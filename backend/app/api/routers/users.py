@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import secrets
-import string
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -40,28 +39,34 @@ async def create_user(
         if existing:
             raise HTTPException(status_code=409, detail="Email already registered")
 
-        # Generate a temporary password; user will be invited via email
-        temp_password = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(16))
+        # Create user with a locked placeholder password (must use invite flow to log in)
         import bcrypt
-        password_hash = bcrypt.hashpw(temp_password.encode(), bcrypt.gensalt()).decode()
+        placeholder_hash = bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt()).decode()
 
         user = await repo.create(
             company_id=current_user.company_id,
             email=body.email,
-            password_hash=password_hash,
+            password_hash=placeholder_hash,
             role=body.role,
         )
 
-        # Send invite email via NotificationService
+        # Generate a 24-hour invite token and send a set-password email
+        from app.redis_client import get_redis
+        from app.services.auth_service import AuthService
+        from app.services.notification_service import NotificationService
+
         try:
-            from app.services.notification_service import NotificationService
+            async for r in get_redis():
+                svc = AuthService(session, r)
+                invite_token = await svc.create_invite_token(user.id)
+            invite_link = f"/set-password?token={invite_token}"
             notif = NotificationService()
-            await notif.send_invitation_email(
-                candidate_email=body.email,
-                interview_link=f"/set-password?email={body.email}",
+            await notif.send_user_invite_email(
+                to_email=body.email,
+                invite_link=invite_link,
             )
         except Exception:
-            pass  # Do not fail user creation if email fails
+            pass  # Do not fail user creation if Redis/email fails
 
         return UserResponse(**user.__dict__)
 

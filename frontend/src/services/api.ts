@@ -44,6 +44,8 @@ export const api = {
     refresh: () =>
       request<{ access_token: string; token_type: string }>("POST", "/auth/refresh"),
     logout: (token: string) => request<void>("POST", "/auth/logout", undefined, token),
+    setPassword: (data: { token: string; new_password: string }) =>
+      request<{ access_token: string; token_type: string }>("POST", "/auth/set-password", data),
     me: (token: string) =>
       request<{ id: string; company_id: string; email: string; role: string; is_active: boolean }>(
         "GET",

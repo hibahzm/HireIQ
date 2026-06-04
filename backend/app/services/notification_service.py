@@ -16,6 +16,17 @@ class NotificationService:
         from app.config import get_settings
         self._settings = get_settings()
 
+    async def send_user_invite_email(self, to_email: str, invite_link: str) -> None:
+        if not await self._should_send("user_invite", to_email):
+            return
+        subject = "You've been invited to HireIQ"
+        body = (
+            f"You've been added as a team member on HireIQ. "
+            f"Set your password here (link valid 24 hours): {invite_link}"
+        )
+        await self._send(to_email, subject, body)
+        await self._mark_sent("user_invite", to_email)
+
     async def send_confirmation_email(self, candidate_email: str, job_title: str) -> None:
         if not await self._should_send("confirmation", candidate_email):
             return

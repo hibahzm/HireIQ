@@ -135,3 +135,42 @@ class AuthService:
         token_hash = self._hash_token(refresh_token)
         expire_seconds = self._settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400
         await self._redis.set(self._refresh_token_key(token_hash), user_id, ex=expire_seconds)
+
+    # ── invite / set-password ─────────────────────────────────────────────────
+
+    def _invite_token_key(self, token: str) -> str:
+        return f"invite_token:{token}"
+
+    async def create_invite_token(self, user_id: str) -> str:
+        """Generate a 24-hour invite token for a newly created user."""
+        token = str(uuid.uuid4())
+        await self._redis.set(self._invite_token_key(token), user_id, ex=86400)
+        return token
+
+    async def set_password_via_invite(self, *, token: str, new_password: str) -> User:
+        """Consume an invite token and set the user's password."""
+        user_id = await self._redis.get(self._invite_token_key(token))
+        if not user_id:
+            raise AuthError("invalid_or_expired_invite_token")
+
+        if len(new_password) < 8:
+            raise AuthError("password_too_short")
+
+        await self._redis.delete(self._invite_token_key(token))
+
+        import sqlalchemy as sa
+        from datetime import datetime, timezone
+        from app.models.user import User as UserModel
+
+        new_hash = self._hash_password(new_password)
+        await self._session.execute(
+            sa.update(UserModel)
+            .where(UserModel.id == user_id)
+            .values(password_hash=new_hash, updated_at=datetime.now(timezone.utc))
+        )
+
+        user_repo = UserRepository(self._session)
+        user = await user_repo.get_by_id(user_id)
+        if not user:
+            raise AuthError("user_not_found")
+        return user
