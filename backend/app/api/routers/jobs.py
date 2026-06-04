@@ -101,6 +101,47 @@ async def job_setup_turn(
         return SetupTurnResponse(**result)
 
 
+@router.delete("/{job_id}", status_code=204)
+async def delete_job(
+    job_id: str,
+    current_user: User = Depends(require_recruiter_or_admin),
+    db=Depends(get_db),
+):
+    """
+    Delete a job. Blocked if any application exists in an active state
+    (screening, qualified, invited, interviewing) — spec edge case resolution:
+    jobs with in-progress work cannot be silently deleted.
+    """
+    import sqlalchemy as sa
+    from app.models.application import Application
+
+    async for session in db:
+        from app.repositories.job_repository import JobRepository
+        repo = JobRepository(session)
+        job = await repo.get_by_id(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        blocking_statuses = ("screening", "qualified", "invited", "interviewing")
+        result = await session.execute(
+            sa.select(Application.id)
+            .where(Application.job_id == job_id)
+            .where(Application.status.in_(blocking_statuses))
+            .limit(1)
+        )
+        if result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Cannot delete a job with active applications. "
+                    "Close the job first, then delete once all applications are resolved."
+                ),
+            )
+
+        from app.models.job import Job as JobModel
+        await session.execute(sa.delete(JobModel).where(JobModel.id == job_id))
+
+
 @router.post("/{job_id}/activate", response_model=JobResponse)
 async def activate_job(
     job_id: str,
