@@ -198,7 +198,8 @@ They click the link and see a feedback report with dimension scores and a writte
 - **FR-007**: A job MUST only become active after the setup conversation produces a complete,
   confirmed set of evaluation criteria.
 - **FR-008**: Recruiters MUST be able to view all their company's jobs and their current status
-  (draft, active, paused, closed) on a dashboard.
+  (draft, setup, active, paused, closed) on a dashboard. The `setup` status indicates the
+  AI-guided criteria conversation is in progress.
 
 **CV Application & Screening**
 
@@ -341,3 +342,5 @@ They click the link and see a feedback report with dimension scores and a writte
 - Q: What happens when an interview session is interrupted mid-way? → A: Resume within 24 hours from last completed turn; after 24 hours the session expires.
 - Q: What determines whether a candidate is "qualified" after CV screening? → A: Recruiter sets a minimum score threshold (0–100) per job during setup; candidates at or above it are qualified.
 - Q: What happens when the AI service is unavailable mid-interview? → A: Surface a clear error to the candidate; preserve session as resumable within the 24-hour window; distinguish system interruption from candidate abandonment in recruiter view.
+- Q: How long does the candidate feedback token remain valid? → A: 30 days from the date the evaluation is completed.
+- Q: Is there a rate limit on CV uploads? → A: Yes — maximum 5 CV uploads per IP address per hour to prevent abuse. Candidates exceeding the limit receive a 429 response with a clear message to try again later.
