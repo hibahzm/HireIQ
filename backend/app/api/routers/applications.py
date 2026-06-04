@@ -19,6 +19,7 @@ from app.repositories.job_repository import JobRepository
 from app.schemas.applications import ApplicationResponse
 from app.services.notification_service import NotificationService
 from app.services.ocr_service import OcrService, OcrValidationError
+from app.services.screening_service import run_screening_background
 from app.services.storage_service import StorageService
 
 logger = structlog.get_logger()
@@ -95,9 +96,18 @@ async def submit_application(
             cv_blob_key=blob_key,
         )
 
-        # Kick off background screening asynchronously
+        audit = AuditLogRepository(session)
+        await audit.log_event(
+            event_type="application.created",
+            actor_type="candidate",
+            entity_type="application",
+            entity_id=application.id,
+            company_id=job.company_id,
+        )
+
+        # Kick off background screening — logic lives in ScreeningService (Principle III)
         asyncio.create_task(
-            _run_screening(
+            run_screening_background(
                 application_id=application.id,
                 company_id=job.company_id,
                 job_id=job_id,
@@ -107,55 +117,6 @@ async def submit_application(
         )
 
         return ApplicationResponse(**application.__dict__)
-
-
-async def _run_screening(
-    *,
-    application_id: str,
-    company_id: str,
-    job_id: str,
-    job_title: str,
-    candidate_email: str,
-) -> None:
-    """Fire-and-forget screening task."""
-    from app.db import _get_session_factory
-    from app.services.screening_service import ScreeningService
-    from app.repositories.job_repository import JobRepository
-    from app.models.job_criteria import JobCriteria
-    import sqlalchemy as sa
-
-    async with _get_session_factory()() as session:
-        async with session.begin():
-            await session.execute(
-                sa.text("SET LOCAL app.current_company_id = :cid"),
-                {"cid": company_id},
-            )
-            job_repo = JobRepository(session)
-            job = await job_repo.get_by_id(job_id)
-            result = await session.execute(
-                sa.select(JobCriteria).where(JobCriteria.job_id == job_id)
-            )
-            criteria_model = result.scalar_one_or_none()
-            if not criteria_model:
-                logger.warning("screening.no_criteria", job_id=job_id)
-                return
-            job_criteria = {
-                "required_skills": criteria_model.required_skills,
-                "optional_skills": criteria_model.optional_skills,
-                "experience_level": criteria_model.experience_level,
-                "evaluation_dimensions": criteria_model.evaluation_dimensions,
-                "dealbreakers": criteria_model.dealbreakers,
-                "min_screening_score": criteria_model.min_screening_score,
-            }
-            svc = ScreeningService(session)
-            await svc.screen(
-                application_id=application_id,
-                company_id=company_id,
-                job_title=job_title,
-                candidate_email=candidate_email,
-                job_criteria=job_criteria,
-                job_id=job_id,
-            )
 
 
 @router.get("/jobs/{job_id}/applications", response_model=list[ApplicationResponse])

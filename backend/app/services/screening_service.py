@@ -15,6 +15,56 @@ from app.services.storage_service import StorageService
 logger = structlog.get_logger()
 
 
+async def run_screening_background(
+    *,
+    application_id: str,
+    company_id: str,
+    job_id: str,
+    job_title: str,
+    candidate_email: str,
+) -> None:
+    """
+    Fire-and-forget screening pipeline. Creates its own DB session so it can
+    run as an asyncio.Task without inheriting the request session. Owned here
+    (not in the router) per Principle III.
+    """
+    from app.db import _get_session_factory
+    from app.repositories.job_repository import JobRepository
+    from app.models.job_criteria import JobCriteria
+    import sqlalchemy as sa
+
+    async with _get_session_factory()() as session:
+        async with session.begin():
+            await session.execute(
+                sa.text("SET LOCAL app.current_company_id = :cid"),
+                {"cid": company_id},
+            )
+            result = await session.execute(
+                sa.select(JobCriteria).where(JobCriteria.job_id == job_id)
+            )
+            criteria_model = result.scalar_one_or_none()
+            if not criteria_model:
+                logger.warning("screening.no_criteria", job_id=job_id)
+                return
+            job_criteria = {
+                "required_skills": criteria_model.required_skills,
+                "optional_skills": criteria_model.optional_skills,
+                "experience_level": criteria_model.experience_level,
+                "evaluation_dimensions": criteria_model.evaluation_dimensions,
+                "dealbreakers": criteria_model.dealbreakers,
+                "min_screening_score": criteria_model.min_screening_score,
+            }
+            svc = ScreeningService(session)
+            await svc.screen(
+                application_id=application_id,
+                company_id=company_id,
+                job_title=job_title,
+                candidate_email=candidate_email,
+                job_criteria=job_criteria,
+                job_id=job_id,
+            )
+
+
 class ScreeningService:
     def __init__(self, session: AsyncSession, redis=None) -> None:
         self._session = session

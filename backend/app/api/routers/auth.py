@@ -6,7 +6,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.api.deps import get_current_user
 from app.db import get_db
 from app.redis_client import get_redis
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.repositories.audit_log_repository import AuditLogRepository
+from app.schemas.auth import LoginRequest, RegisterRequest, SetPasswordRequest, TokenResponse, UserResponse
 from app.services.auth_service import AuthError, AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -49,6 +50,15 @@ async def register(
                     raise HTTPException(status_code=409, detail="Email already registered")
                 raise HTTPException(status_code=400, detail=str(exc))
 
+            audit = AuditLogRepository(session)
+            await audit.log_event(
+                event_type="auth.register",
+                actor_type="user",
+                actor_id=user.id,
+                entity_type="user",
+                entity_id=user.id,
+                company_id=user.company_id,
+            )
             _set_refresh_cookie(response, refresh_token)
             return TokenResponse(access_token=access_token)
 
@@ -71,6 +81,15 @@ async def login(
             except AuthError:
                 raise HTTPException(status_code=401, detail="Invalid credentials")
 
+            audit = AuditLogRepository(session)
+            await audit.log_event(
+                event_type="auth.login",
+                actor_type="user",
+                actor_id=user.id,
+                entity_type="user",
+                entity_id=user.id,
+                company_id=user.company_id,
+            )
             _set_refresh_cookie(response, refresh_token)
             return TokenResponse(access_token=access_token)
 
@@ -108,8 +127,35 @@ async def logout(
             async for r in redis:
                 svc = AuthService(session, r)
                 await svc.logout(refresh_token)
+                audit = AuditLogRepository(session)
+                await audit.log_event(event_type="auth.logout", actor_type="user")
 
     response.delete_cookie(key=REFRESH_COOKIE, path="/auth")
+
+
+@router.post("/set-password", response_model=TokenResponse, status_code=200)
+async def set_password(
+    body: SetPasswordRequest,
+    response: Response,
+    db=Depends(get_db),
+    redis=Depends(get_redis),
+):
+    """Consume a one-time invite token and set the user's password."""
+    async for session in db:
+        async for r in redis:
+            svc = AuthService(session, r)
+            try:
+                user = await svc.set_password_via_invite(
+                    token=body.token, new_password=body.new_password
+                )
+            except AuthError as exc:
+                raise HTTPException(status_code=400, detail=str(exc))
+
+            access_token = svc._create_access_token(user.id, user.company_id, user.role)
+            refresh_token = svc._create_refresh_token()
+            await svc._store_refresh_token(refresh_token, user.id)
+            _set_refresh_cookie(response, refresh_token)
+            return TokenResponse(access_token=access_token)
 
 
 @router.get("/me", response_model=UserResponse)

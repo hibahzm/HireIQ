@@ -53,13 +53,36 @@ class InterviewService:
         state = await self._load_redis_state(session_id)
 
         # STT if voice mode
+        audio_key = None
         if mode == "voice" and audio_bytes:
             # Store raw audio before discarding
             audio_key = f"interviews/{session_id}/{str(uuid.uuid4())}.webm"
             await self._storage.upload(audio_key, audio_bytes)
-            candidate_text = await self._stt.transcribe(audio_bytes)
+            try:
+                candidate_text = await self._stt.transcribe(audio_bytes)
+            except ValueError as exc:
+                if "empty_transcript" in str(exc):
+                    # Candidate was silent — return a prompt without consuming a turn
+                    logger.info("interview.empty_audio", session_id=session_id)
+                    ai_prompt = (
+                        "I didn't catch that. Could you speak a bit louder "
+                        "or switch to text input using the toggle below?"
+                    )
+                    ai_audio = None
+                    if mode == "voice":
+                        try:
+                            ai_audio = await self._tts.synthesize(ai_prompt)
+                        except Exception:
+                            pass
+                    return {
+                        "ai_response": ai_prompt,
+                        "session_complete": False,
+                        "audio_bytes": ai_audio,
+                        "guardrail_triggered": False,
+                        "empty_audio": True,
+                    }
+                raise
         else:
-            audio_key = None
             candidate_text = candidate_input or ""
 
         # Append candidate message to state history
