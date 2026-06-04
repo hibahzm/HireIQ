@@ -34,12 +34,12 @@ frontend/build/
 *.log
 npm-debug.log*
 
-# Model weights & large binaries
+# Model weights & large binaries (top-level only — not app/models/)
 *.bin
 *.onnx
 *.pt
 *.safetensors
-models/
+/models/
 
 # Docker
 *.tar
