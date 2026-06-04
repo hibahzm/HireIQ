@@ -161,15 +161,22 @@ They click the link and see a feedback report with dimension scores and a writte
 
 - A corrupted or password-protected PDF is rejected immediately; the candidate sees a clear
   error and is prompted to re-upload. No application record is created.
-- How does the system handle a voice interview where the candidate goes silent for an extended
-  period?
+- If the candidate goes silent during a voice interview (STT returns an empty transcript), the AI
+  prompts them to speak louder or switch to text input. The silence does not consume a turn.
+  After 3 consecutive silent turns the session is preserved as resumable (system_interrupted)
+  and the candidate is notified via the interview UI.
 - An interrupted interview session can be resumed by the candidate within 24 hours from the
   last completed turn. After 24 hours the session expires; completed turns are retained.
-- How does the system behave if the same email address is used to apply to two different jobs at
-  the same company?
+- If the same candidate email is used to apply to two different jobs at the same company, each
+  application is treated as independent — separate screening, separate interview, separate
+  evaluation. The candidate record is shared but the application pipeline is fully isolated per
+  job (see Assumptions).
 - What happens if the AI evaluation produces a very low quality score across all dimensions
   (candidate gave one-word answers)?
-- How does the system handle a recruiter who deletes a job that has in-progress applications?
+- A recruiter cannot delete a job that has applications in an active state (screening, qualified,
+  invited, or interviewing). The system returns a 409 error explaining that the job must be
+  closed first and all active applications resolved. Once no active applications remain, deletion
+  is permitted and cascades to all related records.
 - If the AI service is unavailable mid-interview, the candidate sees a clear error; the session
   is preserved as resumable within the 24-hour window; the recruiter sees it as system-interrupted,
   not abandoned.
