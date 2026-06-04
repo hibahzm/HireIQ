@@ -28,6 +28,7 @@ dependencies = [
     "resend==2.4.0",
     "apscheduler==3.10.4",
     "python-multipart==0.0.18",
+    "tiktoken==0.8.0",
 ]
 
 [project.optional-dependencies]
