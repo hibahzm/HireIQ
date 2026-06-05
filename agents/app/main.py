@@ -35,11 +35,13 @@ def create_app() -> FastAPI:
     from app.api.routers.job_setup import router as job_setup_router
     from app.api.routers.screening import router as screening_router
     from app.api.routers.interview import router as interview_router
+    from app.api.routers.evaluation import router as evaluation_router
 
     app.include_router(health_router)
     app.include_router(job_setup_router)
     app.include_router(screening_router)
     app.include_router(interview_router)
+    app.include_router(evaluation_router)
 
     return app
 

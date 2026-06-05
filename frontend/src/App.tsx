@@ -12,6 +12,8 @@ import ApplicationDetailPage from "./pages/applications/ApplicationDetailPage";
 import JobApplicationPage from "./pages/applications/JobApplicationPage";
 import InterviewRoomPage from "./pages/interview/InterviewRoomPage";
 import UserManagementPage from "./pages/company/UserManagementPage";
+import ShortlistPage from "./pages/evaluations/ShortlistPage";
+import EvaluationDetailPage from "./pages/evaluations/EvaluationDetailPage";
 
 // ── Page wrappers that pull route params and auth token ──────────────────────
 
@@ -70,6 +72,33 @@ function UserManagementWrapper() {
   const { token = "" } = useAuth();
   const navigate = useNavigate();
   return <UserManagementPage token={token} onBack={() => navigate("/jobs")} />;
+}
+
+function ShortlistWrapper() {
+  const { jobId = "" } = useParams();
+  const { token = "" } = useAuth();
+  const navigate = useNavigate();
+  return (
+    <ShortlistPage
+      token={token}
+      jobId={jobId}
+      onSelectEvaluation={(id) => navigate(`/evaluations/${id}`)}
+      onBack={() => navigate(`/jobs/${jobId}/applications`)}
+    />
+  );
+}
+
+function EvaluationDetailWrapper() {
+  const { evaluationId = "" } = useParams();
+  const { token = "" } = useAuth();
+  const navigate = useNavigate();
+  return (
+    <EvaluationDetailPage
+      token={token}
+      evaluationId={evaluationId}
+      onBack={() => navigate(-1)}
+    />
+  );
 }
 
 function JobListWrapper() {
@@ -135,6 +164,8 @@ function AppRoutes() {
       <Route path="/jobs/:jobId/setup" element={<PrivateRoute><JobSetupWrapper /></PrivateRoute>} />
       <Route path="/jobs/:jobId/applications" element={<PrivateRoute><ApplicationListWrapper /></PrivateRoute>} />
       <Route path="/applications/:applicationId" element={<PrivateRoute><ApplicationDetailWrapper /></PrivateRoute>} />
+      <Route path="/jobs/:jobId/evaluations" element={<PrivateRoute><ShortlistWrapper /></PrivateRoute>} />
+      <Route path="/evaluations/:evaluationId" element={<PrivateRoute><EvaluationDetailWrapper /></PrivateRoute>} />
       <Route path="/users" element={<PrivateRoute><UserManagementWrapper /></PrivateRoute>} />
 
       {/* Default */}

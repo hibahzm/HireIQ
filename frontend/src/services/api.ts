@@ -80,6 +80,12 @@ export const api = {
     deactivate: (token: string, id: string) =>
       request<void>("DELETE", `/users/${id}`, undefined, token),
   },
+  evaluations: {
+    listByJob: (token: string, jobId: string) =>
+      request<ShortlistItem[]>("GET", `/jobs/${jobId}/evaluations`, undefined, token),
+    get: (token: string, evaluationId: string) =>
+      request<EvaluationDetail>("GET", `/evaluations/${evaluationId}`, undefined, token),
+  },
 };
 
 export interface Job {
@@ -98,4 +104,55 @@ export interface UserProfile {
   email: string;
   role: string;
   is_active: boolean;
+}
+
+export interface ShortlistItem {
+  evaluation_id: string;
+  application_id: string;
+  candidate: { full_name: string };
+  overall_score: number;
+  recommendation: "hire" | "no_hire" | "uncertain";
+  confidence_flag: boolean;
+  created_at: string;
+}
+
+export interface DimensionScore {
+  dimension: string;
+  score: number;
+  evidence_quotes: string[];
+}
+
+export interface ConsistencyFlag {
+  claim: string;
+  cv_statement: string;
+  interview_statement: string;
+  flag_type: "contradiction" | "unverified";
+}
+
+export interface CommunicationQuality {
+  response_depth: number;
+  filler_word_frequency: number;
+  deflection_frequency: number;
+}
+
+export interface TranscriptTurn {
+  turn_index: number;
+  speaker: string;
+  content_text: string;
+  audio_url: string | null;
+}
+
+export interface EvaluationDetail {
+  id: string;
+  application_id: string;
+  overall_score: number;
+  recommendation: "hire" | "no_hire" | "uncertain";
+  dimension_scores: DimensionScore[];
+  consistency_flags: ConsistencyFlag[];
+  communication_quality: CommunicationQuality;
+  confidence_flag: boolean;
+  confidence_reason: string | null;
+  summary: string | null;
+  transcript: TranscriptTurn[];
+  created_at: string;
 }
