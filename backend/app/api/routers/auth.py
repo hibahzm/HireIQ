@@ -1,20 +1,19 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from redis.asyncio import Redis
 
 from app.api.deps import get_current_user
-from app.db import get_db
+from app.db import _get_session_factory
 from app.redis_client import get_redis
 from app.repositories.audit_log_repository import AuditLogRepository
 from app.schemas.auth import LoginRequest, RegisterRequest, SetPasswordRequest, TokenResponse, UserResponse
 from app.services.auth_service import AuthError, AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-_bearer = HTTPBearer(auto_error=False)
 
 REFRESH_COOKIE = "refresh_token"
-COOKIE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
+COOKIE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -33,12 +32,11 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 async def register(
     body: RegisterRequest,
     response: Response,
-    db=Depends(get_db),
-    redis=Depends(get_redis),
+    redis_client: Redis = Depends(get_redis),
 ):
-    async for session in db:
-        async for r in redis:
-            svc = AuthService(session, r)
+    async with _get_session_factory()() as session:
+        async with session.begin():
+            svc = AuthService(session, redis_client)
             try:
                 user, access_token, refresh_token = await svc.register(
                     company_name=body.company_name,
@@ -50,8 +48,7 @@ async def register(
                     raise HTTPException(status_code=409, detail="Email already registered")
                 raise HTTPException(status_code=400, detail=str(exc))
 
-            audit = AuditLogRepository(session)
-            await audit.log_event(
+            await AuditLogRepository(session).log_event(
                 event_type="auth.register",
                 actor_type="user",
                 actor_id=user.id,
@@ -59,20 +56,20 @@ async def register(
                 entity_id=user.id,
                 company_id=user.company_id,
             )
-            _set_refresh_cookie(response, refresh_token)
-            return TokenResponse(access_token=access_token)
+
+    _set_refresh_cookie(response, refresh_token)
+    return TokenResponse(access_token=access_token)
 
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
     body: LoginRequest,
     response: Response,
-    db=Depends(get_db),
-    redis=Depends(get_redis),
+    redis_client: Redis = Depends(get_redis),
 ):
-    async for session in db:
-        async for r in redis:
-            svc = AuthService(session, r)
+    async with _get_session_factory()() as session:
+        async with session.begin():
+            svc = AuthService(session, redis_client)
             try:
                 user, access_token, refresh_token = await svc.login(
                     email=body.email,
@@ -81,8 +78,7 @@ async def login(
             except AuthError:
                 raise HTTPException(status_code=401, detail="Invalid credentials")
 
-            audit = AuditLogRepository(session)
-            await audit.log_event(
+            await AuditLogRepository(session).log_event(
                 event_type="auth.login",
                 actor_type="user",
                 actor_id=user.id,
@@ -90,63 +86,65 @@ async def login(
                 entity_id=user.id,
                 company_id=user.company_id,
             )
-            _set_refresh_cookie(response, refresh_token)
-            return TokenResponse(access_token=access_token)
+
+    _set_refresh_cookie(response, refresh_token)
+    return TokenResponse(access_token=access_token)
 
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
     response: Response,
     refresh_token: str | None = Cookie(default=None, alias=REFRESH_COOKIE),
-    db=Depends(get_db),
-    redis=Depends(get_redis),
+    redis_client: Redis = Depends(get_redis),
 ):
     if not refresh_token:
         raise HTTPException(status_code=401, detail="No refresh token")
-    async for session in db:
-        async for r in redis:
-            svc = AuthService(session, r)
+
+    async with _get_session_factory()() as session:
+        async with session.begin():
+            svc = AuthService(session, redis_client)
             try:
-                user, access_token, new_refresh = await svc.refresh(refresh_token)
+                _, access_token, new_refresh = await svc.refresh(refresh_token)
             except AuthError:
                 raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
-            _set_refresh_cookie(response, new_refresh)
-            return TokenResponse(access_token=access_token)
+    _set_refresh_cookie(response, new_refresh)
+    return TokenResponse(access_token=access_token)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     response: Response,
     refresh_token: str | None = Cookie(default=None, alias=REFRESH_COOKIE),
-    db=Depends(get_db),
-    redis=Depends(get_redis),
+    redis_client: Redis = Depends(get_redis),
 ):
     if refresh_token:
-        async for session in db:
-            async for r in redis:
-                svc = AuthService(session, r)
+        async with _get_session_factory()() as session:
+            async with session.begin():
+                svc = AuthService(session, redis_client)
                 await svc.logout(refresh_token)
-                audit = AuditLogRepository(session)
-                await audit.log_event(event_type="auth.logout", actor_type="user")
+                await AuditLogRepository(session).log_event(
+                    event_type="auth.logout",
+                    actor_type="user",
+                )
 
     response.delete_cookie(key=REFRESH_COOKIE, path="/auth")
 
 
-@router.post("/set-password", response_model=TokenResponse, status_code=200)
+@router.post("/set-password", response_model=TokenResponse)
 async def set_password(
     body: SetPasswordRequest,
     response: Response,
-    db=Depends(get_db),
-    redis=Depends(get_redis),
+    redis_client: Redis = Depends(get_redis),
 ):
-    """Consume a one-time invite token and set the user's password."""
-    async for session in db:
-        async for r in redis:
-            svc = AuthService(session, r)
+    """Consume a one-time invite token and set the user's own password."""
+    async with _get_session_factory()() as session:
+        async with session.begin():
+            svc = AuthService(session, redis_client)
             try:
                 user = await svc.set_password_via_invite(
-                    token=body.token, new_password=body.new_password
+                    token=body.token,
+                    new_password=body.new_password,
                 )
             except AuthError as exc:
                 raise HTTPException(status_code=400, detail=str(exc))
@@ -154,12 +152,13 @@ async def set_password(
             access_token = svc._create_access_token(user.id, user.company_id, user.role)
             refresh_token = svc._create_refresh_token()
             await svc._store_refresh_token(refresh_token, user.id)
-            _set_refresh_cookie(response, refresh_token)
-            return TokenResponse(access_token=access_token)
+
+    _set_refresh_cookie(response, refresh_token)
+    return TokenResponse(access_token=access_token)
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(current_user=Depends(get_current_user)):
+async def me(current_user: UserResponse = Depends(get_current_user)):
     return UserResponse(
         id=current_user.id,
         company_id=current_user.company_id,
