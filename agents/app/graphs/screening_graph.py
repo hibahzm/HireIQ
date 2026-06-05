@@ -1,37 +1,17 @@
 from __future__ import annotations
 
+import json
 from typing import Any, TypedDict
 
 import structlog
+from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 
 from app.guardrails import PIIRedactor, registry
+from app.prompts import SCREENING_SYSTEM
 
 logger = structlog.get_logger()
-
-_SCREENING_PROMPT = """You are an expert hiring assistant evaluating a candidate's CV against job criteria.
-
-Job criteria:
-{criteria}
-
-Hybrid search results (most relevant CV sections):
-{search_results}
-
-CV text:
-{cv_text}
-
-Score this candidate from 0-100 based on how well they meet the criteria.
-Provide:
-1. A numeric score (integer, 0-100)
-2. A concise rationale (2-3 sentences)
-3. Qualification status: "qualified" (score >= threshold) or "rejected"
-
-Respond ONLY with valid JSON:
-{{"score": <int>, "rationale": "<string>", "status": "qualified" | "rejected"}}
-
-Important: Do NOT include any personal identifying information (names, emails, phone numbers) in the rationale."""
 
 
 class ScreeningState(TypedDict):
@@ -53,8 +33,7 @@ def _build_llm() -> ChatOpenAI:
 
 
 async def score_cv(state: ScreeningState) -> ScreeningState:
-    guard_result = registry.check_input(state["cv_text"])
-    if not guard_result.passed:
+    if not registry.check_input(state["cv_text"]).passed:
         logger.warning("screening.guardrail_triggered", application_id=state["application_id"])
         return {
             **state,
@@ -67,20 +46,16 @@ async def score_cv(state: ScreeningState) -> ScreeningState:
     search_summary = "\n".join(
         f"- {r.get('chunk_text', '')[:200]}" for r in state["hybrid_search_results"][:5]
     )
-    criteria_text = str(state["job_criteria"])
-
-    prompt = _SCREENING_PROMPT.format(
-        criteria=criteria_text,
+    prompt = SCREENING_SYSTEM.format(
+        criteria=str(state["job_criteria"]),
         search_results=search_summary,
         cv_text=state["cv_text"][:3000],
     )
 
-    llm = _build_llm()
-    response = await llm.ainvoke([SystemMessage(content=prompt)])
+    response = await _build_llm().ainvoke([SystemMessage(content=prompt)])
     raw = response.content
 
-    output_guard = registry.check_output(raw)
-    if not output_guard.passed:
+    if not registry.check_output(raw).passed:
         return {
             **state,
             "score": 0,
@@ -89,7 +64,6 @@ async def score_cv(state: ScreeningState) -> ScreeningState:
             "guardrail_triggered": True,
         }
 
-    import json
     try:
         data = json.loads(raw)
         score = int(data["score"])

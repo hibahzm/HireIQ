@@ -8,26 +8,9 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 
 from app.guardrails import PIIRedactor, registry
+from app.prompts import INTERVIEW_SYSTEM
 
 logger = structlog.get_logger()
-
-_SYSTEM_PROMPT = """You are a professional AI interviewer conducting a structured job interview.
-
-Job criteria and evaluation dimensions:
-{criteria}
-
-Dimensions to cover: {dimensions}
-
-Your goals:
-- Ask one clear, focused question per turn
-- Explore each evaluation dimension through 2-3 questions
-- Adapt follow-up questions based on candidate responses
-- Do NOT ask for personal information (address, date of birth, etc.)
-- Keep responses professional and concise (1-2 sentences max)
-
-When all dimensions are adequately covered OR max_turns is reached, end the interview by saying
-exactly: "Thank you for completing this interview. [INTERVIEW_COMPLETE]"
-"""
 
 
 class InterviewState(TypedDict):
@@ -54,8 +37,7 @@ async def check_input_guard(state: InterviewState) -> InterviewState:
         (m["content"] for m in reversed(state["conversation_history"]) if m["role"] == "user"),
         "",
     )
-    result = registry.check_input(last_user_msg)
-    if not result.passed:
+    if not registry.check_input(last_user_msg).passed:
         return {
             **state,
             "guardrail_triggered": True,
@@ -71,26 +53,25 @@ async def generate_response(state: InterviewState) -> InterviewState:
     if state["guardrail_triggered"]:
         return state
 
-    criteria_text = str(state["job_criteria"])
     dimensions_text = ", ".join(state["dimensions_remaining"]) or "general competencies"
+    system = INTERVIEW_SYSTEM.format(
+        criteria=str(state["job_criteria"]),
+        dimensions=dimensions_text,
+    )
 
-    system = _SYSTEM_PROMPT.format(criteria=criteria_text, dimensions=dimensions_text)
     messages = [SystemMessage(content=system)]
-
     for msg in state["conversation_history"]:
         if msg["role"] == "user":
             messages.append(HumanMessage(content=msg["content"]))
         else:
             messages.append(AIMessage(content=msg["content"]))
 
-    llm = _build_llm()
-    response = await llm.ainvoke(messages)
+    response = await _build_llm().ainvoke(messages)
     ai_text = response.content
 
     session_complete = "[INTERVIEW_COMPLETE]" in ai_text
     ai_text = ai_text.replace("[INTERVIEW_COMPLETE]", "").strip()
 
-    # Check if max_turns reached
     if state["turn_count"] + 1 >= state["max_turns"]:
         session_complete = True
         if not ai_text.lower().startswith("thank you"):
@@ -109,19 +90,17 @@ async def check_output_guard(state: InterviewState) -> InterviewState:
         return {**state, "ai_response": state["blocked_redirect"]}
 
     ai_text = state.get("ai_response", "")
-    result = registry.check_output(ai_text)
-    if not result.passed:
+    if not registry.check_output(ai_text).passed:
         return {
             **state,
             "ai_response": "Let's continue. Could you tell me about your approach to teamwork?",
             "guardrail_triggered": True,
         }
 
-    redacted = PIIRedactor.redact(ai_text)
-    return {**state, "ai_response": redacted}
+    return {**state, "ai_response": PIIRedactor.redact(ai_text)}
 
 
-def build_interview_graph():
+def build_interview_graph() -> StateGraph:
     graph = StateGraph(InterviewState)
     graph.add_node("check_input_guard", check_input_guard)
     graph.add_node("generate_response", generate_response)
