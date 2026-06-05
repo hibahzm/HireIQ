@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,10 +8,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import sqlalchemy as sa
 from app.api.deps import get_authed_session, require_recruiter_or_admin
 from app.models.user import User
 from app.repositories.evaluation_repository import EvaluationRepository
+from app.repositories.interview_repository import InterviewMessageRepository
 from app.services.storage_service import StorageService
 
 logger = structlog.get_logger()
@@ -111,22 +110,9 @@ async def get_evaluation(
     if not evaluation:
         raise HTTPException(status_code=404, detail="Evaluation not found")
 
-    # Fetch transcript with audio URLs
-    result = await session.execute(
-        sa.text(
-            """
-            SELECT im.turn_index, im.speaker, im.content_text, im.audio_blob_key
-            FROM interview_messages im
-            JOIN interview_sessions s ON s.id = im.session_id
-            JOIN applications a ON a.id = s.application_id
-            WHERE a.id = :application_id
-            ORDER BY im.turn_index
-            """
-        ),
-        {"application_id": evaluation.application_id},
+    rows = await InterviewMessageRepository(session).list_by_application_id(
+        evaluation.application_id
     )
-    rows = result.mappings().all()
-
     transcript = [
         TranscriptTurn(
             turn_index=r["turn_index"],
@@ -174,25 +160,13 @@ async def get_turn_audio(
     if not evaluation:
         raise HTTPException(status_code=404, detail="Evaluation not found")
 
-    result = await session.execute(
-        sa.text(
-            """
-            SELECT im.audio_blob_key
-            FROM interview_messages im
-            JOIN interview_sessions s ON s.id = im.session_id
-            JOIN applications a ON a.id = s.application_id
-            WHERE a.id = :application_id
-              AND im.turn_index = :turn_index
-            LIMIT 1
-            """
-        ),
-        {"application_id": evaluation.application_id, "turn_index": turn_index},
+    blob_key = await InterviewMessageRepository(session).get_audio_blob_key(
+        evaluation.application_id, turn_index
     )
-    row = result.mappings().first()
-    if not row or not row["audio_blob_key"]:
+    if not blob_key:
         raise HTTPException(status_code=404, detail="No audio for this turn")
 
-    audio_bytes = await StorageService().fetch(row["audio_blob_key"])
+    audio_bytes = await StorageService().download(blob_key)
     if audio_bytes is None:
         raise HTTPException(status_code=404, detail="Audio not found in storage")
 

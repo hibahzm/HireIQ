@@ -146,3 +146,41 @@ class InterviewMessageRepository:
             .order_by(InterviewMessage.turn_index)
         )
         return list(result.scalars().all())
+
+    async def list_by_application_id(self, application_id: str) -> list[dict]:
+        """Return all turns for an application joined via interview_sessions."""
+        result = await self._session.execute(
+            sa.text(
+                """
+                SELECT im.turn_index, im.speaker, im.content_text, im.audio_blob_key
+                FROM interview_messages im
+                JOIN interview_sessions s ON s.id = im.session_id
+                JOIN applications a ON a.id = s.application_id
+                WHERE a.id = :application_id
+                ORDER BY im.turn_index
+                """
+            ),
+            {"application_id": application_id},
+        )
+        return [dict(r) for r in result.mappings().all()]
+
+    async def get_audio_blob_key(self, application_id: str, turn_index: int) -> str | None:
+        """Return the audio_blob_key for a specific turn, looked up via application."""
+        result = await self._session.execute(
+            sa.text(
+                """
+                SELECT im.audio_blob_key
+                FROM interview_messages im
+                JOIN interview_sessions s ON s.id = im.session_id
+                JOIN applications a ON a.id = s.application_id
+                WHERE a.id = :application_id
+                  AND im.turn_index = :turn_index
+                LIMIT 1
+                """
+            ),
+            {"application_id": application_id, "turn_index": turn_index},
+        )
+        row = result.mappings().first()
+        if not row:
+            return None
+        return row["audio_blob_key"] or None
