@@ -242,6 +242,7 @@ AI-generated assessment of a candidate's complete interview. Created after inter
 | `communication_quality` | `JSONB` | NOT NULL | `{response_depth: number, filler_word_frequency: number, deflection_frequency: number}` |
 | `confidence_flag` | `BOOL` | NOT NULL, default false | True when evidence quality is below threshold |
 | `confidence_reason` | `TEXT` | NULLABLE | Explanation when confidence_flag is true |
+| `summary` | `TEXT` | NULLABLE | LLM-generated strengths + areas-for-improvement summary (PII-redacted); required by FR-033 for candidate feedback report |
 | `feedback_token` | `UUID` | NULLABLE | Set when candidate feedback email is sent |
 | `feedback_token_expires_at` | `TIMESTAMPTZ` | NULLABLE | 30 days after evaluation |
 | `created_at` | `TIMESTAMPTZ` | NOT NULL, default now() | |

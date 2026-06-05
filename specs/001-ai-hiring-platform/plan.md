@@ -39,7 +39,7 @@ HireIQ is a multi-tenant AI-powered hiring platform built with FastAPI async, La
 **Project Type**: Multi-service web application (2 Python services + 1 React SPA + PostgreSQL + Redis + Vault)
 
 **Performance Goals**:
-- API responses: p95 ≤ 300 ms (constitution standard; TODO(PERFORMANCE_BASELINE) still open for load profile)
+- API responses: p95 ≤ 300 ms — **load profile (TODO(PERFORMANCE_BASELINE) resolved)**: 50 concurrent users, 200 req/s on REST endpoints, sustained 5 minutes; measured at MVP launch scale of ~20 companies, ~500 applications/job
 - CV screening results available ≤ 2 min for 95% of submissions (SC-002)
 - Evaluation reports available ≤ 5 min post interview (SC-004)
 - Voice turn response delivered ≤ 10 s end-to-end (acceptance scenario for US-3)
