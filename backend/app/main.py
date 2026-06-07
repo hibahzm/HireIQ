@@ -60,6 +60,7 @@ def create_app() -> FastAPI:
     from app.api.routers.interviews import router as interviews_router
     from app.api.routers.evaluations import router as evaluations_router
     from app.api.routers.feedback import router as feedback_router
+    from app.api.routers.analytics import router as analytics_router
 
     app.include_router(health_router)
     app.include_router(auth_router)
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(interviews_router)
     app.include_router(evaluations_router)
     app.include_router(feedback_router)
+    app.include_router(analytics_router)
 
     return app
 

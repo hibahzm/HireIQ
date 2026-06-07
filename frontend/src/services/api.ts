@@ -90,6 +90,12 @@ export const api = {
     get: (token: string) =>
       request<FeedbackReport>("GET", `/feedback/${token}`),
   },
+  analytics: {
+    job: (token: string, jobId: string) =>
+      request<JobAnalytics>("GET", `/jobs/${jobId}/analytics`, undefined, token),
+    overview: (token: string) =>
+      request<CompanyOverview>("GET", "/analytics/overview", undefined, token),
+  },
 };
 
 export interface Job {
@@ -166,4 +172,33 @@ export interface FeedbackReport {
   overall_score: number;
   dimension_scores: Array<{ dimension: string; score: number }>;
   summary: { strengths: string; areas_for_improvement: string } | null;
+}
+
+export interface TimingPercentiles {
+  p50: number;
+  p95: number;
+}
+
+export interface ScoreBucket {
+  band: string;
+  count: number;
+}
+
+export interface JobAnalytics {
+  job_id: string;
+  funnel: { received: number; qualified: number; interviewed: number; evaluated: number };
+  qualification_rate: number | null;
+  interview_completion_rate: number | null;
+  avg_evaluation_score: number | null;
+  time_to_screen_seconds: TimingPercentiles | null;
+  time_to_evaluate_seconds: TimingPercentiles | null;
+  score_distribution: ScoreBucket[];
+}
+
+export interface CompanyOverview {
+  period: string;
+  total_applications: number;
+  screening_pass_rate: number | null;
+  avg_evaluation_score: number | null;
+  jobs: Array<{ id: string; title: string; status: string }>;
 }
