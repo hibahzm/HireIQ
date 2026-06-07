@@ -15,6 +15,8 @@ import UserManagementPage from "./pages/company/UserManagementPage";
 import ShortlistPage from "./pages/evaluations/ShortlistPage";
 import EvaluationDetailPage from "./pages/evaluations/EvaluationDetailPage";
 import FeedbackReportPage from "./pages/feedback/FeedbackReportPage";
+import CompanyOverviewPage from "./pages/analytics/CompanyOverviewPage";
+import JobAnalyticsPage from "./pages/analytics/JobAnalyticsPage";
 
 // ── Page wrappers that pull route params and auth token ──────────────────────
 
@@ -114,6 +116,25 @@ function JobListWrapper() {
   );
 }
 
+function CompanyOverviewWrapper() {
+  const token = useAuth().token ?? "";
+  const navigate = useNavigate();
+  return (
+    <CompanyOverviewPage
+      token={token}
+      onSelectJob={(id) => navigate(`/jobs/${id}/applications`)}
+      onViewJobAnalytics={(id) => navigate(`/jobs/${id}/analytics`)}
+    />
+  );
+}
+
+function JobAnalyticsWrapper() {
+  const { jobId = "" } = useParams();
+  const token = useAuth().token ?? "";
+  const navigate = useNavigate();
+  return <JobAnalyticsPage token={token} jobId={jobId} onBack={() => navigate("/overview")} />;
+}
+
 // ── Auth pages that set token on success ─────────────────────────────────────
 
 function LoginWrapper() {
@@ -121,7 +142,7 @@ function LoginWrapper() {
   const navigate = useNavigate();
   return (
     <LoginPage
-      onSuccess={(t) => { setToken(t); navigate("/jobs"); }}
+      onSuccess={(t) => { setToken(t); navigate("/overview"); }}
       onRegister={() => navigate("/register")}
     />
   );
@@ -132,7 +153,7 @@ function RegisterWrapper() {
   const navigate = useNavigate();
   return (
     <RegisterPage
-      onSuccess={(t) => { setToken(t); navigate("/jobs"); }}
+      onSuccess={(t) => { setToken(t); navigate("/overview"); }}
       onLogin={() => navigate("/login")}
     />
   );
@@ -143,7 +164,7 @@ function SetPasswordWrapper() {
   const navigate = useNavigate();
   return (
     <SetPasswordPage
-      onSuccess={(t) => { setToken(t); navigate("/jobs"); }}
+      onSuccess={(t) => { setToken(t); navigate("/overview"); }}
     />
   );
 }
@@ -162,7 +183,9 @@ function AppRoutes() {
       <Route path="/feedback/:token" element={<FeedbackReportPage />} />
 
       {/* Protected */}
+      <Route path="/overview" element={<PrivateRoute><CompanyOverviewWrapper /></PrivateRoute>} />
       <Route path="/jobs" element={<PrivateRoute><JobListWrapper /></PrivateRoute>} />
+      <Route path="/jobs/:jobId/analytics" element={<PrivateRoute><JobAnalyticsWrapper /></PrivateRoute>} />
       <Route path="/jobs/:jobId/setup" element={<PrivateRoute><JobSetupWrapper /></PrivateRoute>} />
       <Route path="/jobs/:jobId/applications" element={<PrivateRoute><ApplicationListWrapper /></PrivateRoute>} />
       <Route path="/applications/:applicationId" element={<PrivateRoute><ApplicationDetailWrapper /></PrivateRoute>} />
@@ -170,9 +193,9 @@ function AppRoutes() {
       <Route path="/evaluations/:evaluationId" element={<PrivateRoute><EvaluationDetailWrapper /></PrivateRoute>} />
       <Route path="/users" element={<PrivateRoute><UserManagementWrapper /></PrivateRoute>} />
 
-      {/* Default */}
-      <Route path="/" element={<Navigate to="/jobs" replace />} />
-      <Route path="*" element={<Navigate to="/jobs" replace />} />
+      {/* Default — post-login landing is the company overview (FR-005) */}
+      <Route path="/" element={<Navigate to="/overview" replace />} />
+      <Route path="*" element={<Navigate to="/overview" replace />} />
     </Routes>
   );
 }
