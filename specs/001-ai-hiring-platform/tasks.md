@@ -22,14 +22,14 @@
 - [x] T002 [P] Initialize `backend/` Python project — `pyproject.toml` with all api service dependencies (fastapi, sqlalchemy[asyncio], asyncpg, alembic, python-jose[cryptography], bcrypt, httpx, redis[asyncio], azure-storage-blob, PyMuPDF, azure-ai-formrecognizer, openai, azure-identity, hvac, structlog), ruff config, pytest config
 - [x] T003 [P] Initialize `agents/` Python project — `pyproject.toml` with agents service dependencies (fastapi, langgraph, langchain-openai, openai, structlog), ruff config, pytest config
 - [x] T004 [P] Initialize `frontend/` project — `npm create vite@latest` with React + TypeScript template; install tailwindcss, postcss, autoprefixer; configure `tailwind.config.ts`; install `@axe-core/react` as a dev dependency for accessibility auditing (M7)
-- [x] T005 Create `infra/docker-compose.yml` defining 6 services: `api` (backend, port 8000), `agents` (agents service, port 8001, internal-only), `frontend` (nginx, port 3000), `postgres` (postgres:16 with pgvector, port 5432), `redis` (redis:7, port 6379), `vault` (vault:1.15, dev mode, port 8200)
+- [x] T005 Create `infra/docker-compose.yml` defining 6 long-running services — `api` (backend, port 8000), `agents` (agents service, port 8001, internal-only), `frontend` (nginx, port 3000), `postgres` (postgres:16 with pgvector, port 5432), `redis` (redis:7, port 6379), `vault` (vault:1.15, dev mode, port 8200) — plus 2 one-shot init containers that run at startup and exit: `vault-init` (seeds dev Vault from `infra/.env` via `scripts/init-vault.sh`) and `migrate` (`alembic upgrade head`); `api`/`agents` wait on these via `depends_on: service_completed_successfully`
 - [x] T006 [P] Configure GitHub Actions CI workflow in `.github/workflows/ci.yml` — lint (ruff) and test (pytest) for backend and agents on every push; frontend type-check and build
 - [x] T007 [P] Create `.gitignore` at repo root and within `backend/` and `agents/` covering `.env*`, `*.pem`, `*.key`, `*.p12`, model weight directories, `__pycache__`, `dist/`, `.venv/`, `node_modules/` (Principle IV)
 - [x] T007a [P] Write multi-stage `Dockerfile` for `backend/` in `backend/Dockerfile` — builder stage installs deps from `pyproject.toml`; runtime stage uses `python:3.12-slim`, non-root `app` user, copies built packages, exposes port 8000, adds `HEALTHCHECK` (research §8 pattern)
 - [x] T007b [P] Write multi-stage `Dockerfile` for `agents/` in `agents/Dockerfile` — same pattern as T007a; exposes port 8001
 - [x] T007c [P] Write `Dockerfile` for `frontend/` in `frontend/Dockerfile` — builder stage runs `npm run build`; runtime stage uses `nginx:alpine`, copies `dist/` to `/usr/share/nginx/html`, copies `infra/nginx.conf`
 
-**Checkpoint**: All three projects scaffold successfully; `docker compose up` starts all 6 services without errors; CI pipeline runs on push; `docker build` succeeds for all three services.
+**Checkpoint**: All three projects scaffold successfully; `docker compose up` runs the 2 init containers (`vault-init`, `migrate`) to completion, then starts all 6 long-running services without errors; CI pipeline runs on push; `docker build` succeeds for all three services.
 
 ---
 

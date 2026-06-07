@@ -48,7 +48,7 @@ Expected health response:
 # Register company and admin
 curl -X POST http://localhost:8000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"company_name": "Acme Corp", "admin_email": "admin@acme.com", "password": "secret123"}'
+  -d '{"company_name": "Acme Corp", "email": "admin@acme.com", "password": "secret123"}'
 # Save access_token from response as $TOKEN
 
 # Create a job
@@ -202,7 +202,7 @@ curl http://localhost:8000/feedback/$FEEDBACK_TOKEN
 ```bash
 # Register Company B with its own admin
 curl -X POST http://localhost:8000/auth/register \
-  -d '{"company_name": "BetaCo", "admin_email": "admin@betaco.com", "password": "secret456"}'
+  -d '{"company_name": "BetaCo", "email": "admin@betaco.com", "password": "secret456"}'
 # Save token as $TOKEN_B
 
 # Attempt to access Company A's job with Company B's token
