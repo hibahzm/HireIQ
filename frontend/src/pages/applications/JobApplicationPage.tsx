@@ -2,6 +2,14 @@ import { useState } from "react";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
+const ACCEPTED_CV_TYPES = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/jpeg",
+  "image/png",
+];
+const ACCEPTED_CV_ACCEPT = ".pdf,.docx,.jpg,.jpeg,.png";
+
 interface Props {
   jobId: string;
 }
@@ -17,8 +25,8 @@ export default function JobApplicationPage({ jobId }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file) return;
-    if (file.type !== "application/pdf") {
-      setError("Only PDF files are accepted.");
+    if (!ACCEPTED_CV_TYPES.includes(file.type)) {
+      setError("Accepted formats: PDF, DOCX, JPG, PNG.");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -105,12 +113,12 @@ export default function JobApplicationPage({ jobId }: Props) {
           </div>
           <div>
             <label htmlFor="cv" className="block text-sm font-medium text-gray-700">
-              CV / Resume (PDF, max 10 MB)
+              CV / Resume (PDF, DOCX, JPG, or PNG — max 10 MB)
             </label>
             <input
               id="cv"
               type="file"
-              accept="application/pdf"
+              accept={ACCEPTED_CV_ACCEPT}
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               required
               className="mt-1 block w-full text-sm text-gray-600 file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"

@@ -1,0 +1,110 @@
+# Feature Specification: Real-Time Streaming Voice Interview
+
+**Feature Branch**: `017-video-interview`
+
+**Created**: 2026-06-07
+
+**Status**: Draft
+
+**Input**: V2-3 — replace the turn-based voice model with real-time streaming voice
+
+## User Scenarios & Testing *(mandatory)*
+
+### User Story 1 — Candidate Has a Natural, Streaming Conversation (Priority: P1)
+
+A candidate joins the interview and simply speaks — no record/stop button. The system
+detects when they finish a thought (end-of-speech), transcribes it, the AI generates a
+reply, and the AI's voice begins playing within a couple of seconds and streams in as
+it is synthesized. The conversation feels like talking to a person rather than
+exchanging walkie-talkie turns.
+
+**Why this priority**: This is the entire point of V2-3 — eliminating the ~10-second
+turn latency that makes the MVP interview feel mechanical.
+
+**Independent Test**: Join an interview in streaming mode, speak continuously without
+pressing any button, and confirm: end-of-speech is detected after a short silence, the
+AI responds within ~2 seconds, audio starts before synthesis fully completes, and the
+stored transcript is identical in structure to a turn-based interview.
+
+**Acceptance Scenarios**:
+
+1. **Given** a streaming-enabled interview, **When** the candidate speaks and then
+   pauses, **Then** the system detects end-of-speech after a brief silence and begins
+   generating a response without any button press.
+2. **Given** the AI is responding, **When** synthesis begins, **Then** the candidate
+   hears audio start before the full response has finished synthesizing (chunked
+   playback).
+3. **Given** a streaming interview completes, **When** the recruiter reviews it,
+   **Then** the transcript is stored with the same per-turn attribution and audio
+   references as a turn-based interview.
+4. **Given** the candidate is mid-sentence with natural short pauses, **When** they
+   continue speaking, **Then** the system does not prematurely cut them off (end-of-
+   speech requires a sustained silence threshold).
+
+---
+
+### Edge Cases
+
+- Background noise or a brief pause must not trigger a false end-of-turn; only a
+  sustained silence (≥ the configured threshold) ends a turn.
+- A network drop mid-stream falls back to the existing resumable-session behavior
+  (24-hour resume window from the MVP).
+- If streaming components fail, the session falls back to the turn-based path so the
+  interview can still complete.
+- Harmful/off-topic input is still blocked by the guardrails before any AI response,
+  exactly as in turn-based mode; blocked content is not stored.
+- A candidate who cannot use voice still has the text fallback (inherited from MVP).
+
+## Requirements *(mandatory)*
+
+### Functional Requirements
+
+- **FR-001**: The interview MUST support continuous microphone capture from the
+  candidate without a manual record/stop action.
+- **FR-002**: The system MUST detect end-of-speech automatically using voice-activity
+  detection after a sustained silence threshold (target ~800 ms) following speech.
+- **FR-003**: The system MUST transcribe candidate audio incrementally and finalize a
+  transcript when end-of-speech is detected.
+- **FR-004**: The system MUST stream the AI's synthesized voice back to the candidate
+  in chunks so playback can begin before synthesis completes.
+- **FR-005**: Streaming mode MUST be selectable per session/job; when disabled, the
+  system MUST use the existing turn-based path unchanged.
+- **FR-006**: The full transcript MUST be stored identically to turn-based interviews
+  (per-turn speaker attribution and audio references).
+- **FR-007**: All candidate input MUST continue to pass through the guardrail registry
+  before any AI response, and blocked content MUST NOT be stored (parity with MVP
+  FR-023).
+- **FR-008**: A streaming session that is interrupted MUST remain resumable within the
+  existing 24-hour window, and the system MUST fall back to turn-based handling if
+  streaming components are unavailable.
+
+### Key Entities
+
+- **Interview Session** (extended): gains a `streaming_mode` flag (default off) so
+  existing turn-based sessions are unaffected.
+
+## Success Criteria *(mandatory)*
+
+- **SC-001**: After the candidate finishes speaking, the AI's audio response begins
+  within ~2 seconds (end-of-speech to first audio chunk).
+- **SC-002**: AI audio playback starts before full synthesis completes for streamed
+  responses.
+- **SC-003**: A completed streaming interview stores a transcript indistinguishable in
+  structure from a turn-based interview (same turns, attribution, audio).
+- **SC-004**: End-of-speech detection does not prematurely cut off a candidate during
+  natural mid-sentence pauses (no false-positive turn endings in normal speech).
+
+## Assumptions
+
+- The candidate's browser supports continuous audio capture (AudioWorklet) and
+  chunked audio playback (MediaSource).
+- Streaming replaces the turn-based model for enabled jobs; turn-based remains the
+  default and the fallback.
+- English-language interviews only (inherited from MVP).
+
+## Dependencies
+
+- Builds on the MVP WebSocket interview (`InterviewService`, `SttService`,
+  `TtsService`, `interview_graph`, `InterviewRoomPage`) and Redis session state.
+- Adds on-device voice-activity detection (e.g., `silero-vad` via `onnxruntime`) and
+  streaming STT/TTS to the backend.
