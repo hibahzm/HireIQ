@@ -84,15 +84,16 @@ correct company-wide aggregates and lists the jobs below.
 ### Functional Requirements
 
 - **FR-001**: The system MUST compute per-job funnel metrics: application counts by
-  status, qualification rate, interview-completion rate, average overall evaluation
-  score, and p50/p95 time-to-screen and time-to-evaluate.
+  status, qualification rate (qualified ÷ received), interview-completion rate
+  (interviewed ÷ qualified), average overall evaluation score, and p50/p95
+  time-to-screen and time-to-evaluate.
 - **FR-002**: Recruiters and admins MUST be able to retrieve per-job analytics via an
   authenticated, tenant-scoped endpoint.
 - **FR-003**: Any authenticated recruiter or admin MUST be able to retrieve
-  company-wide aggregate analytics (total applications for the current period, overall
-  screening pass rate, overall average evaluation score) via an authenticated endpoint,
-  where the current period is the current calendar month (fixed, not user-selectable in
-  V2).
+  company-wide aggregate analytics via an authenticated endpoint, all scoped to the
+  current calendar month (fixed, not user-selectable in V2): total applications,
+  overall screening pass rate, and overall average evaluation score — each computed over
+  the applications created in that month.
 - **FR-004**: The per-job analytics page MUST visualize the funnel (stage counts), the
   evaluation-score distribution, and the time-to-screen / time-to-evaluate stats.
 - **FR-005**: The company-wide overview MUST present KPI cards above the job list and
@@ -111,8 +112,10 @@ created_at, screening timestamps) and `evaluations` (overall_score, created_at).
 
 - **SC-001**: For a job with 20+ applications, every funnel count and rate matches a
   direct query of the underlying records (100% accuracy).
-- **SC-002**: The company-wide overview loads and renders aggregates without manual
-  data export.
+- **SC-002**: `GET /analytics/overview` returns the three company-wide KPIs (total
+  applications, screening pass rate, average evaluation score) plus the job list, and
+  the overview page renders the KPI cards above the job list — no manual data export
+  required.
 - **SC-003**: Timing percentiles (p50/p95) are computed from real timestamps and are
   reproducible across reloads (deterministic for a fixed dataset).
 - **SC-004**: Both analytics endpoints (per-job and company-wide) respond within

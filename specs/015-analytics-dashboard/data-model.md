@@ -9,9 +9,9 @@ entities, columns, or migrations. (An optional read-only index may be added per
 | Table | Fields used | Role |
 |-------|-------------|------|
 | `applications` | `id`, `job_id`, `company_id`, `screening_status` (`pending\|qualified\|rejected`), `created_at` | funnel base (received, qualified), period filter |
-| `interview_sessions` | `application_id` (unique), `completed_at` | interviewed stage |
-| `evaluations` | `application_id` (unique), `overall_score` (0–100), `created_at` | evaluated stage, average score |
-| `audit_logs` | `event_type`, `entity_id`, `company_id`, `created_at` | stage timings (started/completed pairs) |
+| `interview_sessions` | `application_id` (unique), `completed_at` | interviewed stage; evaluate-timing start |
+| `evaluations` | `application_id` (unique), `overall_score` (0–100), `created_at` | evaluated stage, average score; evaluate-timing end |
+| `audit_logs` | `event_type`, `entity_id`, `company_id`, `created_at` | **screening** stage timing only (`cv.screening.started/completed` pairs) |
 
 All tables are tenant-scoped by `company_id` with RLS; analytics queries inherit that
 isolation (FR-007).
@@ -30,8 +30,8 @@ isolation (FR-007).
 | `qualification_rate` | float \| null | `qualified / received`; `null` if `received = 0` |
 | `interview_completion_rate` | float \| null | `interviewed / qualified`; `null` if `qualified = 0` |
 | `avg_evaluation_score` | float \| null | `AVG(evaluations.overall_score)`; `null` if none |
-| `time_to_screen_seconds` | {p50, p95} \| null | `percentile_cont` over screening durations |
-| `time_to_evaluate_seconds` | {p50, p95} \| null | `percentile_cont` over evaluation durations |
+| `time_to_screen_seconds` | {p50, p95} \| null | `percentile_cont` over `audit_logs` `cv.screening.completed − cv.screening.started` per application |
+| `time_to_evaluate_seconds` | {p50, p95} \| null | `percentile_cont` over `evaluations.created_at − interview_sessions.completed_at` per application |
 | `score_distribution` | bucket[] | counts of `overall_score` per band (e.g. 0–20…81–100) |
 
 ### CompanyOverview (current calendar month)

@@ -15,9 +15,10 @@ time-to-evaluate) and a **company-wide overview** (total applications this calen
 month, overall screening pass rate, overall average evaluation score) that becomes the
 post-login landing surface for all recruiters and admins. All metrics are **computed on
 read** from existing data — funnel counts from `applications` / `interview_sessions` /
-`evaluations`, and stage timings from the `audit_logs` pipeline events the MVP already
-writes (`cv.screening.started/completed`, `evaluation.started/completed`). No new
-write-path data, entities, or migrations are required (a read-only supporting index may
+`evaluations`; time-to-screen from the `audit_logs` `cv.screening.started/completed`
+events the MVP already writes; and time-to-evaluate from `evaluations.created_at −
+interview_sessions.completed_at`. No new write-path data, entities, or migrations are
+required (a read-only supporting index may
 be added if profiling needs it). Percentiles are computed in SQL with `percentile_cont`
 so results are deterministic and meet the p95 ≤ 300 ms gate.
 

@@ -34,28 +34,32 @@ truth for "interviewed"/"evaluated".
 expressed relative to the qualified pool (those eligible to be invited), which is the
 meaningful funnel conversion.
 
-## Decision 3 — Stage timings (p50/p95) from `audit_logs`
+## Decision 3 — Stage timings (p50/p95)
 
-**Decision**: Derive per-application stage durations from the pipeline events the MVP
-already writes to `audit_logs` (immutable, has `created_at TIMESTAMPTZ`, indexed on
-`event_type` and `(entity_type, entity_id)`):
+**Decision**: Derive each stage duration from the most reliable existing source:
 
-- `time_to_screen = (cv.screening.completed.created_at) − (cv.screening.started.created_at)`
-- `time_to_evaluate = (evaluation.completed.created_at) − (evaluation.started.created_at)`
+- **`time_to_screen`** = `audit_logs(cv.screening.completed).created_at −
+  audit_logs(cv.screening.started).created_at`, matched per application via
+  `entity_id = application_id`. The MVP screening service writes both events to
+  `audit_logs` (immutable, `created_at TIMESTAMPTZ`, indexed on `event_type` and
+  `(entity_type, entity_id)`).
+- **`time_to_evaluate`** = `evaluations.created_at − interview_sessions.completed_at`,
+  per application (both are guaranteed real columns).
 
 Aggregate with PostgreSQL `percentile_cont(0.5)` / `percentile_cont(0.95) WITHIN GROUP
 (ORDER BY duration_seconds)`.
 
-**Rationale**: These events already exist (Constitution VII), so timings need no new
-write-path data (FR-006). `percentile_cont` is computed in-SQL → deterministic for a
-fixed dataset (SC-003) and fast. Maps naturally to the screening ≤2 min / evaluation
-≤5 min SLAs.
+**Rationale**: All sources already exist, so timings need no new write-path data
+(FR-006). `percentile_cont` is computed in-SQL → deterministic for a fixed dataset
+(SC-003) and fast.
 
-**Implementation note to confirm**: screening events carry `entity_id = application_id`.
-The evaluation events' `entity_id` linkage (evaluation vs application) is confirmed at
-implementation time; if it is the evaluation id, join `evaluations.id → application_id`.
-Fallback if evaluation start/end events are unavailable for a row: `time_to_evaluate =
-evaluations.created_at − interview_sessions.completed_at` (both guaranteed columns).
+**Why not `audit_logs` for the evaluation stage**: unlike screening, the evaluation
+service does **not** write usable `evaluation.started/completed` rows to `audit_logs` —
+those names are `structlog` (stdout) events, and the evaluation pipeline's DB audit
+call currently uses mismatched kwargs. So `audit_logs` is the source for screening
+timing only; evaluation timing uses the column-based duration above, which is reliable
+and deterministic. (Fixing the evaluation audit-event write is a separate MVP concern,
+out of scope here.)
 
 **Alternatives considered**: Adding `screened_at` / `evaluated_at` columns and populating
 them on the write path — rejected; violates FR-006 ("no new write-path data collection")
