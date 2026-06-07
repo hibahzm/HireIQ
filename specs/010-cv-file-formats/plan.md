@@ -27,7 +27,7 @@ identical screening output to PDFs.
 FastAPI, SQLAlchemy async; **adds `python-docx`** to the backend for DOCX extraction.
 
 **Storage**: No schema change. Existing `applications.cv_extraction_method` records the
-path used (`text` | `document_intelligence`); DOCX adds `docx` as a recorded source.
+path used (`pymupdf` | `document_intelligence`); DOCX adds `docx` as a recorded source.
 
 **Testing**: `pytest` + `pytest-asyncio`; CV screening is a Constitution-VIII TDD
 domain, so DOCX and image extraction get failing-first tests before implementation.
@@ -41,7 +41,7 @@ domain, so DOCX and image extraction get failing-first tests before implementati
 **Constraints**: 10 MB upload cap across all formats; English-language CVs; `.docx`
 only (no legacy `.doc`); single-image CVs only.
 
-**Scale/Scope**: Small, additive feature — 4 tasks (T086–T089), no new endpoints or
+**Scale/Scope**: Small, additive feature — 8 tasks (T001–T008), no new endpoints or
 entities, one new backend dependency.
 
 ## Constitution Check
@@ -51,7 +51,7 @@ entities, one new backend dependency.
 | Principle | Status | Notes |
 |---|---|---|
 | I. User-First Design | ✅ PASS | US1 in spec; the form lists supported formats and errors clearly (WCAG inherited). |
-| II. Async-First Python | ✅ PASS | DOCX/image extraction runs inside the existing async `OcrService`; no sync I/O on the loop. |
+| II. Async-First Python | ✅ PASS | `python-docx` parsing is CPU-bound/synchronous, so `_try_docx` runs it via `anyio.to_thread.run_sync` to avoid blocking the event loop; image extraction uses the already-async Azure DI client. (Follow-up: the existing `_try_pymupdf` path runs `fitz` synchronously and should be wrapped the same way — tracked separately, out of this feature's scope.) |
 | III. Clean Architecture | ✅ PASS | Extraction logic stays in `OcrService`; the router only validates MIME and delegates. |
 | IV. Secrets Hygiene | ✅ PASS | No new secrets; Document Intelligence creds already via `config.py`. |
 | V. AI Agent Safety & PII | ✅ PASS | Unchanged screening pipeline — guardrails + PII redaction already applied. |

@@ -47,9 +47,11 @@ same SLA as PDF, the recruiter sees a screening score, rationale, and status for
 - An image with no legible text (blank/blurry) yields an empty extraction → the
   upload is rejected with a "could not read CV" error; no application record created.
 - File size cap (10 MB) applies identically across all formats; oversized uploads
-  return the existing 413/422 error.
+  return the existing 413 Payload Too Large error.
 - A file with a mismatched extension/MIME type (e.g., a PDF renamed to `.docx`) is
-  validated by actual content type, not just the extension.
+  rejected: the declared MIME type is checked against the allow-list, and extraction
+  then fails to parse the bytes as the claimed type, yielding a 422 with no
+  application record (rather than relying on the file extension alone).
 
 ## Requirements *(mandatory)*
 
@@ -78,7 +80,8 @@ same SLA as PDF, the recruiter sees a screening score, rationale, and status for
 ### Key Entities
 
 No new entities. The `applications.cv_extraction_method` field already records which
-extraction path was used (text vs. document_intelligence) and gains DOCX as a source.
+extraction path was used (`pymupdf` vs. `document_intelligence`) and gains `docx` as a
+source.
 
 ## Success Criteria *(mandatory)*
 
