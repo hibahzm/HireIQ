@@ -40,7 +40,7 @@ Public. Creates a company and its first admin user.
 ```json
 {
   "company_name": "Acme Corp",
-  "admin_email": "admin@acme.com",
+  "email": "admin@acme.com",
   "password": "s3cur3passw0rd"
 }
 ```
