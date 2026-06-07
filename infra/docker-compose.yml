@@ -36,6 +36,41 @@ services:
       - IPC_LOCK
     command: server -dev
 
+  # ── One-shot init containers — run at startup, then exit ──────────────────
+  # Seed dev Vault with secrets from infra/.env, then exit. api/agents wait for
+  # this to complete before starting (they read secrets from Vault on boot).
+  vault-init:
+    image: hashicorp/vault:1.15
+    depends_on:
+      vault:
+        condition: service_started
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: hireiq-dev-token
+    volumes:
+      - ./scripts/init-vault.sh:/init/init-vault.sh:ro
+    entrypoint: ["/bin/sh", "/init/init-vault.sh"]
+    restart: "no"
+
+  # Run Alembic migrations to head, then exit. api waits for completion.
+  migrate:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ENV: development
+      DATABASE_URL: postgresql+asyncpg://hireiq:hireiq_dev@postgres:5432/hireiq
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: hireiq-dev-token
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
   api:
     build:
       context: ../backend
@@ -61,8 +96,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      vault:
-        condition: service_started
+      vault-init:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   agents:
@@ -78,8 +115,8 @@ services:
     volumes:
       - ../agents:/app
     depends_on:
-      vault:
-        condition: service_started
+      vault-init:
+        condition: service_completed_successfully
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 
   frontend:

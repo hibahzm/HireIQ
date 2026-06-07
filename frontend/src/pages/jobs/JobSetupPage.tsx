@@ -117,7 +117,7 @@ export default function JobSetupPage({ token, jobId, onActivated, onBack }: Prop
           <p className="text-sm text-gray-600 mb-3">
             Setup complete. Review the criteria and activate the job.
           </p>
-          {criteriaDraft && (
+          {!!criteriaDraft && (
             <pre className="bg-gray-50 p-3 rounded text-xs overflow-auto max-h-40 mb-3">
               {JSON.stringify(criteriaDraft, null, 2)}
             </pre>

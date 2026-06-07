@@ -18,7 +18,7 @@ export default function InterviewRoomPage({ token }: Props) {
   const [processing, setProcessing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [turnCount, setTurnCount] = useState(0);
-  const [maxTurns, setMaxTurns] = useState(20);
+  const [maxTurns] = useState(20);
   const wsRef = useRef<InterviewWebSocket | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);

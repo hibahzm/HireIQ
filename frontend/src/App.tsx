@@ -20,7 +20,7 @@ import FeedbackReportPage from "./pages/feedback/FeedbackReportPage";
 
 function JobSetupWrapper() {
   const { jobId = "" } = useParams();
-  const { token = "" } = useAuth();
+  const token = useAuth().token ?? "";
   const navigate = useNavigate();
   return (
     <JobSetupPage
@@ -34,7 +34,7 @@ function JobSetupWrapper() {
 
 function ApplicationListWrapper() {
   const { jobId = "" } = useParams();
-  const { token = "" } = useAuth();
+  const token = useAuth().token ?? "";
   const navigate = useNavigate();
   return (
     <ApplicationListPage
@@ -48,7 +48,7 @@ function ApplicationListWrapper() {
 
 function ApplicationDetailWrapper() {
   const { applicationId = "" } = useParams();
-  const { token = "" } = useAuth();
+  const token = useAuth().token ?? "";
   const navigate = useNavigate();
   return (
     <ApplicationDetailPage
@@ -70,14 +70,14 @@ function InterviewWrapper() {
 }
 
 function UserManagementWrapper() {
-  const { token = "" } = useAuth();
+  const token = useAuth().token ?? "";
   const navigate = useNavigate();
   return <UserManagementPage token={token} onBack={() => navigate("/jobs")} />;
 }
 
 function ShortlistWrapper() {
   const { jobId = "" } = useParams();
-  const { token = "" } = useAuth();
+  const token = useAuth().token ?? "";
   const navigate = useNavigate();
   return (
     <ShortlistPage
@@ -91,7 +91,7 @@ function ShortlistWrapper() {
 
 function EvaluationDetailWrapper() {
   const { evaluationId = "" } = useParams();
-  const { token = "" } = useAuth();
+  const token = useAuth().token ?? "";
   const navigate = useNavigate();
   return (
     <EvaluationDetailPage
@@ -103,7 +103,7 @@ function EvaluationDetailWrapper() {
 }
 
 function JobListWrapper() {
-  const { token = "" } = useAuth();
+  const token = useAuth().token ?? "";
   const navigate = useNavigate();
   return (
     <JobListPage

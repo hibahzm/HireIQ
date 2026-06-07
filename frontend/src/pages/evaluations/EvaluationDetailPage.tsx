@@ -138,7 +138,7 @@ function CommunicationPanel({
   );
 }
 
-function TranscriptPanel({ transcript, evaluationId }: { transcript: EvaluationDetail["transcript"]; evaluationId: string }) {
+function TranscriptPanel({ transcript }: { transcript: EvaluationDetail["transcript"] }) {
   const audioRefs = useRef<Record<number, HTMLAudioElement | null>>({});
 
   return (
@@ -252,7 +252,7 @@ export default function EvaluationDetailPage({ token, evaluationId, onBack }: Pr
       <DimensionScoresPanel dimensions={evaluation.dimension_scores} />
       <ConsistencyFlagsPanel flags={evaluation.consistency_flags} />
       <CommunicationPanel quality={evaluation.communication_quality} />
-      <TranscriptPanel transcript={evaluation.transcript} evaluationId={evaluationId} />
+      <TranscriptPanel transcript={evaluation.transcript} />
     </div>
   );
 }

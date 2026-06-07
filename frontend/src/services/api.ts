@@ -72,11 +72,11 @@ export const api = {
   },
   users: {
     list: (token: string) =>
-      request<User[]>("GET", "/users", undefined, token),
+      request<UserProfile[]>("GET", "/users", undefined, token),
     create: (token: string, data: { email: string; role: string }) =>
-      request<User>("POST", "/users", data, token),
+      request<UserProfile>("POST", "/users", data, token),
     setRole: (token: string, id: string, role: string) =>
-      request<User>("PUT", `/users/${id}/role`, { role }, token),
+      request<UserProfile>("PUT", `/users/${id}/role`, { role }, token),
     deactivate: (token: string, id: string) =>
       request<void>("DELETE", `/users/${id}`, undefined, token),
   },
