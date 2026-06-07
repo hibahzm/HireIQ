@@ -1,0 +1,28 @@
+{
+  "id": "cv-07-frontend-partial",
+  "role": "Frontend Engineer",
+  "seniority": "Junior",
+  "years_experience": 2,
+  "cv_text": "Riley Nguyen\nJunior Frontend Engineer \u2014 2 years experience.\n\nSummary: Junior engineer focused on frontend engineer work. Hands-on with React, TypeScript, CSS.\n\nExperience:\n- Built and shipped frontend engineer features using React, TypeScript, CSS.\n- Collaborated cross-functionally; mentored 0 engineers.\n\nSkills: React, TypeScript, CSS.\n",
+  "job_criteria": {
+    "title": "Frontend Engineer",
+    "required_skills": [
+      "React",
+      "TypeScript",
+      "CSS",
+      "accessibility",
+      "Vite"
+    ],
+    "nice_to_have_skills": [
+      "Next.js",
+      "design systems"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "React",
+    "TypeScript",
+    "CSS"
+  ],
+  "expected_qualified": true
+}

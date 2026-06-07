@@ -1,0 +1,28 @@
+{
+  "id": "cv-03-backend-partial",
+  "role": "Backend Engineer",
+  "seniority": "Junior",
+  "years_experience": 2,
+  "cv_text": "Sam Patel\nJunior Backend Engineer \u2014 2 years experience.\n\nSummary: Junior engineer focused on backend engineer work. Hands-on with Python, PostgreSQL, FastAPI.\n\nExperience:\n- Built and shipped backend engineer features using Python, PostgreSQL, FastAPI.\n- Collaborated cross-functionally; mentored 0 engineers.\n\nSkills: Python, PostgreSQL, FastAPI.\n",
+  "job_criteria": {
+    "title": "Backend Engineer",
+    "required_skills": [
+      "Python",
+      "PostgreSQL",
+      "FastAPI",
+      "async",
+      "Docker"
+    ],
+    "nice_to_have_skills": [
+      "distributed systems",
+      "Kubernetes"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "Python",
+    "PostgreSQL",
+    "FastAPI"
+  ],
+  "expected_qualified": true
+}

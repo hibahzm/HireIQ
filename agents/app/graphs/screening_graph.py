@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+import json
+from typing import Any, TypedDict
+
+import structlog
+from langchain_core.messages import SystemMessage
+from langchain_openai import ChatOpenAI
+from langgraph.graph import END, StateGraph
+
+from app.guardrails import PIIRedactor, registry
+from app.prompts import SCREENING_SYSTEM
+
+logger = structlog.get_logger()
+
+
+class ScreeningState(TypedDict):
+    application_id: str
+    company_id: str
+    cv_text: str
+    job_criteria: dict[str, Any]
+    hybrid_search_results: list[dict[str, Any]]
+    score: int | None
+    rationale: str | None
+    status: str
+    guardrail_triggered: bool
+
+
+def _build_llm() -> ChatOpenAI:
+    from app.config import get_settings
+    settings = get_settings()
+    return ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY, temperature=0.1)
+
+
+async def score_cv(state: ScreeningState) -> ScreeningState:
+    if not registry.check_input(state["cv_text"]).passed:
+        logger.warning("screening.guardrail_triggered", application_id=state["application_id"])
+        return {
+            **state,
+            "score": 0,
+            "rationale": "Content blocked by guardrails.",
+            "status": "rejected",
+            "guardrail_triggered": True,
+        }
+
+    search_summary = "\n".join(
+        f"- {r.get('chunk_text', '')[:200]}" for r in state["hybrid_search_results"][:5]
+    )
+    prompt = SCREENING_SYSTEM.format(
+        criteria=str(state["job_criteria"]),
+        search_results=search_summary,
+        cv_text=state["cv_text"][:3000],
+    )
+
+    response = await _build_llm().ainvoke([SystemMessage(content=prompt)])
+    raw = response.content
+
+    if not registry.check_output(raw).passed:
+        return {
+            **state,
+            "score": 0,
+            "rationale": "Output blocked by guardrails.",
+            "status": "rejected",
+            "guardrail_triggered": True,
+        }
+
+    try:
+        data = json.loads(raw)
+        score = int(data["score"])
+        rationale = PIIRedactor.redact(str(data["rationale"]))
+        threshold = state["job_criteria"].get("min_screening_score", 70)
+        status = "qualified" if score >= threshold else "rejected"
+    except (json.JSONDecodeError, KeyError, ValueError):
+        score = 0
+        rationale = "Unable to parse evaluation result."
+        status = "rejected"
+
+    return {
+        **state,
+        "score": score,
+        "rationale": rationale,
+        "status": status,
+        "guardrail_triggered": False,
+    }
+
+
+def build_screening_graph() -> StateGraph:
+    graph = StateGraph(ScreeningState)
+    graph.add_node("score_cv", score_cv)
+    graph.set_entry_point("score_cv")
+    graph.add_edge("score_cv", END)
+    return graph.compile()
+
+
+screening_graph = build_screening_graph()

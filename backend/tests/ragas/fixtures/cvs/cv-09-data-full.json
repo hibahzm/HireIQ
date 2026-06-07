@@ -1,0 +1,30 @@
+{
+  "id": "cv-09-data-full",
+  "role": "Data Engineer",
+  "seniority": "Senior",
+  "years_experience": 7,
+  "cv_text": "Quinn Foster\nSenior Data Engineer \u2014 7 years experience.\n\nSummary: Senior engineer focused on data engineer work. Hands-on with SQL, Spark, Airflow, Python, ETL, dbt.\n\nExperience:\n- Built and shipped data engineer features using SQL, Spark, Airflow.\n- Collaborated cross-functionally; mentored 5 engineers.\n\nSkills: SQL, Spark, Airflow, Python, ETL, dbt.\n",
+  "job_criteria": {
+    "title": "Data Engineer",
+    "required_skills": [
+      "SQL",
+      "Spark",
+      "Airflow",
+      "Python",
+      "ETL"
+    ],
+    "nice_to_have_skills": [
+      "dbt",
+      "Snowflake"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "SQL",
+    "Spark",
+    "Airflow",
+    "Python",
+    "ETL"
+  ],
+  "expected_qualified": true
+}

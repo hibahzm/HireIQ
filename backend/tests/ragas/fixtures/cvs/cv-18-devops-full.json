@@ -1,0 +1,30 @@
+{
+  "id": "cv-18-devops-full",
+  "role": "DevOps Engineer",
+  "seniority": "Mid-level",
+  "years_experience": 4,
+  "cv_text": "Emerson Cruz\nMid-level DevOps Engineer \u2014 4 years experience.\n\nSummary: Mid-level engineer focused on devops engineer work. Hands-on with Terraform, AWS, CI/CD, Kubernetes, observability, service mesh.\n\nExperience:\n- Built and shipped devops engineer features using Terraform, AWS, CI/CD.\n- Collaborated cross-functionally; mentored 2 engineers.\n\nSkills: Terraform, AWS, CI/CD, Kubernetes, observability, service mesh.\n",
+  "job_criteria": {
+    "title": "DevOps Engineer",
+    "required_skills": [
+      "Terraform",
+      "AWS",
+      "CI/CD",
+      "Kubernetes",
+      "observability"
+    ],
+    "nice_to_have_skills": [
+      "service mesh",
+      "incident response"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "Terraform",
+    "AWS",
+    "CI/CD",
+    "Kubernetes",
+    "observability"
+  ],
+  "expected_qualified": true
+}

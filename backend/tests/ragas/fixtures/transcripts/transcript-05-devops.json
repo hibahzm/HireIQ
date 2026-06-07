@@ -1,0 +1,57 @@
+{
+  "id": "transcript-05-devops",
+  "role": "DevOps Engineer",
+  "job_criteria": {
+    "title": "DevOps Engineer",
+    "required_skills": [
+      "Terraform",
+      "AWS",
+      "CI/CD",
+      "Kubernetes",
+      "observability"
+    ],
+    "evaluation_dimensions": [
+      "technical_skills",
+      "problem_solving",
+      "communication"
+    ]
+  },
+  "cv_text": "Candidate for DevOps Engineer. Skills: Terraform, AWS, CI/CD, Kubernetes, observability.",
+  "transcript": [
+    {
+      "turn_index": 0,
+      "speaker": "ai",
+      "content_text": "Welcome. Tell me about your experience as a DevOps Engineer."
+    },
+    {
+      "turn_index": 1,
+      "speaker": "candidate",
+      "content_text": "I have several years building devops engineer systems with Terraform and AWS. Recently I led a project improving throughput using CI/CD."
+    },
+    {
+      "turn_index": 2,
+      "speaker": "ai",
+      "content_text": "Describe a hard problem you solved and the trade-offs you weighed."
+    },
+    {
+      "turn_index": 3,
+      "speaker": "candidate",
+      "content_text": "We hit a scaling bottleneck; I profiled it, isolated the hot path, and redesigned it with Kubernetes. The trade-off was added complexity, justified by a 4x latency win."
+    },
+    {
+      "turn_index": 4,
+      "speaker": "ai",
+      "content_text": "How do you communicate technical decisions to non-technical stakeholders?"
+    },
+    {
+      "turn_index": 5,
+      "speaker": "candidate",
+      "content_text": "I frame decisions around user impact and cost, use diagrams, and confirm understanding by restating the agreed plan."
+    }
+  ],
+  "ground_truth_evidence": {
+    "technical_skills": "I have several years building devops engineer systems with Terraform and AWS. Recently I led a project improving throughput using CI/CD.",
+    "problem_solving": "We hit a scaling bottleneck; I profiled it, isolated the hot path, and redesigned it with Kubernetes. The trade-off was added complexity, justified by a 4x latency win.",
+    "communication": "I frame decisions around user impact and cost, use diagrams, and confirm understanding by restating the agreed plan."
+  }
+}

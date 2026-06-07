@@ -1,0 +1,26 @@
+{
+  "id": "cv-16-ml-weak",
+  "role": "Machine Learning Engineer",
+  "seniority": "Career-changer",
+  "years_experience": 1,
+  "cv_text": "Devon Shah\nCareer-changer Machine Learning Engineer \u2014 1 years experience.\n\nSummary: Career-changer engineer focused on machine learning engineer work. Hands-on with PyTorch, communication, self-taught projects.\n\nExperience:\n- Built and shipped machine learning engineer features using PyTorch, communication, self-taught projects.\n- Collaborated cross-functionally; mentored 0 engineers.\n\nSkills: PyTorch, communication, self-taught projects.\n",
+  "job_criteria": {
+    "title": "Machine Learning Engineer",
+    "required_skills": [
+      "PyTorch",
+      "Python",
+      "MLOps",
+      "feature engineering",
+      "NLP"
+    ],
+    "nice_to_have_skills": [
+      "LLM fine-tuning",
+      "vector databases"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "PyTorch"
+  ],
+  "expected_qualified": false
+}

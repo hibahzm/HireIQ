@@ -1,0 +1,28 @@
+{
+  "id": "cv-11-data-partial",
+  "role": "Data Engineer",
+  "seniority": "Junior",
+  "years_experience": 2,
+  "cv_text": "Jamie Cole\nJunior Data Engineer \u2014 2 years experience.\n\nSummary: Junior engineer focused on data engineer work. Hands-on with SQL, Spark, Airflow.\n\nExperience:\n- Built and shipped data engineer features using SQL, Spark, Airflow.\n- Collaborated cross-functionally; mentored 0 engineers.\n\nSkills: SQL, Spark, Airflow.\n",
+  "job_criteria": {
+    "title": "Data Engineer",
+    "required_skills": [
+      "SQL",
+      "Spark",
+      "Airflow",
+      "Python",
+      "ETL"
+    ],
+    "nice_to_have_skills": [
+      "dbt",
+      "Snowflake"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "SQL",
+    "Spark",
+    "Airflow"
+  ],
+  "expected_qualified": true
+}

@@ -1,0 +1,26 @@
+{
+  "id": "cv-04-backend-weak",
+  "role": "Backend Engineer",
+  "seniority": "Career-changer",
+  "years_experience": 1,
+  "cv_text": "Taylor Chen\nCareer-changer Backend Engineer \u2014 1 years experience.\n\nSummary: Career-changer engineer focused on backend engineer work. Hands-on with Python, communication, self-taught projects.\n\nExperience:\n- Built and shipped backend engineer features using Python, communication, self-taught projects.\n- Collaborated cross-functionally; mentored 0 engineers.\n\nSkills: Python, communication, self-taught projects.\n",
+  "job_criteria": {
+    "title": "Backend Engineer",
+    "required_skills": [
+      "Python",
+      "PostgreSQL",
+      "FastAPI",
+      "async",
+      "Docker"
+    ],
+    "nice_to_have_skills": [
+      "distributed systems",
+      "Kubernetes"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "Python"
+  ],
+  "expected_qualified": false
+}

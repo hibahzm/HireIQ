@@ -1,0 +1,30 @@
+{
+  "id": "cv-14-ml-full",
+  "role": "Machine Learning Engineer",
+  "seniority": "Mid-level",
+  "years_experience": 4,
+  "cv_text": "Reese Wells\nMid-level Machine Learning Engineer \u2014 4 years experience.\n\nSummary: Mid-level engineer focused on machine learning engineer work. Hands-on with PyTorch, Python, MLOps, feature engineering, NLP, LLM fine-tuning.\n\nExperience:\n- Built and shipped machine learning engineer features using PyTorch, Python, MLOps.\n- Collaborated cross-functionally; mentored 2 engineers.\n\nSkills: PyTorch, Python, MLOps, feature engineering, NLP, LLM fine-tuning.\n",
+  "job_criteria": {
+    "title": "Machine Learning Engineer",
+    "required_skills": [
+      "PyTorch",
+      "Python",
+      "MLOps",
+      "feature engineering",
+      "NLP"
+    ],
+    "nice_to_have_skills": [
+      "LLM fine-tuning",
+      "vector databases"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "PyTorch",
+    "Python",
+    "MLOps",
+    "feature engineering",
+    "NLP"
+  ],
+  "expected_qualified": true
+}

@@ -1,0 +1,30 @@
+{
+  "id": "cv-05-frontend-full",
+  "role": "Frontend Engineer",
+  "seniority": "Senior",
+  "years_experience": 7,
+  "cv_text": "Morgan Lee\nSenior Frontend Engineer \u2014 7 years experience.\n\nSummary: Senior engineer focused on frontend engineer work. Hands-on with React, TypeScript, CSS, accessibility, Vite, Next.js.\n\nExperience:\n- Built and shipped frontend engineer features using React, TypeScript, CSS.\n- Collaborated cross-functionally; mentored 5 engineers.\n\nSkills: React, TypeScript, CSS, accessibility, Vite, Next.js.\n",
+  "job_criteria": {
+    "title": "Frontend Engineer",
+    "required_skills": [
+      "React",
+      "TypeScript",
+      "CSS",
+      "accessibility",
+      "Vite"
+    ],
+    "nice_to_have_skills": [
+      "Next.js",
+      "design systems"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "React",
+    "TypeScript",
+    "CSS",
+    "accessibility",
+    "Vite"
+  ],
+  "expected_qualified": true
+}
