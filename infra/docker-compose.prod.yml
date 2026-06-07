@@ -1,11 +1,25 @@
-# Production composition — pulls pre-built images from Docker Hub (no source
-# bind-mounts, no --reload). Used as the reference topology for Azure Container
-# Apps: `api` and `frontend` have external ingress; `agents` is internal-only
-# (no published ports — only reachable on the compose/ACA internal network).
+# Production composition — reference topology for Azure Container Apps.
+# Pulls pre-built images from Docker Hub (no source bind-mounts, no --reload).
+# `api` and `frontend` have external ingress; `agents` is internal-only.
 #
-# Secrets are injected from the environment (CI / Key Vault), never baked in.
-# Required env: DOCKERHUB_NAMESPACE, IMAGE_TAG, DATABASE_URL, REDIS_URL,
-# JWT_SECRET, AGENTS_INTERNAL_SECRET, OPENAI_API_KEY, STORAGE_*, EMAIL_*.
+# SECRETS: production does NOT use HashiCorp Vault or an .env file. With
+# ENV=production, config.py loads every secret from **Azure Key Vault** via
+# DefaultAzureCredential (config._load_from_azure_keyvault). On Azure Container
+# Apps the container's **managed identity** is granted Key Vault access, so no
+# credentials are passed here. The only env below is non-secret configuration
+# plus the Key Vault URL.
+#
+# Secrets resolved from Key Vault (set with `az keyvault secret set`):
+#   api    : openai-api-key, jwt-secret, agents-internal-secret, database-url,
+#            redis-url, email-api-key, azure-storage-connection-string
+#   agents : openai-api-key, agents-internal-secret, azure-speech-key
+#
+# For LOCAL testing of this file (outside ACA), DefaultAzureCredential needs
+# AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_CLIENT_SECRET (a service principal)
+# or a mounted `az login` — it cannot use a managed identity off-Azure.
+#
+# Required env for substitution: DOCKERHUB_NAMESPACE, IMAGE_TAG,
+# AZURE_KEYVAULT_URL, FRONTEND_ORIGIN, EMAIL_FROM.
 services:
   api:
     image: ${DOCKERHUB_NAMESPACE}/hireiq-api:${IMAGE_TAG:-latest}
@@ -13,17 +27,12 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      JWT_SECRET: ${JWT_SECRET}
+      ENV: production
+      AZURE_KEYVAULT_URL: ${AZURE_KEYVAULT_URL}
       AGENTS_BASE_URL: http://agents:8001
-      AGENTS_INTERNAL_SECRET: ${AGENTS_INTERNAL_SECRET}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      STORAGE_BACKEND: ${STORAGE_BACKEND:-azure}
-      STORAGE_CONNECTION_STRING: ${STORAGE_CONNECTION_STRING}
-      STORAGE_CONTAINER: ${STORAGE_CONTAINER:-hireiq}
-      EMAIL_BACKEND: ${EMAIL_BACKEND:-resend}
-      EMAIL_API_KEY: ${EMAIL_API_KEY}
+      STORAGE_BACKEND: azure
+      AZURE_STORAGE_CONTAINER: ${AZURE_STORAGE_CONTAINER:-hireiq}
+      EMAIL_BACKEND: resend
       EMAIL_FROM: ${EMAIL_FROM}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
     depends_on:
@@ -42,10 +51,9 @@ services:
     expose:
       - "8001"
     environment:
-      AGENTS_INTERNAL_SECRET: ${AGENTS_INTERNAL_SECRET}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      AZURE_SPEECH_KEY: ${AZURE_SPEECH_KEY}
-      AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION}
+      ENV: production
+      AZURE_KEYVAULT_URL: ${AZURE_KEYVAULT_URL}
+      AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION:-eastus}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health').status==200 else 1)"]
       interval: 30s
