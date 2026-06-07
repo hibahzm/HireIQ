@@ -151,7 +151,7 @@ export default function FeedbackReportPage() {
         )}
 
         <p className="text-center text-xs text-gray-400 pb-4">
-          Powered by HireIQ · This link expires 30 days after your interview
+          Powered by HireIQ · This link expires 30 days after your evaluation
         </p>
       </div>
     </div>

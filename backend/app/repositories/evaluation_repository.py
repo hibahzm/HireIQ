@@ -104,6 +104,40 @@ class EvaluationRepository:
             object.__setattr__(ev, k, v)
         return ev
 
+    async def get_feedback_token_row(self, token: str) -> dict[str, Any] | None:
+        """Lookup by token *without* the expiry filter — used to distinguish an
+        unknown token (404) from an expired one (410). Bypasses RLS (public)."""
+        result = await self._session.execute(
+            sa.text(
+                """
+                SELECT feedback_token_expires_at, application_id
+                FROM evaluations
+                WHERE feedback_token = :token
+                LIMIT 1
+                """
+            ),
+            {"token": token},
+        )
+        row = result.mappings().first()
+        return dict(row) if row else None
+
+    async def get_job_title_by_application_id(self, application_id: str) -> str | None:
+        """Resolve the job title for a feedback report. Bypasses RLS (public)."""
+        result = await self._session.execute(
+            sa.text(
+                """
+                SELECT j.title
+                FROM jobs j
+                JOIN applications a ON a.job_id = j.id
+                WHERE a.id = :application_id
+                LIMIT 1
+                """
+            ),
+            {"application_id": application_id},
+        )
+        row = result.mappings().first()
+        return row["title"] if row else None
+
     async def set_feedback_token(
         self,
         evaluation_id: str,

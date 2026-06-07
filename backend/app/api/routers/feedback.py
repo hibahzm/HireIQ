@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import sqlalchemy as sa
 import structlog
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import _get_session_factory
 from app.repositories.evaluation_repository import EvaluationRepository
@@ -66,48 +64,22 @@ async def get_feedback_report(token: str) -> FeedbackReportResponse:
             repo = EvaluationRepository(session)
             evaluation = await repo.get_by_feedback_token(token)
 
-    if evaluation is None:
-        # Distinguish: if the token row exists but expired, get_by_feedback_token
-        # returns None (it checks expires_at). We need to tell them apart.
-        # Re-query without expiry filter to return 410 for expired tokens.
-        async with _get_session_factory()() as session:
-            async with session.begin():
-                result = await session.execute(
-                    sa.text(
-                        "SELECT feedback_token_expires_at, application_id "
-                        "FROM evaluations WHERE feedback_token = :token LIMIT 1"
-                    ),
-                    {"token": token},
-                )
-                row = result.mappings().first()
+            if evaluation is None:
+                # get_by_feedback_token applies the expiry filter, so a None result
+                # is either an unknown token (404) or an expired one (410).
+                # Re-look up without the expiry filter to tell them apart.
+                row = await repo.get_feedback_token_row(token)
+                if row is None:
+                    raise HTTPException(status_code=404, detail="Feedback link not found")
+                expires_at = row["feedback_token_expires_at"]
+                if expires_at and expires_at < datetime.now(timezone.utc):
+                    raise HTTPException(status_code=410, detail="Feedback link has expired")
+                raise HTTPException(status_code=404, detail="Feedback link not found")
 
-        if row is None:
-            raise HTTPException(status_code=404, detail="Feedback link not found")
-
-        expires_at = row["feedback_token_expires_at"]
-        if expires_at and expires_at < datetime.now(timezone.utc):
-            raise HTTPException(status_code=410, detail="Feedback link has expired")
-
-        raise HTTPException(status_code=404, detail="Feedback link not found")
-
-    # Fetch job title via application → job
-    async with _get_session_factory()() as session:
-        async with session.begin():
-            result = await session.execute(
-                sa.text(
-                    """
-                    SELECT j.title
-                    FROM jobs j
-                    JOIN applications a ON a.job_id = j.id
-                    WHERE a.id = :application_id
-                    LIMIT 1
-                    """
-                ),
-                {"application_id": evaluation.application_id},
+            job_title = (
+                await repo.get_job_title_by_application_id(evaluation.application_id)
+                or "the position"
             )
-            row = result.mappings().first()
-
-    job_title = row["title"] if row else "the position"
 
     dimension_scores = [
         DimensionScorePublic(
