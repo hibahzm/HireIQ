@@ -17,10 +17,10 @@ exists with id `$JOB_ID`.
 curl -X POST http://localhost:8000/jobs/$JOB_ID/applications \
   -F "full_name=Dana Doc" \
   -F "email=dana@example.com" \
-  -F "cv=@/path/to/cv.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  -F "cv_file=@/path/to/cv.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 ```
 
-**Expected**: `202` with `application_id`. Within ~2 min, `GET /applications/{id}`
+**Expected**: `201` with the application's `id`. Within ~2 min, `GET /applications/{id}`
 shows a `screening_score`, `screening_rationale`, and `screening_status`;
 `cv_extraction_method` is `docx` (or `document_intelligence` if the DOCX was sparse).
 
@@ -30,10 +30,10 @@ shows a `screening_score`, `screening_rationale`, and `screening_status`;
 curl -X POST http://localhost:8000/jobs/$JOB_ID/applications \
   -F "full_name=Ivan Image" \
   -F "email=ivan@example.com" \
-  -F "cv=@/path/to/cv.png;type=image/png"
+  -F "cv_file=@/path/to/cv.png;type=image/png"
 ```
 
-**Expected**: `202`; screening completes within ~2 min; `cv_extraction_method` is
+**Expected**: `201`; screening completes within ~2 min; `cv_extraction_method` is
 `document_intelligence`.
 
 ## Scenario 3 — Unsupported format rejected
@@ -42,7 +42,7 @@ curl -X POST http://localhost:8000/jobs/$JOB_ID/applications \
 curl -X POST http://localhost:8000/jobs/$JOB_ID/applications \
   -F "full_name=Terry Text" \
   -F "email=terry@example.com" \
-  -F "cv=@/path/to/cv.txt;type=text/plain"
+  -F "cv_file=@/path/to/cv.txt;type=text/plain"
 ```
 
 **Expected**: `422` with a clear "Accepted: PDF, DOCX, JPG, PNG" message. Verify **no

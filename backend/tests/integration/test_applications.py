@@ -28,13 +28,16 @@ async def test_application_form_validates_file_size(client: AsyncClient, active_
 
 
 @pytest.mark.asyncio
-async def test_application_rejects_non_pdf(client: AsyncClient, active_job):
-    """Non-PDF files are rejected with 422."""
+async def test_application_rejects_unsupported_type(client: AsyncClient, active_job):
+    """Unsupported file types (e.g. .txt) are rejected with 422.
+
+    NOTE: As of V2-1, DOCX and image CVs are accepted — see test_cv_formats.py.
+    """
     job_id = active_job
 
     resp = await client.post(
         f"/jobs/{job_id}/applications",
-        data={"full_name": "Word User", "email": "word@test.com"},
-        files={"cv_file": ("cv.docx", b"PK mock docx content", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        data={"full_name": "Terry Text", "email": "terry@test.com"},
+        files={"cv_file": ("cv.txt", b"plain text, not a CV file", "text/plain")},
     )
     assert resp.status_code == 422

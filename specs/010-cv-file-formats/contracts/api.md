@@ -14,7 +14,7 @@ CV content types.
 |-------|------|-------|
 | `full_name` | string | unchanged |
 | `email` | string | unchanged |
-| `cv` | file | **Accepted types (widened)**: see below. Max size **10 MB** (unchanged). |
+| `cv_file` | file | **Accepted types (widened)**: see below. Max size **10 MB** (unchanged). |
 
 **Accepted `cv` content types**:
 
@@ -29,7 +29,7 @@ CV content types.
 
 | Status | When | Body |
 |--------|------|------|
-| `202 Accepted` | Valid file accepted; screening enqueued | `{ "application_id": "uuid", "status": "screening" }` (unchanged) |
+| `201 Created` | Valid file accepted; screening enqueued | `ApplicationResponse` JSON — includes `id`, `status`, `screening_status`, and `cv_extraction_method` (unchanged from MVP) |
 | `409 Conflict` | Duplicate (same email + job) | unchanged |
 | `422 Unprocessable Entity` | **Unsupported format**, or file unreadable/corrupt/encrypted (any format) | `{ "detail": "Unsupported file type. Accepted: PDF, DOCX, JPG, PNG." }` — **no application record created** |
 | `413 Payload Too Large` | File exceeds 10 MB | unchanged |

@@ -22,7 +22,7 @@ corresponding implementation tasks.
 
 ## Phase 1: Setup
 
-- [ ] T001 [P] Add `python-docx` to `backend/pyproject.toml` dependencies (DOCX extraction); rebuild the backend image / reinstall deps
+- [X] T001 [P] Add `python-docx` to `backend/pyproject.toml` dependencies (DOCX extraction); rebuild the backend image / reinstall deps
 
 ---
 
@@ -45,15 +45,15 @@ the recruiter sees a screening score/rationale/status for each; a `.txt` upload 
 
 ### Tests for User Story 1 (Constitution VIII — write FIRST, confirm FAILING before T005)
 
-- [ ] T002 [P] [US1] Write failing integration test: DOCX CV upload → extraction + screening in `backend/tests/integration/test_cv_formats.py` — asserts a `.docx` (paragraphs + a table) yields a non-empty `cv_text`, a screening score/rationale, and `cv_extraction_method == "docx"` (mock the agents/LLM call); a sparse/text-light `.docx` falls back to `document_intelligence`
-- [ ] T003 [P] [US1] Write failing integration test: image + unsupported handling in `backend/tests/integration/test_cv_formats.py` — a `.png`/`.jpg` CV routes to `document_intelligence` and produces a screening result; a blank/blurry image with no legible text yields an empty extraction → 422 "could not read CV" with NO application record (the `no_text_extracted` branch); a `.txt` upload returns 422 with a clear message and creates NO application record; a renamed/corrupt file returns 422
+- [X] T002 [P] [US1] Write failing integration test: DOCX CV upload → extraction + screening in `backend/tests/integration/test_cv_formats.py` — asserts a `.docx` (paragraphs + a table) yields a non-empty `cv_text`, a screening score/rationale, and `cv_extraction_method == "docx"` (mock the agents/LLM call); a sparse/text-light `.docx` falls back to `document_intelligence`
+- [X] T003 [P] [US1] Write failing integration test: image + unsupported handling in `backend/tests/integration/test_cv_formats.py` — a `.png`/`.jpg` CV routes to `document_intelligence` and produces a screening result; a blank/blurry image with no legible text yields an empty extraction → 422 "could not read CV" with NO application record (the `no_text_extracted` branch); a `.txt` upload returns 422 with a clear message and creates NO application record; a renamed/corrupt file returns 422
 
 ### Implementation for User Story 1
 
-- [ ] T004 [US1] Add DOCX extraction to `OcrService` in `backend/app/services/ocr_service.py` — `_try_docx(file_bytes)` using `python-docx` to read paragraph text and table cell text; run the synchronous `python-docx` parse via `anyio.to_thread.run_sync` so the CPU-bound parse does not block the event loop (Constitution Principle II); raise `OcrValidationError` on corrupt/unreadable DOCX; reuse the existing `_quality_ok` heuristic to fall back to `_azure_doc_intelligence` when text is sparse; return `(text, "docx")`
-- [ ] T005 [US1] Add format dispatch + image routing in `OcrService.extract` in `backend/app/services/ocr_service.py` — dispatch on the file type (extension/MIME from `filename`): PDF → existing PyMuPDF-then-DI path; DOCX → `_try_docx`-then-DI; image (`.jpg`/`.jpeg`/`.png`) → `_azure_doc_intelligence` directly; unknown type → `OcrValidationError`
-- [ ] T006 [US1] Widen accepted CV content types in `backend/app/api/routers/applications.py` — accept `application/pdf`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `image/jpeg`, `image/png`; keep the 10 MB cap; return 422 with "Accepted: PDF, DOCX, JPG, PNG." for unsupported types; ensure no application record is created on rejection (parity with FR-006)
-- [ ] T007 [US1] Update `JobApplicationPage` in `frontend/src/pages/applications/JobApplicationPage.tsx` — set the file input `accept=".pdf,.docx,.jpg,.jpeg,.png"` (and matching MIME types) and update helper text to list all supported formats
+- [X] T004 [US1] Add DOCX extraction to `OcrService` in `backend/app/services/ocr_service.py` — `_try_docx(file_bytes)` using `python-docx` to read paragraph text and table cell text; run the synchronous `python-docx` parse via `anyio.to_thread.run_sync` so the CPU-bound parse does not block the event loop (Constitution Principle II); raise `OcrValidationError` on corrupt/unreadable DOCX; reuse the existing `_quality_ok` heuristic to fall back to `_azure_doc_intelligence` when text is sparse; return `(text, "docx")`
+- [X] T005 [US1] Add format dispatch + image routing in `OcrService.extract` in `backend/app/services/ocr_service.py` — dispatch on the file type (extension/MIME from `filename`): PDF → existing PyMuPDF-then-DI path; DOCX → `_try_docx`-then-DI; image (`.jpg`/`.jpeg`/`.png`) → `_azure_doc_intelligence` directly; unknown type → `OcrValidationError`
+- [X] T006 [US1] Widen accepted CV content types in `backend/app/api/routers/applications.py` — accept `application/pdf`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `image/jpeg`, `image/png`; keep the 10 MB cap; return 422 with "Accepted: PDF, DOCX, JPG, PNG." for unsupported types; ensure no application record is created on rejection (parity with FR-006)
+- [X] T007 [US1] Update `JobApplicationPage` in `frontend/src/pages/applications/JobApplicationPage.tsx` — set the file input `accept=".pdf,.docx,.jpg,.jpeg,.png"` (and matching MIME types) and update helper text to list all supported formats
 
 **Checkpoint**: DOCX and image CVs produce screening results at the same quality/SLA as
 PDF (SC-001/SC-002); unsupported formats return 422 with no record (SC-003). Tests

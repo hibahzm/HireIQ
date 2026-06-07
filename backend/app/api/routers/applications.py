@@ -32,6 +32,15 @@ MAX_CV_SIZE = 10 * 1024 * 1024  # 10 MB
 RATE_LIMIT_MAX = 5
 RATE_LIMIT_WINDOW = 3600  # 1 hour
 
+# Accepted CV content types (V2-1: PDF + DOCX + JPG/PNG). Mapped to a blob extension.
+ACCEPTED_CV_TYPES = {
+    "application/pdf": ".pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+}
+UNSUPPORTED_CV_MESSAGE = "Unsupported file type. Accepted: PDF, DOCX, JPG, PNG."
+
 
 @router.post("/jobs/{job_id}/applications", response_model=ApplicationResponse, status_code=201)
 async def submit_application(
@@ -43,8 +52,8 @@ async def submit_application(
     redis_client: Redis = Depends(get_redis),
 ):
     """Public — no auth. Rate-limited 5/IP/hr."""
-    if cv_file.content_type != "application/pdf":
-        raise HTTPException(status_code=422, detail="Only PDF files are accepted")
+    if cv_file.content_type not in ACCEPTED_CV_TYPES:
+        raise HTTPException(status_code=422, detail=UNSUPPORTED_CV_MESSAGE)
 
     cv_bytes = await cv_file.read()
     if len(cv_bytes) > MAX_CV_SIZE:
@@ -60,9 +69,12 @@ async def submit_application(
     if current > RATE_LIMIT_MAX:
         raise HTTPException(status_code=429, detail="Too many submissions. Try again later.")
 
-    # Validate CV before touching the DB
+    # Validate CV before touching the DB — dispatch on the declared type, and let the
+    # extractor reject files whose bytes don't parse as the claimed type (renamed/corrupt).
     try:
-        _, _ = await OcrService().extract(cv_bytes)
+        _, _ = await OcrService().extract(
+            cv_bytes, filename=cv_file.filename or "cv", content_type=cv_file.content_type
+        )
     except OcrValidationError as exc:
         raise HTTPException(status_code=422, detail=f"Invalid CV: {exc}")
 
@@ -96,8 +108,9 @@ async def submit_application(
                     status_code=409, detail="Application already submitted for this job"
                 )
 
-            # 4. Store CV
-            blob_key = f"cvs/{job_id}/{uuid.uuid4()}.pdf"
+            # 4. Store CV (preserve the original format's extension)
+            blob_ext = ACCEPTED_CV_TYPES[cv_file.content_type]
+            blob_key = f"cvs/{job_id}/{uuid.uuid4()}{blob_ext}"
             await StorageService().upload(blob_key, cv_bytes)
 
             # 5. Create candidate + application
