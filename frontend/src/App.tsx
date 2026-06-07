@@ -14,6 +14,7 @@ import InterviewRoomPage from "./pages/interview/InterviewRoomPage";
 import UserManagementPage from "./pages/company/UserManagementPage";
 import ShortlistPage from "./pages/evaluations/ShortlistPage";
 import EvaluationDetailPage from "./pages/evaluations/EvaluationDetailPage";
+import FeedbackReportPage from "./pages/feedback/FeedbackReportPage";
 
 // ── Page wrappers that pull route params and auth token ──────────────────────
 
@@ -158,6 +159,7 @@ function AppRoutes() {
       <Route path="/set-password" element={<SetPasswordWrapper />} />
       <Route path="/apply/:jobId" element={<JobApplicationWrapper />} />
       <Route path="/interview/:token" element={<InterviewWrapper />} />
+      <Route path="/feedback/:token" element={<FeedbackReportPage />} />
 
       {/* Protected */}
       <Route path="/jobs" element={<PrivateRoute><JobListWrapper /></PrivateRoute>} />

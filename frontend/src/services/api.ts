@@ -86,6 +86,10 @@ export const api = {
     get: (token: string, evaluationId: string) =>
       request<EvaluationDetail>("GET", `/evaluations/${evaluationId}`, undefined, token),
   },
+  feedback: {
+    get: (token: string) =>
+      request<FeedbackReport>("GET", `/feedback/${token}`),
+  },
 };
 
 export interface Job {
@@ -155,4 +159,11 @@ export interface EvaluationDetail {
   summary: string | null;
   transcript: TranscriptTurn[];
   created_at: string;
+}
+
+export interface FeedbackReport {
+  job_title: string;
+  overall_score: number;
+  dimension_scores: Array<{ dimension: string; score: number }>;
+  summary: { strengths: string; areas_for_improvement: string } | null;
 }
