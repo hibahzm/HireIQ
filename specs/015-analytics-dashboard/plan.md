@@ -109,10 +109,10 @@ backend/
 
 frontend/
 ├── package.json                      # + recharts dependency
+├── src/services/api.ts               # + api.analytics.job()/overview() client + types (central convention)
 └── src/pages/analytics/
     ├── CompanyOverviewPage.tsx       # NEW — post-login landing: KPI cards above the job list
     └── JobAnalyticsPage.tsx          # NEW — funnel + score distribution + timing stats
-    └── (api client + chart components as needed)
 ```
 
 **Structure Decision**: Follows the MVP's repository → service → thin-router layering.

@@ -35,7 +35,7 @@ written before the corresponding endpoints.
 - [X] T003 Create `AnalyticsRepository` skeleton in `backend/app/repositories/analytics_repository.py` — class taking an `AsyncSession`; all aggregation SQL lives here (Principle III); no raw queries leak to service/router
 - [X] T004 Create `AnalyticsService` skeleton in `backend/app/services/analytics_service.py` — class wired to `AnalyticsRepository`; will hold ÷0-safe rate math and DTO assembly
 - [X] T005 Create analytics router in `backend/app/api/routers/analytics.py` (auth via `require_recruiter_or_admin`, session via `get_authed_session`, both `Depends()`-wired) and register it on the app (`include_router`) so routes resolve once endpoints are added
-- [X] T006 [P] Create the frontend analytics API client in `frontend/src/pages/analytics/analyticsApi.ts` — typed `getJobAnalytics(jobId)` and `getCompanyOverview()` matching [contracts/api.md](contracts/api.md)
+- [X] T006 [P] Extend the central frontend API client in `frontend/src/services/api.ts` — typed `api.analytics.job(jobId)` and `api.analytics.overview()` plus `JobAnalytics`/`CompanyOverview` types matching [contracts/api.md](contracts/api.md) (follows the codebase convention of one shared client, rather than a per-page `analyticsApi.ts`)
 
 ---
 
@@ -82,7 +82,7 @@ Scenarios 3, 5.
 
 ### Tests for User Story 2 (required quality gates — write FIRST, confirm FAILING before T015)
 
-- [X] T014 [P] [US2] Write failing integration test: company overview accuracy + edge + authz in `backend/tests/integration/test_analytics.py` — assert current-calendar-month `total_applications`, `screening_pass_rate`, `avg_evaluation_score`, and the `jobs` list match direct queries; zero-application period yields `null` rate/avg (no error); no token → 401, non-recruiter/admin → 403; results are company-scoped (no cross-tenant rows)
+- [X] T014 [P] [US2] Write failing integration test: company overview accuracy + edge + authz in `backend/tests/integration/test_analytics.py` — assert current-calendar-month `total_applications`, `screening_pass_rate`, `avg_evaluation_score`, and the `jobs` list match direct queries; zero-application period yields `null` rate/avg (no error); no token → 401 (the recruiter/admin guard is inherited from `require_recruiter_or_admin`, exercised in auth tests — no authenticated non-recruiter/admin role exists to seed a 403 here); results are company-scoped (no cross-tenant rows)
 
 ### Implementation for User Story 2
 
