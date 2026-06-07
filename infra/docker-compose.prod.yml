@@ -1,0 +1,62 @@
+# Production composition — pulls pre-built images from Docker Hub (no source
+# bind-mounts, no --reload). Used as the reference topology for Azure Container
+# Apps: `api` and `frontend` have external ingress; `agents` is internal-only
+# (no published ports — only reachable on the compose/ACA internal network).
+#
+# Secrets are injected from the environment (CI / Key Vault), never baked in.
+# Required env: DOCKERHUB_NAMESPACE, IMAGE_TAG, DATABASE_URL, REDIS_URL,
+# JWT_SECRET, AGENTS_INTERNAL_SECRET, OPENAI_API_KEY, STORAGE_*, EMAIL_*.
+services:
+  api:
+    image: ${DOCKERHUB_NAMESPACE}/hireiq-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      AGENTS_BASE_URL: http://agents:8001
+      AGENTS_INTERNAL_SECRET: ${AGENTS_INTERNAL_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-azure}
+      STORAGE_CONNECTION_STRING: ${STORAGE_CONNECTION_STRING}
+      STORAGE_CONTAINER: ${STORAGE_CONTAINER:-hireiq}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-resend}
+      EMAIL_API_KEY: ${EMAIL_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
+    depends_on:
+      - agents
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  agents:
+    image: ${DOCKERHUB_NAMESPACE}/hireiq-agents:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    # Internal-only: no `ports:` mapping — agents is never publicly reachable.
+    expose:
+      - "8001"
+    environment:
+      AGENTS_INTERNAL_SECRET: ${AGENTS_INTERNAL_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      AZURE_SPEECH_KEY: ${AZURE_SPEECH_KEY}
+      AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  frontend:
+    image: ${DOCKERHUB_NAMESPACE}/hireiq-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - api

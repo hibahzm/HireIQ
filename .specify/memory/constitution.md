@@ -1,5 +1,5 @@
 <!-- SYNC IMPACT REPORT
-Version change: 1.0.0 → 1.1.0
+Version change: 1.1.0 → 1.1.1
 Modified principles:
   - II. Test-First Development → VIII. Test Coverage (domain-specific required areas added)
   - III. API-First Architecture → III. Clean Architecture (repository pattern + DI rules added)
@@ -14,7 +14,8 @@ Removed sections: None
 Deferred TODOs resolved:
   - TODO(TECH_STACK): Python/FastAPI confirmed (resolved)
 Remaining deferred TODOs:
-  - TODO(PERFORMANCE_BASELINE): Define load profile for p95 latency target
+  - (none) — TODO(PERFORMANCE_BASELINE) resolved in v1.1.1: load profile defined
+    under Technical Standards → Performance and enforced by infra/perf/.
 Templates requiring updates:
   - .specify/templates/plan-template.md  ✅ No structural changes required
   - .specify/templates/spec-template.md  ✅ No structural changes required
@@ -94,8 +95,12 @@ Tests for other areas are encouraged but not gating.
 - **Secrets Management**: `config.py` backed by Vault or Azure Key Vault; no `.env` in CI/CD.
 - **Testing**: `pytest` with `pytest-asyncio`; repositories and services tested via dependency
   injection mocks.
-- **Performance**: API responses MUST meet p95 ≤ 300 ms under expected load.
-  TODO(PERFORMANCE_BASELINE): Define load profile per feature.
+- **Performance**: API responses MUST meet p95 ≤ 300 ms under the defined load
+  profile: 50 concurrent users, ~200 req/s on synchronous REST endpoints,
+  sustained 5 minutes, at MVP launch scale (~20 companies, ~500 applications/job).
+  Async pipelines are budgeted separately by their SLAs (CV screening ≤ 2 min /
+  SC-002; evaluation ≤ 5 min / SC-004). The profile is enforced by the load
+  harness in `infra/perf/` (Locust + `check_p95.py` gate).
 - **Accessibility**: All UI components MUST conform to WCAG 2.1 AA.
 - **Code Quality**: `ruff` for linting and formatting; enforced in CI; lint errors block merge.
 - **Dependency Vetting**: All new dependencies evaluated for CVEs, maintenance status, and
@@ -132,4 +137,4 @@ Amendments require:
 All PRs and reviews MUST verify compliance with this constitution.
 For runtime development guidance, refer to `CLAUDE.md`.
 
-**Version**: 1.1.0 | **Ratified**: 2026-06-04 | **Last Amended**: 2026-06-04
+**Version**: 1.1.1 | **Ratified**: 2026-06-04 | **Last Amended**: 2026-06-07

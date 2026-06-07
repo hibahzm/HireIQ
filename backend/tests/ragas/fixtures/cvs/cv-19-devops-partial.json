@@ -1,0 +1,28 @@
+{
+  "id": "cv-19-devops-partial",
+  "role": "DevOps Engineer",
+  "seniority": "Junior",
+  "years_experience": 2,
+  "cv_text": "Rowan Bell\nJunior DevOps Engineer \u2014 2 years experience.\n\nSummary: Junior engineer focused on devops engineer work. Hands-on with Terraform, AWS, CI/CD.\n\nExperience:\n- Built and shipped devops engineer features using Terraform, AWS, CI/CD.\n- Collaborated cross-functionally; mentored 0 engineers.\n\nSkills: Terraform, AWS, CI/CD.\n",
+  "job_criteria": {
+    "title": "DevOps Engineer",
+    "required_skills": [
+      "Terraform",
+      "AWS",
+      "CI/CD",
+      "Kubernetes",
+      "observability"
+    ],
+    "nice_to_have_skills": [
+      "service mesh",
+      "incident response"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "Terraform",
+    "AWS",
+    "CI/CD"
+  ],
+  "expected_qualified": true
+}

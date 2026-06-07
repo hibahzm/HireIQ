@@ -1,0 +1,28 @@
+{
+  "id": "cv-15-ml-partial",
+  "role": "Machine Learning Engineer",
+  "seniority": "Junior",
+  "years_experience": 2,
+  "cv_text": "Skyler Hayes\nJunior Machine Learning Engineer \u2014 2 years experience.\n\nSummary: Junior engineer focused on machine learning engineer work. Hands-on with PyTorch, Python, MLOps.\n\nExperience:\n- Built and shipped machine learning engineer features using PyTorch, Python, MLOps.\n- Collaborated cross-functionally; mentored 0 engineers.\n\nSkills: PyTorch, Python, MLOps.\n",
+  "job_criteria": {
+    "title": "Machine Learning Engineer",
+    "required_skills": [
+      "PyTorch",
+      "Python",
+      "MLOps",
+      "feature engineering",
+      "NLP"
+    ],
+    "nice_to_have_skills": [
+      "LLM fine-tuning",
+      "vector databases"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "PyTorch",
+    "Python",
+    "MLOps"
+  ],
+  "expected_qualified": true
+}

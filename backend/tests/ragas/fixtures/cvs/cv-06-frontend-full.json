@@ -1,0 +1,30 @@
+{
+  "id": "cv-06-frontend-full",
+  "role": "Frontend Engineer",
+  "seniority": "Mid-level",
+  "years_experience": 4,
+  "cv_text": "Casey Diaz\nMid-level Frontend Engineer \u2014 4 years experience.\n\nSummary: Mid-level engineer focused on frontend engineer work. Hands-on with React, TypeScript, CSS, accessibility, Vite, Next.js.\n\nExperience:\n- Built and shipped frontend engineer features using React, TypeScript, CSS.\n- Collaborated cross-functionally; mentored 2 engineers.\n\nSkills: React, TypeScript, CSS, accessibility, Vite, Next.js.\n",
+  "job_criteria": {
+    "title": "Frontend Engineer",
+    "required_skills": [
+      "React",
+      "TypeScript",
+      "CSS",
+      "accessibility",
+      "Vite"
+    ],
+    "nice_to_have_skills": [
+      "Next.js",
+      "design systems"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "React",
+    "TypeScript",
+    "CSS",
+    "accessibility",
+    "Vite"
+  ],
+  "expected_qualified": true
+}

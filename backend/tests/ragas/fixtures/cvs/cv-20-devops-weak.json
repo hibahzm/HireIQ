@@ -1,0 +1,26 @@
+{
+  "id": "cv-20-devops-weak",
+  "role": "DevOps Engineer",
+  "seniority": "Career-changer",
+  "years_experience": 1,
+  "cv_text": "Finley Wu\nCareer-changer DevOps Engineer \u2014 1 years experience.\n\nSummary: Career-changer engineer focused on devops engineer work. Hands-on with Terraform, communication, self-taught projects.\n\nExperience:\n- Built and shipped devops engineer features using Terraform, communication, self-taught projects.\n- Collaborated cross-functionally; mentored 0 engineers.\n\nSkills: Terraform, communication, self-taught projects.\n",
+  "job_criteria": {
+    "title": "DevOps Engineer",
+    "required_skills": [
+      "Terraform",
+      "AWS",
+      "CI/CD",
+      "Kubernetes",
+      "observability"
+    ],
+    "nice_to_have_skills": [
+      "service mesh",
+      "incident response"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "Terraform"
+  ],
+  "expected_qualified": false
+}

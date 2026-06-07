@@ -1,0 +1,26 @@
+{
+  "id": "cv-12-data-weak",
+  "role": "Data Engineer",
+  "seniority": "Career-changer",
+  "years_experience": 1,
+  "cv_text": "Cameron Reed\nCareer-changer Data Engineer \u2014 1 years experience.\n\nSummary: Career-changer engineer focused on data engineer work. Hands-on with SQL, communication, self-taught projects.\n\nExperience:\n- Built and shipped data engineer features using SQL, communication, self-taught projects.\n- Collaborated cross-functionally; mentored 0 engineers.\n\nSkills: SQL, communication, self-taught projects.\n",
+  "job_criteria": {
+    "title": "Data Engineer",
+    "required_skills": [
+      "SQL",
+      "Spark",
+      "Airflow",
+      "Python",
+      "ETL"
+    ],
+    "nice_to_have_skills": [
+      "dbt",
+      "Snowflake"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "SQL"
+  ],
+  "expected_qualified": false
+}

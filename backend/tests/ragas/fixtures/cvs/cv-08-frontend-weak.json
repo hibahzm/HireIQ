@@ -1,0 +1,26 @@
+{
+  "id": "cv-08-frontend-weak",
+  "role": "Frontend Engineer",
+  "seniority": "Career-changer",
+  "years_experience": 1,
+  "cv_text": "Avery Brooks\nCareer-changer Frontend Engineer \u2014 1 years experience.\n\nSummary: Career-changer engineer focused on frontend engineer work. Hands-on with React, communication, self-taught projects.\n\nExperience:\n- Built and shipped frontend engineer features using React, communication, self-taught projects.\n- Collaborated cross-functionally; mentored 0 engineers.\n\nSkills: React, communication, self-taught projects.\n",
+  "job_criteria": {
+    "title": "Frontend Engineer",
+    "required_skills": [
+      "React",
+      "TypeScript",
+      "CSS",
+      "accessibility",
+      "Vite"
+    ],
+    "nice_to_have_skills": [
+      "Next.js",
+      "design systems"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "React"
+  ],
+  "expected_qualified": false
+}

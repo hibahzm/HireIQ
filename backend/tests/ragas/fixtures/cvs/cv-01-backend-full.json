@@ -1,0 +1,30 @@
+{
+  "id": "cv-01-backend-full",
+  "role": "Backend Engineer",
+  "seniority": "Senior",
+  "years_experience": 7,
+  "cv_text": "Alex Rivera\nSenior Backend Engineer \u2014 7 years experience.\n\nSummary: Senior engineer focused on backend engineer work. Hands-on with Python, PostgreSQL, FastAPI, async, Docker, distributed systems.\n\nExperience:\n- Built and shipped backend engineer features using Python, PostgreSQL, FastAPI.\n- Collaborated cross-functionally; mentored 5 engineers.\n\nSkills: Python, PostgreSQL, FastAPI, async, Docker, distributed systems.\n",
+  "job_criteria": {
+    "title": "Backend Engineer",
+    "required_skills": [
+      "Python",
+      "PostgreSQL",
+      "FastAPI",
+      "async",
+      "Docker"
+    ],
+    "nice_to_have_skills": [
+      "distributed systems",
+      "Kubernetes"
+    ],
+    "experience_level": "mid-to-senior"
+  },
+  "ground_truth_evidenced_skills": [
+    "Python",
+    "PostgreSQL",
+    "FastAPI",
+    "async",
+    "Docker"
+  ],
+  "expected_qualified": true
+}
