@@ -188,6 +188,135 @@ class InterviewService:
             "guardrail_triggered": guardrail_triggered,
         }
 
+    @staticmethod
+    def _pcm_to_wav(pcm: bytes, sample_rate: int = 16000) -> bytes:
+        """Wrap raw PCM16 mono audio in a WAV container so it stores like a turn-based blob."""
+        import io
+        import wave
+
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(sample_rate)
+            w.writeframes(pcm)
+        return buf.getvalue()
+
+    async def handle_streaming_turn(
+        self,
+        *,
+        session_id: str,
+        company_id: str,
+        candidate_text: str,
+        candidate_pcm: bytes | None,
+        job_criteria: dict,
+    ) -> dict:
+        """
+        Process one streaming turn from an already-finalized transcript. Runs the same
+        turn-core as handle_turn (guardrails → persist → state → evaluation) but does NOT
+        synthesize audio — the WS layer streams TTS for the guardrail-approved text, so
+        blocked content is never spoken (FR-007). Returns ai_response, session_complete,
+        guardrail_triggered.
+        """
+        session_repo = InterviewSessionRepository(self._session)
+        message_repo = InterviewMessageRepository(self._session)
+        audit = AuditLogRepository(self._session)
+
+        state = await self._load_redis_state(session_id)
+
+        # Assemble + store the candidate's streamed audio so audio_blob_key has parity
+        # with the turn-based path (FR-006 / SC-003).
+        audio_key = None
+        if candidate_pcm:
+            audio_key = f"interviews/{session_id}/{str(uuid.uuid4())}.wav"
+            await self._storage.upload(audio_key, self._pcm_to_wav(candidate_pcm))
+
+        history = state.get("conversation_history", [])
+        history.append({"role": "user", "content": candidate_text})
+
+        await session_repo.update_status(session_id, "in_progress")
+
+        import httpx
+
+        payload = {
+            "conversation_history": history,
+            "dimensions_covered": state.get("dimensions_covered", []),
+            "dimensions_remaining": state.get("dimensions_remaining", list(
+                d.get("name", "") for d in job_criteria.get("evaluation_dimensions", [])
+            )),
+            "turn_count": state.get("turn_count", 0),
+            "max_turns": state.get("max_turns", 20),
+            "job_criteria": job_criteria,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{self._settings.AGENTS_BASE_URL}/agents/interview/turn",
+                    json=payload,
+                    headers={"X-Internal-Secret": self._settings.AGENTS_INTERNAL_SECRET},
+                )
+                resp.raise_for_status()
+            agent_result = resp.json()
+        except Exception as exc:
+            logger.error("interview.agents_call_failed", session_id=session_id, error=str(exc))
+            await self.handle_system_interrupt(session_id)
+            raise
+
+        ai_text = agent_result["ai_response"]
+        guardrail_triggered = agent_result.get("guardrail_triggered", False)
+        session_complete = agent_result.get("session_complete", False)
+
+        turn_index = state.get("turn_count", 0) * 2
+        await message_repo.append_message(
+            session_id=session_id,
+            company_id=company_id,
+            turn_index=turn_index,
+            speaker="candidate",
+            content_text=candidate_text,
+            audio_blob_key=audio_key,
+            is_blocked=guardrail_triggered,
+        )
+        await message_repo.append_message(
+            session_id=session_id,
+            company_id=company_id,
+            turn_index=turn_index + 1,
+            speaker="ai",
+            content_text=ai_text,
+        )
+
+        if guardrail_triggered:
+            await audit.log_event(
+                event_type="interview.turn.blocked",
+                actor_type="system",
+                entity_type="interview_session",
+                entity_id=session_id,
+                company_id=company_id,
+            )
+
+        new_turn_count = state.get("turn_count", 0) + 1
+        history.append({"role": "assistant", "content": ai_text})
+        new_state = {
+            **state,
+            "conversation_history": history,
+            "dimensions_covered": agent_result["updated_state"].get("dimensions_covered", []),
+            "dimensions_remaining": agent_result.get("dimensions_remaining", []),
+            "turn_count": new_turn_count,
+        }
+        await self._save_redis_state(session_id, new_state)
+        await session_repo.increment_turn(session_id)
+
+        if session_complete:
+            await session_repo.update_status(session_id, "completed")
+            import asyncio
+            asyncio.create_task(self._trigger_evaluation(session_id, company_id))
+
+        return {
+            "ai_response": ai_text,
+            "session_complete": session_complete,
+            "guardrail_triggered": guardrail_triggered,
+        }
+
     async def handle_system_interrupt(self, session_id: str) -> None:
         session_repo = InterviewSessionRepository(self._session)
         audit = AuditLogRepository(self._session)
