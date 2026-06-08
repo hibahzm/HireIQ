@@ -44,8 +44,10 @@ class InterviewSessionRepository:
         result = await self._session.execute(
             sa.text(
                 """
-                SELECT a.id as application_id, a.company_id
+                SELECT a.id as application_id, a.company_id,
+                       COALESCE(j.streaming_interview, false) AS streaming_interview
                 FROM applications a
+                JOIN jobs j ON j.id = a.job_id
                 WHERE a.interview_token = :token
                   AND a.interview_token_expires_at > now()
                 LIMIT 1
@@ -62,6 +64,7 @@ class InterviewSessionRepository:
             application_id=str(row["application_id"]),
             company_id=str(row["company_id"]),
             mode="voice",
+            streaming_mode=bool(row["streaming_interview"]),
             status="pending",
             turn_count=0,
             max_turns=20,

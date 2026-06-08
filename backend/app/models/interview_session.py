@@ -16,6 +16,7 @@ class InterviewSession(Base):
     application_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, unique=True)
     company_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
     mode: Mapped[str] = mapped_column(Text, nullable=False)
+    streaming_mode: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
     status: Mapped[str] = mapped_column(Text, server_default="pending", nullable=False)
     turn_count: Mapped[int] = mapped_column(SmallInteger, server_default="0", nullable=False)
     max_turns: Mapped[int] = mapped_column(SmallInteger, server_default="20", nullable=False)

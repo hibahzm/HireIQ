@@ -74,13 +74,16 @@ stored transcript is identical in structure to a turn-based interview.
   voice-activity detection (silero-vad via onnxruntime-web in the browser) after a
   sustained silence threshold (target ~800 ms) following speech; detected speech is
   streamed to the backend.
-- **FR-003**: The system MUST transcribe candidate audio incrementally and finalize a
-  transcript when end-of-speech is detected.
+- **FR-003**: The system MUST transcribe candidate audio incrementally on the backend
+  (Azure streaming recognition) and finalize the transcript when end-of-speech is
+  detected; surfacing interim partial transcripts to the candidate UI is optional.
 - **FR-004**: The system MUST stream the AI's synthesized voice back to the candidate
   in chunks (Azure Speech streaming synthesis) so playback can begin before synthesis
   completes.
-- **FR-005**: Streaming mode MUST be selectable per session/job; when disabled, the
-  system MUST use the existing turn-based path unchanged.
+- **FR-005**: Streaming mode MUST be selectable via a **job-level streaming toggle** set
+  during job setup (default off), which seeds each new interview session's
+  `streaming_mode`; when disabled, the system MUST use the existing turn-based path
+  unchanged.
 - **FR-006**: The full transcript MUST be stored identically to turn-based interviews
   (per-turn speaker attribution and audio references).
 - **FR-007**: All candidate input MUST continue to pass through the guardrail registry
@@ -99,7 +102,8 @@ stored transcript is identical in structure to a turn-based interview.
 
 - **SC-001**: Latency from end-of-speech to the first AI audio chunk is **p95 ≤ 2
   seconds**, tracked as a target metric (not a hard merge gate, given third-party
-  speech-service variance).
+  speech-service variance). Note: this budget is dominated by the agent/LLM turn, so the
+  STT-finalize→first-chunk and agent-call segments are measured separately.
 - **SC-002**: AI audio playback starts before full synthesis completes for streamed
   responses.
 - **SC-003**: A completed streaming interview stores a transcript indistinguishable in

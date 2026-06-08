@@ -8,10 +8,16 @@
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `streaming_mode` | `BOOLEAN NOT NULL DEFAULT false` | **NEW.** When true, the WS uses the streaming branch; false (default) = existing turn-based path. Set at session creation from the job/session config (FR-005). |
+| `streaming_mode` | `BOOLEAN NOT NULL DEFAULT false` | **NEW.** When true, the WS uses the streaming branch; false (default) = existing turn-based path. Seeded at session creation from the **job-level streaming toggle** (FR-005). |
 
-- **Migration**: additive column with a server default, so existing rows and turn-based sessions are
-  unaffected. No backfill required.
+### Job streaming toggle (source of `streaming_mode`)
+
+A job-level **`streaming_interview`** flag (default false), set during job setup, is the source that
+seeds `interview_sessions.streaming_mode` when a session is created. Stored on the job (column or the
+job's existing setup config); recruiters enable streaming per job.
+
+- **Migration**: additive `streaming_mode` column with a server default, so existing rows and
+  turn-based sessions are unaffected. No backfill required.
 - All other `interview_sessions` fields (`status`, `mode`, `turn_count`, `max_turns`, `started_at`,
   `completed_at`, the 24-hour resume fields) are unchanged.
 
@@ -22,7 +28,7 @@
 | `interview_messages` | Per-turn transcript with speaker attribution + audio references — written identically for streamed turns (FR-006 / SC-003). |
 | Redis session state | `conversation_history`, `dimensions_covered/remaining`, `turn_count`, `max_turns` — reused as-is. |
 | `audit_logs` | Existing interview-turn events; a streaming-fallback event is emitted if the streaming path degrades. |
-| Audio blob storage | Candidate utterance audio stored as today; AI turn references its synthesized audio. |
+| Audio blob storage | Candidate utterance audio stored as today — but in streaming the PCM frames are **assembled into a WAV and uploaded** so the message's `audio_blob_key` has parity with turn-based; AI turn references its synthesized audio. |
 
 ## Validation / invariants
 

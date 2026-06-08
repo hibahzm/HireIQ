@@ -1,9 +1,13 @@
 const WS_BASE = import.meta.env.VITE_WS_URL ?? "ws://localhost:8000";
 
 export type InboundMessage =
-  | { type: "session_ready"; session_id: string; resuming: boolean; turn_count: number; max_turns: number }
+  | { type: "session_ready"; session_id: string; resuming: boolean; turn_count: number; max_turns: number; streaming_mode?: boolean }
   | { type: "turn_processing" }
   | { type: "ai_turn"; text: string; audio?: string }
+  | { type: "partial_transcript"; text: string }
+  | { type: "ai_turn_text"; text: string }
+  | { type: "ai_audio_chunk"; audio: string; seq: number }
+  | { type: "ai_audio_end" }
   | { type: "turn_blocked"; message: string }
   | { type: "interview_complete" }
   | { type: "session_expired"; message: string }
@@ -11,15 +15,28 @@ export type InboundMessage =
 
 export type OutboundMessage =
   | { type: "text_input"; text: string }
-  | { type: "audio_input"; audio: string };
+  | { type: "audio_input"; audio: string }
+  | { type: "audio_frame"; audio: string }
+  | { type: "end_of_speech" };
 
 interface Callbacks {
-  onReady?: (data: { resuming: boolean; turn_count: number }) => void;
+  onReady?: (data: { resuming: boolean; turn_count: number; streaming_mode: boolean }) => void;
   onAiTurn?: (text: string, audio?: ArrayBuffer) => void;
+  onPartial?: (text: string) => void;
+  onAiText?: (text: string) => void;
+  onAiAudioChunk?: (chunk: ArrayBuffer, seq: number) => void;
+  onAiAudioEnd?: () => void;
   onBlocked?: (message: string) => void;
   onComplete?: () => void;
   onExpired?: () => void;
   onError?: (message: string) => void;
+}
+
+function b64ToArrayBuffer(b64: string): ArrayBuffer {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
 }
 
 export class InterviewWebSocket {
@@ -40,19 +57,29 @@ export class InterviewWebSocket {
 
       switch (msg.type) {
         case "session_ready":
-          this.callbacks.onReady?.({ resuming: msg.resuming, turn_count: msg.turn_count });
+          this.callbacks.onReady?.({
+            resuming: msg.resuming,
+            turn_count: msg.turn_count,
+            streaming_mode: msg.streaming_mode ?? false,
+          });
           break;
         case "ai_turn": {
-          let audioBuffer: ArrayBuffer | undefined;
-          if (msg.audio) {
-            const binary = atob(msg.audio);
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-            audioBuffer = bytes.buffer;
-          }
+          const audioBuffer = msg.audio ? b64ToArrayBuffer(msg.audio) : undefined;
           this.callbacks.onAiTurn?.(msg.text, audioBuffer);
           break;
         }
+        case "partial_transcript":
+          this.callbacks.onPartial?.(msg.text);
+          break;
+        case "ai_turn_text":
+          this.callbacks.onAiText?.(msg.text);
+          break;
+        case "ai_audio_chunk":
+          this.callbacks.onAiAudioChunk?.(b64ToArrayBuffer(msg.audio), msg.seq);
+          break;
+        case "ai_audio_end":
+          this.callbacks.onAiAudioEnd?.();
+          break;
         case "turn_blocked":
           this.callbacks.onBlocked?.(msg.message);
           break;
@@ -78,11 +105,26 @@ export class InterviewWebSocket {
   }
 
   sendAudio(audioBuffer: ArrayBuffer): void {
-    const bytes = new Uint8Array(audioBuffer);
+    this.ws?.send(JSON.stringify({ type: "audio_input", audio: this.encode(audioBuffer) }));
+  }
+
+  /** Streaming: send one captured PCM16 frame while the candidate is speaking. */
+  sendAudioFrame(pcmFrame: ArrayBuffer): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: "audio_frame", audio: this.encode(pcmFrame) }));
+    }
+  }
+
+  /** Streaming: client VAD detected end-of-speech → finalize the utterance. */
+  sendEndOfSpeech(): void {
+    this.ws?.send(JSON.stringify({ type: "end_of_speech" }));
+  }
+
+  private encode(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
     let binary = "";
     for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    const base64 = btoa(binary);
-    this.ws?.send(JSON.stringify({ type: "audio_input", audio: base64 }));
+    return btoa(binary);
   }
 
   close(): void {

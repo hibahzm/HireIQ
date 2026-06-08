@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     AZURE_FORM_RECOGNIZER_ENDPOINT: str = ""
     AZURE_FORM_RECOGNIZER_KEY: str = ""
 
+    # Azure Speech (streaming STT/TTS — free F0 tier)
+    AZURE_SPEECH_KEY: str = ""
+    AZURE_SPEECH_REGION: str = ""
+
     # Email
     EMAIL_BACKEND: Literal["console", "resend"] = "console"
     EMAIL_API_KEY: str = ""
@@ -91,6 +95,8 @@ class Settings(BaseSettings):
                 "OPENAI_API_KEY": "openai_api_key",
                 "JWT_SECRET": "jwt_secret",
                 "AGENTS_INTERNAL_SECRET": "agents_internal_secret",
+                "AZURE_SPEECH_KEY": "azure_speech_key",
+                "AZURE_SPEECH_REGION": "azure_speech_region",
             }
             for attr, key in mapping.items():
                 value = _read_vault_secret(
@@ -110,6 +116,8 @@ class Settings(BaseSettings):
                 "REDIS_URL": "redis-url",
                 "EMAIL_API_KEY": "email-api-key",
                 "AZURE_STORAGE_CONNECTION_STRING": "azure-storage-connection-string",
+                "AZURE_SPEECH_KEY": "azure-speech-key",
+                "AZURE_SPEECH_REGION": "azure-speech-region",
             }
             for attr, secret_name in mapping.items():
                 value = _read_azure_secret(secret_name)

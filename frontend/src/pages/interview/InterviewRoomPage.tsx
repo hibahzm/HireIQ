@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { InterviewWebSocket } from "../../services/interview-ws";
+import { StreamingController } from "../../audio/streaming-controller";
 
 interface Props {
   token: string;
@@ -17,23 +18,35 @@ export default function InterviewRoomPage({ token }: Props) {
   const [useTextFallback, setUseTextFallback] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [streamingMode, setStreamingMode] = useState(false);
   const [turnCount, setTurnCount] = useState(0);
   const [maxTurns] = useState(20);
   const wsRef = useRef<InterviewWebSocket | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const streamingRef = useRef<StreamingController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const ws = new InterviewWebSocket(token, {
-      onReady: ({ resuming, turn_count }) => {
+      onReady: ({ resuming, turn_count, streaming_mode }) => {
         setStatus("ready");
         setTurnCount(turn_count);
+        setStreamingMode(streaming_mode);
         if (resuming) {
           addMessage("system", `Resuming from turn ${turn_count}. Welcome back.`);
         }
+        if (streaming_mode && audioRef.current) {
+          const controller = new StreamingController(ws, audioRef.current);
+          streamingRef.current = controller;
+          controller.start().catch(() => {
+            addMessage("system", "Couldn't start the microphone — switching to text input.");
+            setUseTextFallback(true);
+          });
+        }
       },
+      // Turn-based (full-blob) AI turn
       onAiTurn: (text, audioBuffer) => {
         setProcessing(false);
         addMessage("ai", text);
@@ -44,12 +57,23 @@ export default function InterviewRoomPage({ token }: Props) {
         }
         setTurnCount((n) => n + 1);
       },
+      // Streaming AI turn: text first, then audio chunks
+      onAiText: (text) => {
+        setProcessing(false);
+        addMessage("ai", text);
+        streamingRef.current?.beginPlayback();
+        setTurnCount((n) => n + 1);
+      },
+      onAiAudioChunk: (chunk) => streamingRef.current?.pushChunk(chunk),
+      onAiAudioEnd: () => streamingRef.current?.endPlayback(),
       onBlocked: (message) => {
         setProcessing(false);
         addMessage("system", message);
+        streamingRef.current?.endPlayback(); // release half-duplex
       },
       onComplete: () => {
         setStatus("complete");
+        streamingRef.current?.stop();
         addMessage("system", "Interview complete. Thank you for your time!");
       },
       onExpired: () => setStatus("expired"),
@@ -62,7 +86,10 @@ export default function InterviewRoomPage({ token }: Props) {
     wsRef.current = ws;
     ws.connect();
 
-    return () => ws.close();
+    return () => {
+      streamingRef.current?.stop();
+      ws.close();
+    };
   }, [token]);
 
   useEffect(() => {
@@ -207,6 +234,13 @@ export default function InterviewRoomPage({ token }: Props) {
                 Send
               </button>
             </form>
+          ) : streamingMode ? (
+            <div className="flex justify-center" aria-live="polite">
+              <div className="px-6 py-3 bg-gray-100 text-gray-700 rounded-full flex items-center gap-2 text-sm">
+                <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
+                {processing ? "Thinking…" : "Listening — just speak naturally"}
+              </div>
+            </div>
           ) : (
             <div className="flex justify-center">
               {isRecording ? (
