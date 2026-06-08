@@ -7,10 +7,10 @@ only when the session's `streaming_mode` is true; otherwise the turn-based messa
 
 ## Connection handshake (unchanged + one field)
 
-On connect the server sends the existing `session_started` payload, extended with:
+On connect the server sends the existing `session_ready` payload, extended with:
 
 ```json
-{ "type": "session_started", "session_id": "uuid", "streaming_mode": true, "...": "..." }
+{ "type": "session_ready", "session_id": "uuid", "streaming_mode": true, "...": "..." }
 ```
 
 The client uses `streaming_mode` to decide whether to start continuous capture + VAD or show the
