@@ -1,8 +1,9 @@
 FROM python:3.12-slim AS builder
+# uv for fast, reproducible installs (pin to a specific release for reproducibility)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /app
 COPY pyproject.toml .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir .
+RUN uv pip install --system --no-cache .
 
 FROM python:3.12-slim
 WORKDIR /app
