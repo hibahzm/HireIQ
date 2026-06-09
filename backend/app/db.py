@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from datetime import datetime
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -10,7 +11,13 @@ from app.config import get_settings
 
 
 class Base(DeclarativeBase):
-    pass
+    # All `Mapped[datetime]` columns map to TIMESTAMP WITH TIME ZONE, matching the
+    # timestamptz columns the migrations create. Without this, SQLAlchemy binds
+    # tz-aware datetimes (datetime.now(timezone.utc)) against a naive TIMESTAMP param
+    # and asyncpg raises "can't subtract offset-naive and offset-aware datetimes".
+    type_annotation_map = {
+        datetime: sa.DateTime(timezone=True),
+    }
 
 
 _engine = None
