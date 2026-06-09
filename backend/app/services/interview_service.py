@@ -362,7 +362,7 @@ class InterviewService:
         async with _get_session_factory()() as db_session:
             async with db_session.begin():
                 await db_session.execute(
-                    sa.text("SET LOCAL app.current_company_id = :cid"), {"cid": company_id}
+                    sa.text("SELECT set_config('app.current_company_id', :cid, true)"), {"cid": company_id}
                 )
                 from app.services.evaluation_service import EvaluationService
                 svc = EvaluationService(db_session, self._redis)

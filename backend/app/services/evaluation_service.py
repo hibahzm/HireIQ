@@ -133,9 +133,9 @@ class EvaluationService:
                 company_id=company_id,
                 actor_type="system",
                 actor_id=session_id,
-                action="evaluation_failed",
-                resource_type="application",
-                resource_id=application_id,
+                event_type="evaluation.failed",
+                entity_type="application",
+                entity_id=application_id,
                 metadata={"error": str(exc)},
             )
             return
@@ -192,9 +192,9 @@ class EvaluationService:
             company_id=company_id,
             actor_type="system",
             actor_id=session_id,
-            action="evaluation_completed",
-            resource_type="evaluation",
-            resource_id=evaluation.id,
+            event_type="evaluation.completed",
+            entity_type="evaluation",
+            entity_id=evaluation.id,
             metadata={
                 "overall_score": evaluation.overall_score,
                 "recommendation": evaluation.recommendation,

@@ -50,7 +50,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                 return
 
             await session.execute(
-                sa.text("SET LOCAL app.current_company_id = :cid"), {"cid": company_id}
+                sa.text("SELECT set_config('app.current_company_id', :cid, true)"), {"cid": company_id}
             )
             result = await session.execute(
                 sa.select(JobCriteria).where(JobCriteria.job_id == application.job_id)
@@ -102,7 +102,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                     from app.repositories.audit_log_repository import AuditLogRepository
 
                     await s.execute(
-                        sa.text("SET LOCAL app.current_company_id = :cid"), {"cid": company_id}
+                        sa.text("SELECT set_config('app.current_company_id', :cid, true)"), {"cid": company_id}
                     )
                     await AuditLogRepository(s).log_event(
                         event_type="interview.streaming_fallback",
@@ -170,7 +170,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                     async with session.begin():
                         import sqlalchemy as sa
                         await session.execute(
-                            sa.text("SET LOCAL app.current_company_id = :cid"), {"cid": company_id}
+                            sa.text("SELECT set_config('app.current_company_id', :cid, true)"), {"cid": company_id}
                         )
                         from app.services.interview_service import InterviewService
 
@@ -209,7 +209,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                 async with session.begin():
                     import sqlalchemy as sa
                     await session.execute(
-                        sa.text("SET LOCAL app.current_company_id = :cid"), {"cid": company_id}
+                        sa.text("SELECT set_config('app.current_company_id', :cid, true)"), {"cid": company_id}
                     )
                     from app.services.interview_service import InterviewService
                     redis = get_redis_instance

@@ -45,7 +45,7 @@ async def get_current_user(
     async with _get_session_factory()() as session:
         async with session.begin():
             await session.execute(
-                sa.text("SET LOCAL app.current_company_id = :cid"),
+                sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                 {"cid": company_id},
             )
             user = await UserRepository(session).get_by_id(user_id)
@@ -73,7 +73,7 @@ async def get_authed_session(
     async with _get_session_factory()() as session:
         async with session.begin():
             await session.execute(
-                sa.text("SET LOCAL app.current_company_id = :cid"),
+                sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                 {"cid": str(current_user.company_id)},
             )
             yield session

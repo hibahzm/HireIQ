@@ -97,7 +97,7 @@ async def submit_application(
             # 2. Now set RLS context — all subsequent queries are scoped to this company
             company_id = str(job_row["company_id"])
             await session.execute(
-                sa.text("SET LOCAL app.current_company_id = :cid"),
+                sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                 {"cid": company_id},
             )
 
