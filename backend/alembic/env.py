@@ -1,7 +1,7 @@
 import asyncio
 from logging.config import fileConfig
 
-from sqlalchemy import pool, text
+from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -56,22 +56,11 @@ async def run_async_migrations() -> None:
         poolclass=pool.NullPool,
     )
     async with connectable.connect() as connection:
-        # Ensure the BYPASSRLS migration role exists, then assume it so DDL on
-        # RLS-enabled tables runs unhindered. Idempotent; requires the connecting
-        # user to have role-creation privilege (superuser in dev/CI, admin on
-        # Azure Postgres). Previously `SET ROLE migration_user` was issued
-        # against a role nobody created, so `alembic upgrade head` always failed.
-        await connection.execute(
-            text(
-                "DO $$ BEGIN "
-                "IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'migration_user') "
-                "THEN CREATE ROLE migration_user WITH BYPASSRLS NOLOGIN; "
-                "END IF; END $$;"
-            )
-        )
-        await connection.execute(text("GRANT migration_user TO CURRENT_USER"))
-        await connection.commit()
-        await connection.execute(text("SET ROLE migration_user"))
+        # Migrations are pure DDL (CREATE EXTENSION, CREATE TABLE, FORCE RLS, policies)
+        # and run as the connecting role — a superuser in dev/CI, the DB owner/admin on
+        # Azure Postgres. FORCE ROW LEVEL SECURITY only restricts DML, not DDL, and there
+        # are no data backfills, so no BYPASSRLS role is needed. (CREATE EXTENSION vector
+        # requires superuser/owner anyway, which a separate NOLOGIN role would not have.)
         await connection.run_sync(do_run_migrations)
     await connectable.dispose()
 
