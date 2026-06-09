@@ -29,8 +29,9 @@ class AuditLogRepository:
                     (company_id, actor_id, actor_type, event_type,
                      entity_type, entity_id, metadata)
                 VALUES
-                    (:company_id::uuid, :actor_id::uuid, :actor_type, :event_type,
-                     :entity_type, :entity_id::uuid, :metadata::jsonb)
+                    (CAST(:company_id AS uuid), CAST(:actor_id AS uuid),
+                     :actor_type, :event_type, :entity_type,
+                     CAST(:entity_id AS uuid), CAST(:metadata AS jsonb))
                 """
             ),
             {
