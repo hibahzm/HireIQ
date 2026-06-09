@@ -42,21 +42,11 @@ class UserRepository:
         return result.scalar_one_or_none()
 
     async def get_by_email_global(self, email: str) -> User | None:
-        """Bypasses RLS — used for login lookup only."""
+        """Global email lookup for login (no company context yet)."""
         result = await self._session.execute(
-            sa.text(
-                "SELECT id, company_id, email, password_hash, role, is_active, created_at, updated_at "
-                "FROM users WHERE lower(email) = lower(:email) LIMIT 1"
-            ),
-            {"email": email},
+            sa.select(User).where(sa.func.lower(User.email) == email.lower())
         )
-        row = result.mappings().first()
-        if not row:
-            return None
-        user = User.__new__(User)
-        for key, value in row.items():
-            object.__setattr__(user, key, value)
-        return user
+        return result.scalar_one_or_none()
 
     async def list_by_company(self, company_id: str) -> list[User]:
         result = await self._session.execute(

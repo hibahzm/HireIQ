@@ -99,10 +99,7 @@ class EvaluationRepository:
         row = result.mappings().first()
         if not row:
             return None
-        ev = Evaluation.__new__(Evaluation)
-        for k, v in row.items():
-            object.__setattr__(ev, k, v)
-        return ev
+        return Evaluation(**dict(row))
 
     async def get_feedback_token_row(self, token: str) -> dict[str, Any] | None:
         """Lookup by token *without* the expiry filter — used to distinguish an

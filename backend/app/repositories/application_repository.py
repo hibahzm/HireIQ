@@ -57,10 +57,7 @@ class ApplicationRepository:
         row = result.mappings().first()
         if not row:
             return None
-        app = Application.__new__(Application)
-        for k, v in row.items():
-            object.__setattr__(app, k, v)
-        return app
+        return Application(**dict(row))
 
     async def list_by_job(
         self,

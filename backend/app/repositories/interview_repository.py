@@ -31,10 +31,7 @@ class InterviewSessionRepository:
         row = result.mappings().first()
         if not row:
             return None
-        sess = InterviewSession.__new__(InterviewSession)
-        for k, v in row.items():
-            object.__setattr__(sess, k, v)
-        return sess
+        return InterviewSession(**dict(row))
 
     async def get_or_create_for_token(self, token: str) -> InterviewSession | None:
         existing = await self.get_by_interview_token(token)

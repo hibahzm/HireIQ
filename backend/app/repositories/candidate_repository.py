@@ -20,10 +20,7 @@ class CandidateRepository:
         )
         row = result.mappings().first()
         if row:
-            cand = Candidate.__new__(Candidate)
-            for k, v in row.items():
-                object.__setattr__(cand, k, v)
-            return cand
+            return Candidate(**dict(row))
 
         cand = Candidate(
             id=str(uuid.uuid4()),
