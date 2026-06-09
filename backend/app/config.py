@@ -97,6 +97,8 @@ class Settings(BaseSettings):
                 "AGENTS_INTERNAL_SECRET": "agents_internal_secret",
                 "AZURE_SPEECH_KEY": "azure_speech_key",
                 "AZURE_SPEECH_REGION": "azure_speech_region",
+                "AZURE_FORM_RECOGNIZER_ENDPOINT": "azure_form_recognizer_endpoint",
+                "AZURE_FORM_RECOGNIZER_KEY": "azure_form_recognizer_key",
             }
             for attr, key in mapping.items():
                 value = _read_vault_secret(
@@ -118,6 +120,8 @@ class Settings(BaseSettings):
                 "AZURE_STORAGE_CONNECTION_STRING": "azure-storage-connection-string",
                 "AZURE_SPEECH_KEY": "azure-speech-key",
                 "AZURE_SPEECH_REGION": "azure-speech-region",
+                "AZURE_FORM_RECOGNIZER_ENDPOINT": "azure-form-recognizer-endpoint",
+                "AZURE_FORM_RECOGNIZER_KEY": "azure-form-recognizer-key",
             }
             for attr, secret_name in mapping.items():
                 value = _read_azure_secret(secret_name)

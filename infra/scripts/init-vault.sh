@@ -27,6 +27,9 @@ vault kv put secret/hireiq/dev \
   jwt_secret="${JWT_SECRET:-dev-secret-change-me}" \
   agents_internal_secret="${AGENTS_INTERNAL_SECRET:-dev-internal-secret}" \
   email_api_key="${EMAIL_API_KEY:-}" \
-  azure_speech_key="${AZURE_SPEECH_KEY:-}"
+  azure_speech_key="${AZURE_SPEECH_KEY:-}" \
+  azure_speech_region="${AZURE_SPEECH_REGION:-}" \
+  azure_form_recognizer_endpoint="${AZURE_FORM_RECOGNIZER_ENDPOINT:-}" \
+  azure_form_recognizer_key="${AZURE_FORM_RECOGNIZER_KEY:-}"
 
 echo "init-vault: done."
