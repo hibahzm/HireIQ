@@ -82,8 +82,38 @@ class JobService:
 
         if agent_response["status"] == "completed":
             await conv_repo.complete(conv.id)
+            criteria = agent_response.get("criteria_draft")
+            if criteria:
+                await self._upsert_criteria(job_id, company_id, criteria)
 
         return agent_response
+
+    async def _upsert_criteria(self, job_id: str, company_id: str, criteria: dict) -> None:
+        """Persist the agent's extracted criteria into job_criteria so the job can activate."""
+        import sqlalchemy as sa
+
+        from app.models.job_criteria import JobCriteria
+
+        fields = dict(
+            required_skills=criteria.get("required_skills", []),
+            optional_skills=criteria.get("optional_skills", []),
+            experience_level=criteria.get("experience_level") or "mid",
+            min_years_experience=criteria.get("min_years_experience"),
+            evaluation_dimensions=criteria.get("evaluation_dimensions", []),
+            dealbreakers=criteria.get("dealbreakers", []),
+            min_screening_score=criteria.get("min_screening_score", 60),
+        )
+        existing = (
+            await self._session.execute(
+                sa.select(JobCriteria).where(JobCriteria.job_id == job_id)
+            )
+        ).scalar_one_or_none()
+        if existing:
+            for k, v in fields.items():
+                setattr(existing, k, v)
+        else:
+            self._session.add(JobCriteria(job_id=job_id, company_id=company_id, **fields))
+        await self._session.flush()
 
     async def activate_job(self, *, job_id: str, company_id: str, actor_id: str) -> Job:
         job_repo = JobRepository(self._session)
