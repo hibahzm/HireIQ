@@ -5,6 +5,7 @@ interface Props {
   token: string;
   onSelectJob: (jobId: string) => void;
   onViewJobAnalytics: (jobId: string) => void;
+  onManageJobs: () => void;
 }
 
 const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
@@ -19,7 +20,7 @@ function KpiCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default function CompanyOverviewPage({ token, onSelectJob, onViewJobAnalytics }: Props) {
+export default function CompanyOverviewPage({ token, onSelectJob, onViewJobAnalytics, onManageJobs }: Props) {
   const [data, setData] = useState<CompanyOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,9 +47,17 @@ export default function CompanyOverviewPage({ token, onSelectJob, onViewJobAnaly
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-5xl mx-auto space-y-8">
-        <h1 className="text-2xl font-semibold text-gray-900">
-          Company overview <span className="text-base font-normal text-gray-500">({data.period})</span>
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold text-gray-900">
+            Company overview <span className="text-base font-normal text-gray-500">({data.period})</span>
+          </h1>
+          <button
+            onClick={onManageJobs}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+          >
+            + Create / manage jobs
+          </button>
+        </div>
 
         {/* KPI cards */}
         <section aria-label="Company-wide KPIs" className="grid grid-cols-1 sm:grid-cols-3 gap-4">

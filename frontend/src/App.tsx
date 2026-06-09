@@ -124,6 +124,7 @@ function CompanyOverviewWrapper() {
       token={token}
       onSelectJob={(id) => navigate(`/jobs/${id}/applications`)}
       onViewJobAnalytics={(id) => navigate(`/jobs/${id}/analytics`)}
+      onManageJobs={() => navigate("/jobs")}
     />
   );
 }
