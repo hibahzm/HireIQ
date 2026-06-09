@@ -82,6 +82,29 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication,
         <h1 className="text-2xl font-bold text-gray-900">Applications</h1>
       </div>
 
+      <div className="mb-6 p-3 bg-blue-50 border border-blue-100 rounded-md">
+        <p className="text-sm text-gray-700 mb-1">Public application link (share with candidates):</p>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 text-xs bg-white border rounded px-2 py-1 overflow-x-auto">
+            {`${window.location.origin}/apply/${jobId}`}
+          </code>
+          <button
+            onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/apply/${jobId}`)}
+            className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 whitespace-nowrap"
+          >
+            Copy
+          </button>
+          <a
+            href={`/apply/${jobId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs px-3 py-1 border border-blue-600 text-blue-700 rounded hover:bg-blue-100 whitespace-nowrap"
+          >
+            Open
+          </a>
+        </div>
+      </div>
+
       {error && <p className="text-red-600 mb-4" role="alert">{error}</p>}
 
       {applications.length === 0 ? (
