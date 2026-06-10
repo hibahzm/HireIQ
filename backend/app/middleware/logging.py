@@ -14,15 +14,22 @@ logger = structlog.get_logger()
 
 def configure_structlog() -> None:
     settings = get_settings()
+    # NOTE: structlog.stdlib.add_logger_name is intentionally omitted — it reads
+    # `logger.name`, which the PrintLogger from PrintLoggerFactory does not have,
+    # so including it makes every structlog log call raise AttributeError.
     shared_processors = [
         structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
     ]
     if settings.ENV == "production":
-        processors = shared_processors + [structlog.processors.JSONRenderer()]
+        # format_exc_info serializes exc_info into the JSON output; the dev
+        # ConsoleRenderer formats exceptions itself, so it's only needed here.
+        processors = shared_processors + [
+            structlog.processors.format_exc_info,
+            structlog.processors.JSONRenderer(),
+        ]
     else:
         processors = shared_processors + [
             structlog.dev.ConsoleRenderer(colors=True),
