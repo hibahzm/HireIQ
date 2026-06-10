@@ -22,6 +22,7 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [rescreening, setRescreening] = useState<string | null>(null);
 
   const applyLink = `${window.location.origin}/apply/${jobId}`;
   const isActive = job?.status === "active";
@@ -43,6 +44,23 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
       );
     } catch {
       setError("Failed to send invite");
+    }
+  }
+
+  async function handleRescreen(applicationId: string) {
+    setRescreening(applicationId);
+    setError(null);
+    try {
+      await api.applications.rescreen(token, applicationId);
+      setApplications((prev) =>
+        prev.map((a) =>
+          a.id === applicationId ? { ...a, screening_status: "pending", screening_score: null } : a
+        )
+      );
+    } catch {
+      setError("Failed to re-run screening");
+    } finally {
+      setRescreening(null);
     }
   }
 
@@ -163,6 +181,17 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
                     {app.screening_status === "qualified" && app.status === "qualified" && (
                       <Button size="sm" variant="secondary" onClick={() => handleInvite(app.id)}>
                         Invite
+                      </Button>
+                    )}
+                    {(app.screening_status === "pending" ||
+                      app.screening_status === "system_interrupted") && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        loading={rescreening === app.id}
+                        onClick={() => handleRescreen(app.id)}
+                      >
+                        Re-run screening
                       </Button>
                     )}
                   </td>

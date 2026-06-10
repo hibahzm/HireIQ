@@ -220,3 +220,58 @@ async def invite_to_interview(
     )
 
     return {"interview_token": token, "expires_at": expires_at.isoformat()}
+
+
+@router.post("/applications/{application_id}/rescreen", status_code=202)
+async def rescreen_application(
+    application_id: str,
+    current_user: User = Depends(require_recruiter_or_admin),
+    session: AsyncSession = Depends(get_authed_session),
+):
+    """Re-run the screening pipeline for an application stuck before it completed."""
+    repo = ApplicationRepository(session)
+    app = await repo.get_by_id(application_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+    if app.screening_status not in ("pending", "system_interrupted"):
+        raise HTTPException(
+            status_code=422,
+            detail="Only applications stuck in pending or interrupted screening can be re-run.",
+        )
+
+    row = (
+        await session.execute(
+            sa.text(
+                "SELECT j.title AS job_title, c.email AS candidate_email "
+                "FROM applications a "
+                "JOIN jobs j ON j.id = a.job_id "
+                "JOIN candidates c ON c.id = a.candidate_id "
+                "WHERE a.id = :id"
+            ),
+            {"id": application_id},
+        )
+    ).mappings().first()
+
+    # Reset to pending so the UI shows an in-flight re-run immediately.
+    await repo.update_screening_status(application_id, "pending")
+
+    await AuditLogRepository(session).log_event(
+        event_type="application.rescreen_triggered",
+        actor_type="user",
+        actor_id=current_user.id,
+        entity_type="application",
+        entity_id=application_id,
+        company_id=current_user.company_id,
+    )
+
+    asyncio.create_task(
+        run_screening_background(
+            application_id=application_id,
+            company_id=str(current_user.company_id),
+            job_id=str(app.job_id),
+            job_title=str(row["job_title"]) if row else "the position",
+            candidate_email=str(row["candidate_email"]) if row else "",
+        )
+    )
+
+    return {"status": "rescreening", "application_id": application_id}

@@ -79,6 +79,13 @@ export const api = {
       request<Application[]>("GET", `/jobs/${jobId}/applications`, undefined, token),
     invite: (token: string, applicationId: string) =>
       request<void>("POST", `/applications/${applicationId}/invite`, undefined, token),
+    rescreen: (token: string, applicationId: string) =>
+      request<{ status: string; application_id: string }>(
+        "POST",
+        `/applications/${applicationId}/rescreen`,
+        undefined,
+        token
+      ),
   },
   users: {
     list: (token: string) =>
