@@ -88,6 +88,11 @@ services:
       STORAGE_LOCAL_PATH: /app/storage
       EMAIL_BACKEND: console
       EMAIL_FROM: noreply@hireiq.local
+      # Don't write .pyc/__pycache__ into the bind-mounted source as the
+      # container's app user — it leaves host-owned files that break host-side
+      # tooling (compile checks, git clean) with permission errors.
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
     volumes:
       - ../backend:/app
       - api_storage:/app/storage
@@ -112,6 +117,8 @@ services:
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: hireiq-dev-token
       AGENTS_INTERNAL_SECRET: dev-internal-secret
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
     volumes:
       - ../agents:/app
     depends_on:
