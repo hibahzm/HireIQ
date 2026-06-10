@@ -8,12 +8,14 @@ from pydantic import BaseModel
 
 class CreateJobRequest(BaseModel):
     title: str
+    description: str | None = None
 
 
 class JobResponse(BaseModel):
     id: str
     company_id: str
     title: str
+    description: str | None = None
     status: str
     created_by: str
     created_at: datetime

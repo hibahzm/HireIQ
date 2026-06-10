@@ -14,11 +14,14 @@ class JobRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def create(self, *, company_id: str, title: str, created_by: str) -> Job:
+    async def create(
+        self, *, company_id: str, title: str, created_by: str, description: str | None = None
+    ) -> Job:
         job = Job(
             id=str(uuid.uuid4()),
             company_id=company_id,
             title=title,
+            description=description,
             status="draft",
             created_by=created_by,
             created_at=datetime.now(timezone.utc),

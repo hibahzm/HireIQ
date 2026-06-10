@@ -38,6 +38,7 @@ async def create_job(
     job = await JobService(session).create_job(
         company_id=current_user.company_id,
         title=body.title,
+        description=body.description,
         created_by=current_user.id,
     )
     return JobResponse(**job.__dict__)

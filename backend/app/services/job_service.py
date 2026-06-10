@@ -21,9 +21,13 @@ class JobService:
         self._session = session
         self._settings = get_settings()
 
-    async def create_job(self, *, company_id: str, title: str, created_by: str) -> Job:
+    async def create_job(
+        self, *, company_id: str, title: str, created_by: str, description: str | None = None
+    ) -> Job:
         repo = JobRepository(self._session)
-        job = await repo.create(company_id=company_id, title=title, created_by=created_by)
+        job = await repo.create(
+            company_id=company_id, title=title, created_by=created_by, description=description
+        )
 
         audit = AuditLogRepository(self._session)
         await audit.log_event(
@@ -58,6 +62,17 @@ class JobService:
         conv_repo = SetupConversationRepository(self._session)
         conv = await conv_repo.get_or_create(job_id=job_id, company_id=company_id)
 
+        # On the very first turn, seed the agent with the recruiter-provided job
+        # description (if any) so it can pre-extract criteria and only ask about
+        # genuine gaps, instead of interrogating from scratch.
+        effective_user_message = user_message
+        if not conv.messages and not user_message and job.description:
+            effective_user_message = (
+                "Here is the job description for this role. Extract as much hiring "
+                "criteria as you can from it, and only ask me about details that are "
+                f"genuinely missing or ambiguous:\n\n{job.description}"
+            )
+
         # Call agents service
         import httpx
 
@@ -65,7 +80,7 @@ class JobService:
             "job_id": job_id,
             "company_id": company_id,
             "conversation_history": list(conv.messages),
-            "user_message": user_message,
+            "user_message": effective_user_message,
         }
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
@@ -76,8 +91,9 @@ class JobService:
             resp.raise_for_status()
         agent_response = resp.json()
 
-        # Persist messages
-        await conv_repo.append_message(conv.id, "user", user_message)
+        # Persist messages (skip empty kickoff turns so history stays clean)
+        if effective_user_message:
+            await conv_repo.append_message(conv.id, "user", effective_user_message)
         await conv_repo.append_message(conv.id, "assistant", agent_response["message"])
 
         if agent_response["status"] == "completed":
