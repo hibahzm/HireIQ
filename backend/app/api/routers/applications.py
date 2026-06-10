@@ -212,9 +212,11 @@ async def invite_to_interview(
     )
     candidate_email = result.scalar_one_or_none() or ""
 
+    from app.config import get_settings
+
     await NotificationService(redis_client).send_invitation_email(
         candidate_email=candidate_email,
-        interview_link=f"/interview/{token}",
+        interview_link=f"{get_settings().FRONTEND_ORIGIN}/interview/{token}",
     )
 
     return {"interview_token": token, "expires_at": expires_at.isoformat()}

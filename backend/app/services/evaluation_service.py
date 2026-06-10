@@ -176,7 +176,7 @@ class EvaluationService:
             )
             job = result.scalar_one_or_none()
             job_title = job.title if job else "the position"
-            feedback_url = f"/feedback/{feedback_token}"
+            feedback_url = f"{self._settings.FRONTEND_ORIGIN}/feedback/{feedback_token}"
             try:
                 from app.services.notification_service import NotificationService
                 await NotificationService(self._redis).send_feedback_email(

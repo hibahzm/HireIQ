@@ -7,6 +7,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_authed_session, require_admin
+from app.config import get_settings
 from app.models.user import User
 from app.redis_client import get_redis
 from app.repositories.user_repository import UserRepository
@@ -54,7 +55,7 @@ async def create_user(
 
         svc = AuthService(session, redis_client)
         invite_token = await svc.create_invite_token(user.id)
-        invite_link = f"/set-password?token={invite_token}"
+        invite_link = f"{get_settings().FRONTEND_ORIGIN}/set-password?token={invite_token}"
         await NotificationService(redis_client).send_user_invite_email(
             to_email=body.email,
             invite_link=invite_link,
