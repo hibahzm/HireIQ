@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { api, ApiError } from "../../services/api";
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
 
 interface ApplicationDetail {
   id: string;
@@ -35,19 +36,41 @@ export default function ApplicationDetailPage({ token, applicationId, onInvite }
   const [app, setApp] = useState<ApplicationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [inviting, setInviting] = useState(false);
 
   useEffect(() => {
     fetch(`${BASE_URL}/applications/${applicationId}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          throw new Error(body?.detail ?? `Failed to load application (${r.status})`);
+        }
+        return r.json();
+      })
       .then(setApp)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [applicationId, token]);
 
-  if (loading) return <div className="p-8 text-gray-500">Loading…</div>;
-  if (!app) return <div className="p-8 text-red-600">{error ?? "Not found"}</div>;
+  async function handleInvite() {
+    if (!app) return;
+    setInviting(true);
+    setError(null);
+    try {
+      await api.applications.invite(token, app.id);
+      setApp({ ...app, status: "invited" });
+      onInvite?.(app.id);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Failed to send invitation");
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  if (loading) return <div className="text-primary-500">Loading…</div>;
+  if (!app) return <div className="text-red-600">{error ?? "Not found"}</div>;
 
   return (
     <div className="max-w-2xl">
@@ -105,15 +128,23 @@ export default function ApplicationDetailPage({ token, applicationId, onInvite }
         </div>
       </dl>
 
-      {app.screening_status === "qualified" && app.status === "qualified" && (
-        <div className="mt-6">
-          <button
-            onClick={() => onInvite?.(app.id)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Send interview invitation
-          </button>
-        </div>
+      {error && <p className="mt-4 text-sm text-red-600" role="alert">{error}</p>}
+
+      {app.status === "invited" ? (
+        <p className="mt-6 text-sm font-medium text-green-700">Interview invitation sent.</p>
+      ) : (
+        app.screening_status === "qualified" &&
+        app.status === "qualified" && (
+          <div className="mt-6">
+            <button
+              onClick={handleInvite}
+              disabled={inviting}
+              className="rounded-lg bg-brand-600 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60 cursor-pointer"
+            >
+              {inviting ? "Sending…" : "Send interview invitation"}
+            </button>
+          </div>
+        )
       )}
     </div>
   );
