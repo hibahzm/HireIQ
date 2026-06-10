@@ -24,7 +24,7 @@ class CvChunkRepository:
                 """
                 INSERT INTO cv_chunks (id, application_id, company_id, chunk_index, chunk_text, embedding, tsv)
                 VALUES (:id, :app_id, :company_id, :chunk_index, :chunk_text,
-                        :embedding::vector, to_tsvector('english', :chunk_text))
+                        CAST(:embedding AS vector), to_tsvector('english', :chunk_text))
                 """
             )
             await self._session.execute(
@@ -52,7 +52,7 @@ class CvChunkRepository:
         dense_q = sa.text(
             """
             SELECT cv.id, cv.application_id, cv.chunk_text,
-                   1 - (cv.embedding <=> :embedding::vector) AS score
+                   1 - (cv.embedding <=> CAST(:embedding AS vector)) AS score
             FROM cv_chunks cv
             JOIN applications a ON a.id = cv.application_id
             WHERE a.job_id = :job_id
@@ -113,7 +113,7 @@ class JobChunkRepository:
                 sa.text(
                     """
                     INSERT INTO job_chunks (id, job_id, company_id, chunk_index, chunk_text, embedding)
-                    VALUES (:id, :job_id, :company_id, :chunk_index, :chunk_text, :embedding::vector)
+                    VALUES (:id, :job_id, :company_id, :chunk_index, :chunk_text, CAST(:embedding AS vector))
                     """
                 ),
                 {
