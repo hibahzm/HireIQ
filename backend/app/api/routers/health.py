@@ -40,7 +40,10 @@ async def health_check() -> JSONResponse:
         result["status"] = "degraded"
         status_code = 503
 
-    # Agents service check
+    # Agents service check — informational only. A degraded agents service must
+    # NOT fail this container's readiness probe (the API can still serve most
+    # traffic), so it marks `status: degraded` but keeps HTTP 200. Only the API's
+    # own hard dependencies (DB, Redis) return 503.
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
             resp = await client.get(f"{settings.AGENTS_BASE_URL}/health")
@@ -48,7 +51,7 @@ async def health_check() -> JSONResponse:
                 raise ValueError(f"status {resp.status_code}")
     except Exception as exc:
         result["agents"] = f"error: {exc}"
-        result["status"] = "degraded"
-        status_code = 503
+        if result["status"] == "ok":
+            result["status"] = "degraded"
 
     return JSONResponse(content=result, status_code=status_code)

@@ -8,24 +8,20 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health")
 async def health_check() -> JSONResponse:
-    import httpx
+    """Liveness probe.
+
+    Intentionally does NOT call OpenAI: a readiness/liveness probe must be cheap
+    and stable. Calling the OpenAI API on every probe added latency/cost and made
+    the check flap (a transient OpenAI hiccup would 503 the agents service, which
+    in turn flapped the API's own /health). We only report that the OpenAI key is
+    configured — no network call.
+    """
     from app.config import get_settings
 
     settings = get_settings()
-    result: dict = {"status": "ok", "openai": "ok"}
-    status_code = 200
-
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(
-                "https://api.openai.com/v1/models",
-                headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
-            )
-            if resp.status_code not in (200, 401):
-                raise ValueError(f"unexpected status {resp.status_code}")
-    except Exception as exc:
-        result["openai"] = f"unreachable: {exc}"
-        result["status"] = "degraded"
-        status_code = 503
-
-    return JSONResponse(content=result, status_code=status_code)
+    configured = bool(getattr(settings, "OPENAI_API_KEY", ""))
+    result = {
+        "status": "ok",
+        "openai": "configured" if configured else "not_configured",
+    }
+    return JSONResponse(content=result, status_code=200)
