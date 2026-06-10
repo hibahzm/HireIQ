@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+import structlog
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.middleware.logging import CorrelationIdMiddleware, configure_structlog
 from app.redis_client import close_redis
+
+logger = structlog.get_logger()
 
 
 @asynccontextmanager
@@ -51,6 +55,18 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.add_middleware(CorrelationIdMiddleware)
+
+    # Catch-all so an unhandled error returns a JSON 500 *inside* the CORS layer.
+    # Without this, an uncaught exception is handled above CORSMiddleware and the
+    # 500 ships with no CORS headers, which browsers report as an opaque
+    # "network error" rather than the actual server failure.
+    @app.middleware("http")
+    async def catch_unhandled_errors(request: Request, call_next):
+        try:
+            return await call_next(request)
+        except Exception:
+            logger.exception("unhandled_error", path=request.url.path, method=request.method)
+            return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
     from app.api.routers.health import router as health_router
     from app.api.routers.auth import router as auth_router
