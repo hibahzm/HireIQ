@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 import structlog
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -111,13 +112,13 @@ class EvaluationService:
         ]
 
         # 4. Call agents /evaluate
-        payload = {
+        payload = jsonable_encoder({
             "application_id": application_id,
             "company_id": company_id,
             "cv_text": cv_text,
             "job_criteria": job_criteria,
             "transcript": transcript,
-        }
+        })
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:
                 resp = await client.post(

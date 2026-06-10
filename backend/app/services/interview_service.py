@@ -5,6 +5,7 @@ import json
 import uuid
 
 import structlog
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -95,7 +96,7 @@ class InterviewService:
         # Call agents interview/turn
         import httpx
 
-        payload = {
+        payload = jsonable_encoder({
             "conversation_history": history,
             "dimensions_covered": state.get("dimensions_covered", []),
             "dimensions_remaining": state.get("dimensions_remaining", list(
@@ -104,7 +105,7 @@ class InterviewService:
             "turn_count": state.get("turn_count", 0),
             "max_turns": state.get("max_turns", 20),
             "job_criteria": job_criteria,
-        }
+        })
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -238,7 +239,7 @@ class InterviewService:
 
         import httpx
 
-        payload = {
+        payload = jsonable_encoder({
             "conversation_history": history,
             "dimensions_covered": state.get("dimensions_covered", []),
             "dimensions_remaining": state.get("dimensions_remaining", list(
@@ -247,7 +248,7 @@ class InterviewService:
             "turn_count": state.get("turn_count", 0),
             "max_turns": state.get("max_turns", 20),
             "job_criteria": job_criteria,
-        }
+        })
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:

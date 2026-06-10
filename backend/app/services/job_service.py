@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import structlog
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -76,12 +77,12 @@ class JobService:
         # Call agents service
         import httpx
 
-        payload = {
+        payload = jsonable_encoder({
             "job_id": job_id,
             "company_id": company_id,
             "conversation_history": list(conv.messages),
             "user_message": effective_user_message,
-        }
+        })
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 f"{self._settings.AGENTS_BASE_URL}/agents/job-setup/turn",

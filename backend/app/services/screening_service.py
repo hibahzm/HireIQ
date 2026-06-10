@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import structlog
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -148,13 +149,13 @@ class ScreeningService:
         # 5. Call agents /cv-screen
         import httpx
 
-        payload = {
+        payload = jsonable_encoder({
             "application_id": application_id,
             "company_id": company_id,
             "cv_text": cv_text,
             "job_criteria": job_criteria,
             "hybrid_search_results": search_results,
-        }
+        })
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 f"{self._settings.AGENTS_BASE_URL}/agents/cv-screen",
