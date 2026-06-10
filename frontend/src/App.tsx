@@ -1,6 +1,7 @@
-import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import PrivateRoute from "./components/PrivateRoute";
+import AppShell from "./components/AppShell";
 
 import LoginPage from "./pages/auth/LoginPage";
 import RegisterPage from "./pages/auth/RegisterPage";
@@ -172,6 +173,17 @@ function SetPasswordWrapper() {
 
 // ── Router ────────────────────────────────────────────────────────────────────
 
+// Protected pages share the persistent app shell (sidebar + top bar + breadcrumbs).
+function ProtectedLayout() {
+  return (
+    <PrivateRoute>
+      <AppShell>
+        <Outlet />
+      </AppShell>
+    </PrivateRoute>
+  );
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -183,16 +195,18 @@ function AppRoutes() {
       <Route path="/interview/:token" element={<InterviewWrapper />} />
       <Route path="/feedback/:token" element={<FeedbackReportPage />} />
 
-      {/* Protected */}
-      <Route path="/overview" element={<PrivateRoute><CompanyOverviewWrapper /></PrivateRoute>} />
-      <Route path="/jobs" element={<PrivateRoute><JobListWrapper /></PrivateRoute>} />
-      <Route path="/jobs/:jobId/analytics" element={<PrivateRoute><JobAnalyticsWrapper /></PrivateRoute>} />
-      <Route path="/jobs/:jobId/setup" element={<PrivateRoute><JobSetupWrapper /></PrivateRoute>} />
-      <Route path="/jobs/:jobId/applications" element={<PrivateRoute><ApplicationListWrapper /></PrivateRoute>} />
-      <Route path="/applications/:applicationId" element={<PrivateRoute><ApplicationDetailWrapper /></PrivateRoute>} />
-      <Route path="/jobs/:jobId/evaluations" element={<PrivateRoute><ShortlistWrapper /></PrivateRoute>} />
-      <Route path="/evaluations/:evaluationId" element={<PrivateRoute><EvaluationDetailWrapper /></PrivateRoute>} />
-      <Route path="/users" element={<PrivateRoute><UserManagementWrapper /></PrivateRoute>} />
+      {/* Protected — rendered inside the app shell */}
+      <Route element={<ProtectedLayout />}>
+        <Route path="/overview" element={<CompanyOverviewWrapper />} />
+        <Route path="/jobs" element={<JobListWrapper />} />
+        <Route path="/jobs/:jobId/analytics" element={<JobAnalyticsWrapper />} />
+        <Route path="/jobs/:jobId/setup" element={<JobSetupWrapper />} />
+        <Route path="/jobs/:jobId/applications" element={<ApplicationListWrapper />} />
+        <Route path="/applications/:applicationId" element={<ApplicationDetailWrapper />} />
+        <Route path="/jobs/:jobId/evaluations" element={<ShortlistWrapper />} />
+        <Route path="/evaluations/:evaluationId" element={<EvaluationDetailWrapper />} />
+        <Route path="/users" element={<UserManagementWrapper />} />
+      </Route>
 
       {/* Default — post-login landing is the company overview (FR-005) */}
       <Route path="/" element={<Navigate to="/overview" replace />} />
