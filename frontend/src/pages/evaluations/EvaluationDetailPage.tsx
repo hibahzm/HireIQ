@@ -185,7 +185,7 @@ function TranscriptPanel({ transcript }: { transcript: EvaluationDetail["transcr
   );
 }
 
-export default function EvaluationDetailPage({ token, evaluationId, onBack }: Props) {
+export default function EvaluationDetailPage({ token, evaluationId }: Props) {
   const [evaluation, setEvaluation] = useState<EvaluationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -198,16 +198,12 @@ export default function EvaluationDetailPage({ token, evaluationId, onBack }: Pr
       .finally(() => setLoading(false));
   }, [token, evaluationId]);
 
-  if (loading) return <div className="p-8 text-gray-500">Loading evaluation…</div>;
-  if (error) return <div className="p-8 text-red-600">{error}</div>;
+  if (loading) return <div className="text-primary-500">Loading evaluation…</div>;
+  if (error) return <div className="text-red-600">{error}</div>;
   if (!evaluation) return null;
 
   return (
-    <div className="p-8 max-w-3xl mx-auto space-y-8">
-      <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
-        ← Back to shortlist
-      </button>
-
+    <div className="max-w-3xl space-y-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

@@ -17,10 +17,10 @@ interface Props {
   token: string;
   jobId: string;
   onSelectEvaluation: (evaluationId: string) => void;
-  onBack: () => void;
+  onBack?: () => void;
 }
 
-export default function ShortlistPage({ token, jobId, onSelectEvaluation, onBack }: Props) {
+export default function ShortlistPage({ token, jobId, onSelectEvaluation }: Props) {
   const [items, setItems] = useState<ShortlistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,15 +36,8 @@ export default function ShortlistPage({ token, jobId, onSelectEvaluation, onBack
   if (loading) return <div className="p-8 text-gray-500">Loading evaluations…</div>;
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <button
-        onClick={onBack}
-        className="mb-4 text-sm text-blue-600 hover:underline"
-      >
-        ← Back
-      </button>
-
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Candidate Shortlist</h1>
+    <div className="max-w-4xl">
+      <h1 className="mb-6 text-2xl font-bold tracking-tight text-primary-800">Candidate shortlist</h1>
 
       {error && <p className="text-red-600 mb-4" role="alert">{error}</p>}
 

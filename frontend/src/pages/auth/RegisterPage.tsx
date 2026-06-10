@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { api, ApiError } from "../../services/api";
+import AuthLayout, { Field } from "../../components/AuthLayout";
+import Button from "../../components/ui/Button";
 
 interface Props {
   onSuccess: (token: string) => void;
@@ -22,72 +24,56 @@ export default function RegisterPage({ onSuccess, onLogin }: Props) {
       onSuccess(res.access_token);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Registration failed");
-    } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md p-8 bg-white rounded-lg shadow">
-        <h1 className="text-2xl font-bold mb-6 text-gray-900">Create your HireIQ account</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="company" className="block text-sm font-medium text-gray-700">
-              Company name
-            </label>
-            <input
-              id="company"
-              type="text"
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              required
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          {error && <p className="text-red-600 text-sm" role="alert">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {loading ? "Creating account…" : "Create account"}
-          </button>
-        </form>
-        <p className="mt-4 text-sm text-gray-600">
+    <AuthLayout
+      title="Create your HireIQ account"
+      subtitle="Set up your company workspace in a minute."
+      footer={
+        <>
           Already have an account?{" "}
-          <button onClick={onLogin} className="text-blue-600 hover:underline">
+          <button onClick={onLogin} className="font-medium text-brand-700 hover:underline cursor-pointer">
             Sign in
           </button>
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Field
+          id="company"
+          label="Company name"
+          type="text"
+          value={companyName}
+          onChange={(e) => setCompanyName(e.target.value)}
+          required
+        />
+        <Field
+          id="email"
+          label="Email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          autoComplete="email"
+        />
+        <Field
+          id="password"
+          label="Password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          minLength={8}
+          autoComplete="new-password"
+        />
+        {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+        <Button type="submit" loading={loading} className="w-full">
+          Create account
+        </Button>
+      </form>
+    </AuthLayout>
   );
 }

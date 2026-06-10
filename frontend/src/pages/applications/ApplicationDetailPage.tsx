@@ -27,11 +27,11 @@ const STATUS_COLORS: Record<string, string> = {
 interface Props {
   token: string;
   applicationId: string;
-  onBack: () => void;
+  onBack?: () => void;
   onInvite?: (id: string) => void;
 }
 
-export default function ApplicationDetailPage({ token, applicationId, onBack, onInvite }: Props) {
+export default function ApplicationDetailPage({ token, applicationId, onInvite }: Props) {
   const [app, setApp] = useState<ApplicationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,13 +50,8 @@ export default function ApplicationDetailPage({ token, applicationId, onBack, on
   if (!app) return <div className="p-8 text-red-600">{error ?? "Not found"}</div>;
 
   return (
-    <div className="p-8 max-w-2xl mx-auto">
-      <div className="flex items-center gap-2 mb-6">
-        <button onClick={onBack} className="text-gray-500 hover:text-gray-700 text-sm">
-          ← Back
-        </button>
-        <h1 className="text-2xl font-bold text-gray-900">Application Detail</h1>
-      </div>
+    <div className="max-w-2xl">
+      <h1 className="mb-6 text-2xl font-bold tracking-tight text-primary-800">Application detail</h1>
 
       <dl className="space-y-4">
         <div>

@@ -3,10 +3,10 @@ import { api, ApiError, UserProfile } from "../../services/api";
 
 interface Props {
   token: string;
-  onBack: () => void;
+  onBack?: () => void;
 }
 
-export default function UserManagementPage({ token, onBack }: Props) {
+export default function UserManagementPage({ token }: Props) {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,13 +61,8 @@ export default function UserManagementPage({ token, onBack }: Props) {
   if (loading) return <div className="p-8 text-gray-500">Loading users…</div>;
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <div className="flex items-center gap-2 mb-6">
-        <button onClick={onBack} className="text-gray-500 hover:text-gray-700 text-sm">
-          ← Back
-        </button>
-        <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
-      </div>
+    <div className="max-w-3xl">
+      <h1 className="mb-6 text-2xl font-bold tracking-tight text-primary-800">Team</h1>
 
       <form onSubmit={handleInvite} className="flex gap-2 mb-6">
         <input

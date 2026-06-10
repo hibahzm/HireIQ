@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { api, Job, ApiError } from "../../services/api";
-
-const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-700",
-  setup: "bg-yellow-100 text-yellow-800",
-  active: "bg-green-100 text-green-800",
-  paused: "bg-orange-100 text-orange-800",
-  closed: "bg-red-100 text-red-700",
-};
+import Card from "../../components/ui/Card";
+import Button from "../../components/ui/Button";
+import Badge from "../../components/ui/Badge";
+import PageHeader from "../../components/ui/PageHeader";
+import EmptyState from "../../components/ui/EmptyState";
+import Spinner from "../../components/ui/Spinner";
+import { BriefcaseIcon, CopyIcon, PlusIcon } from "../../components/ui/icons";
 
 interface Props {
   token: string;
@@ -19,8 +18,11 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [newDescription, setNewDescription] = useState("");
   const [creating, setCreating] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     api.jobs
@@ -34,87 +36,176 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
     e.preventDefault();
     if (!newTitle.trim()) return;
     setCreating(true);
+    setError(null);
     try {
-      const job = await api.jobs.create(token, { title: newTitle.trim() });
-      setJobs((prev) => [job, ...prev]);
-      setNewTitle("");
+      const job = await api.jobs.create(token, {
+        title: newTitle.trim(),
+        description: newDescription.trim() || undefined,
+      });
+      // Continue straight into AI-guided setup, where the agent reads the
+      // description and only asks about whatever is missing.
+      onSetupJob(job.id);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create job");
-    } finally {
       setCreating(false);
     }
   }
 
-  if (loading) return <div className="p-8 text-gray-500">Loading jobs…</div>;
+  function copyApplyLink(jobId: string) {
+    const link = `${window.location.origin}/apply/${jobId}`;
+    navigator.clipboard?.writeText(link);
+    setCopiedId(jobId);
+    setTimeout(() => setCopiedId((c) => (c === jobId ? null : c)), 1500);
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <Spinner label="Loading jobs…" />
+      </div>
+    );
+  }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Jobs</h1>
+    <div>
+      <PageHeader
+        title="Jobs"
+        description="Create roles, run AI-guided setup, and share the public application link."
+        actions={
+          !showForm && (
+            <Button onClick={() => setShowForm(true)}>
+              <PlusIcon /> New job
+            </Button>
+          )
+        }
+      />
 
-      <form onSubmit={handleCreate} className="flex gap-2 mb-6">
-        <input
-          type="text"
-          value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
-          placeholder="New job title"
-          className="flex-1 rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <button
-          type="submit"
-          disabled={creating}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-        >
-          {creating ? "Creating…" : "New job"}
-        </button>
-      </form>
+      {error && (
+        <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          {error}
+        </p>
+      )}
 
-      {error && <p className="text-red-600 mb-4" role="alert">{error}</p>}
+      {showForm && (
+        <Card className="mb-6 p-5">
+          <h2 className="mb-1 text-base font-semibold text-primary-800">Create a new job</h2>
+          <p className="mb-4 text-sm text-primary-500">
+            Add the title and a project / job description. The setup assistant will read the
+            description, extract criteria automatically, and only ask about anything missing.
+          </p>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div>
+              <label htmlFor="job-title" className="block text-sm font-medium text-primary-700">
+                Job title
+              </label>
+              <input
+                id="job-title"
+                type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="e.g. Senior Backend Engineer"
+                required
+                className="mt-1 block w-full rounded-lg border border-primary-200 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+              />
+            </div>
+            <div>
+              <label htmlFor="job-desc" className="block text-sm font-medium text-primary-700">
+                Project / job description
+                <span className="ml-1 font-normal text-primary-400">(recommended)</span>
+              </label>
+              <textarea
+                id="job-desc"
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+                rows={6}
+                placeholder="Describe the role, responsibilities, required skills, experience level, must-haves and dealbreakers. The more detail you give, the fewer questions the assistant will ask."
+                className="mt-1 block w-full rounded-lg border border-primary-200 px-3 py-2.5 text-sm leading-relaxed focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" loading={creating} disabled={!newTitle.trim()}>
+                Create &amp; start setup
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setShowForm(false);
+                  setNewTitle("");
+                  setNewDescription("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
 
       {jobs.length === 0 ? (
-        <p className="text-gray-500">No jobs yet. Create your first job above.</p>
+        <EmptyState
+          icon={<BriefcaseIcon className="h-8 w-8" />}
+          title="No jobs yet"
+          description="Create your first job to start receiving and screening applications."
+          action={
+            !showForm && (
+              <Button onClick={() => setShowForm(true)}>
+                <PlusIcon /> New job
+              </Button>
+            )
+          }
+        />
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left py-2 font-medium text-gray-700">Title</th>
-              <th className="text-left py-2 font-medium text-gray-700">Status</th>
-              <th className="text-left py-2 font-medium text-gray-700">Created</th>
-              <th className="py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobs.map((job) => (
-              <tr key={job.id} className="border-b hover:bg-gray-50">
-                <td className="py-2">
-                  <button
-                    onClick={() => onSelectJob(job.id)}
-                    className="text-blue-600 hover:underline font-medium"
-                  >
-                    {job.title}
-                  </button>
-                </td>
-                <td className="py-2">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[job.status] ?? ""}`}>
-                    {job.status}
-                  </span>
-                </td>
-                <td className="py-2 text-gray-500">
-                  {new Date(job.created_at).toLocaleDateString()}
-                </td>
-                <td className="py-2 text-right">
-                  {(job.status === "draft" || job.status === "setup") && (
-                    <button
-                      onClick={() => onSetupJob(job.id)}
-                      className="text-sm text-blue-600 hover:underline"
-                    >
-                      Setup
-                    </button>
-                  )}
-                </td>
+        <Card className="overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-primary-100 bg-primary-50/50 text-left text-xs uppercase tracking-wide text-primary-400">
+                <th className="px-5 py-3 font-semibold">Title</th>
+                <th className="px-5 py-3 font-semibold">Status</th>
+                <th className="px-5 py-3 font-semibold">Created</th>
+                <th className="px-5 py-3 font-semibold">Apply link</th>
+                <th className="px-5 py-3"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-primary-100">
+              {jobs.map((job) => (
+                <tr key={job.id} className="transition-colors hover:bg-primary-50/60">
+                  <td className="px-5 py-3">
+                    <button
+                      onClick={() => onSelectJob(job.id)}
+                      className="font-semibold text-brand-700 hover:underline cursor-pointer"
+                    >
+                      {job.title}
+                    </button>
+                  </td>
+                  <td className="px-5 py-3">
+                    <Badge status={job.status} />
+                  </td>
+                  <td className="px-5 py-3 text-primary-500">
+                    {new Date(job.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-5 py-3">
+                    <button
+                      onClick={() => copyApplyLink(job.id)}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-primary-500 hover:text-brand-700 cursor-pointer"
+                      aria-label={`Copy public application link for ${job.title}`}
+                    >
+                      <CopyIcon className="h-4 w-4" />
+                      {copiedId === job.id ? "Copied!" : "Copy link"}
+                    </button>
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    {(job.status === "draft" || job.status === "setup") && (
+                      <Button size="sm" variant="secondary" onClick={() => onSetupJob(job.id)}>
+                        Setup
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
       )}
     </div>
   );

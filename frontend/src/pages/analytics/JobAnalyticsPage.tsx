@@ -13,7 +13,7 @@ import { api, ApiError, type JobAnalytics } from "../../services/api";
 interface Props {
   token: string;
   jobId: string;
-  onBack: () => void;
+  onBack?: () => void;
 }
 
 const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
@@ -21,7 +21,7 @@ const num = (v: number | null) => (v === null ? "—" : String(v));
 const secs = (t: { p50: number; p95: number } | null) =>
   t === null ? "—" : `p50 ${Math.round(t.p50)}s · p95 ${Math.round(t.p95)}s`;
 
-export default function JobAnalyticsPage({ token, jobId, onBack }: Props) {
+export default function JobAnalyticsPage({ token, jobId }: Props) {
   const [data, setData] = useState<JobAnalytics | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,15 +39,10 @@ export default function JobAnalyticsPage({ token, jobId, onBack }: Props) {
   }, [token, jobId]);
 
   if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-8">
-        <p className="text-red-600" role="alert">{error}</p>
-        <button onClick={onBack} className="mt-4 text-blue-600 underline">Back</button>
-      </div>
-    );
+    return <p className="text-red-600" role="alert">{error}</p>;
   }
   if (!data) {
-    return <div className="min-h-screen bg-gray-50 p-8 text-gray-600">Loading analytics…</div>;
+    return <div className="text-primary-500">Loading analytics…</div>;
   }
 
   const funnelData = [
@@ -58,12 +53,9 @@ export default function JobAnalyticsPage({ token, jobId, onBack }: Props) {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-gray-900">Job analytics</h1>
-          <button onClick={onBack} className="text-blue-600 underline">Back</button>
-        </div>
+    <div className="max-w-4xl">
+      <div className="space-y-8">
+        <h1 className="text-2xl font-bold tracking-tight text-primary-800">Job analytics</h1>
 
         {/* Funnel */}
         <section aria-labelledby="funnel-h" className="bg-white rounded-lg shadow p-6">

@@ -57,7 +57,7 @@ export const api = {
   jobs: {
     list: (token: string, status?: string) =>
       request<Job[]>("GET", `/jobs${status ? `?status=${status}` : ""}`, undefined, token),
-    create: (token: string, data: { title: string }) =>
+    create: (token: string, data: { title: string; description?: string }) =>
       request<Job>("POST", "/jobs", data, token),
     get: (token: string, id: string) => request<Job>("GET", `/jobs/${id}`, undefined, token),
     setupTurn: (token: string, id: string, data: { user_message: string }) =>
@@ -69,6 +69,12 @@ export const api = {
       ),
     activate: (token: string, id: string) =>
       request<Job>("POST", `/jobs/${id}/activate`, undefined, token),
+  },
+  applications: {
+    listByJob: (token: string, jobId: string) =>
+      request<Application[]>("GET", `/jobs/${jobId}/applications`, undefined, token),
+    invite: (token: string, applicationId: string) =>
+      request<void>("POST", `/applications/${applicationId}/invite`, undefined, token),
   },
   users: {
     list: (token: string) =>
@@ -102,10 +108,20 @@ export interface Job {
   id: string;
   company_id: string;
   title: string;
+  description?: string | null;
   status: string;
   created_by: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface Application {
+  id: string;
+  candidate_id: string;
+  screening_score: number | null;
+  screening_status: string;
+  status: string;
+  created_at: string;
 }
 
 export interface UserProfile {

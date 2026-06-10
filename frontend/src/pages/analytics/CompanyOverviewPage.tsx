@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type CompanyOverview } from "../../services/api";
+import Card from "../../components/ui/Card";
+import Button from "../../components/ui/Button";
+import Badge from "../../components/ui/Badge";
+import PageHeader from "../../components/ui/PageHeader";
+import { PlusIcon } from "../../components/ui/icons";
 
 interface Props {
   token: string;
@@ -13,10 +18,10 @@ const num = (v: number | null) => (v === null ? "—" : String(v));
 
 function KpiCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="text-sm text-gray-600">{label}</div>
-      <div className="mt-1 text-3xl font-semibold text-gray-900">{value}</div>
-    </div>
+    <Card className="p-6">
+      <div className="text-sm text-primary-500">{label}</div>
+      <div className="mt-1 text-3xl font-bold text-primary-800">{value}</div>
+    </Card>
   );
 }
 
@@ -38,56 +43,49 @@ export default function CompanyOverviewPage({ token, onSelectJob, onViewJobAnaly
   }, [token]);
 
   if (error) {
-    return <div className="min-h-screen bg-gray-50 p-8 text-red-600" role="alert">{error}</div>;
+    return <div className="text-red-600" role="alert">{error}</div>;
   }
   if (!data) {
-    return <div className="min-h-screen bg-gray-50 p-8 text-gray-600">Loading overview…</div>;
+    return <div className="text-primary-500">Loading overview…</div>;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-5xl mx-auto space-y-8">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-gray-900">
-            Company overview <span className="text-base font-normal text-gray-500">({data.period})</span>
-          </h1>
-          <button
-            onClick={onManageJobs}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
-          >
-            + Create / manage jobs
-          </button>
-        </div>
+    <div className="space-y-8">
+      <PageHeader
+        title="Company overview"
+        description={`Hiring activity for ${data.period}.`}
+        actions={
+          <Button onClick={onManageJobs}>
+            <PlusIcon /> Create / manage jobs
+          </Button>
+        }
+      />
 
-        {/* KPI cards */}
-        <section aria-label="Company-wide KPIs" className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <KpiCard label="Applications this month" value={String(data.total_applications)} />
-          <KpiCard label="Screening pass rate" value={pct(data.screening_pass_rate)} />
-          <KpiCard label="Avg evaluation score" value={num(data.avg_evaluation_score)} />
-        </section>
+      {/* KPI cards */}
+      <section aria-label="Company-wide KPIs" className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <KpiCard label="Applications this month" value={String(data.total_applications)} />
+        <KpiCard label="Screening pass rate" value={pct(data.screening_pass_rate)} />
+        <KpiCard label="Avg evaluation score" value={num(data.avg_evaluation_score)} />
+      </section>
 
-        {/* Job list (beneath the KPI cards) */}
-        <section aria-labelledby="jobs-h">
-          <h2 id="jobs-h" className="text-lg font-medium text-gray-900 mb-3">Jobs</h2>
-          <ul className="bg-white rounded-lg shadow divide-y">
-            {data.jobs.length === 0 && <li className="p-4 text-gray-500">No jobs yet.</li>}
-            {data.jobs.map((job) => (
-              <li key={job.id} className="p-4 flex items-center justify-between">
-                <button onClick={() => onSelectJob(job.id)} className="text-left">
-                  <span className="font-medium text-gray-900">{job.title}</span>
-                  <span className="ml-2 text-xs uppercase text-gray-500">{job.status}</span>
-                </button>
-                <button
-                  onClick={() => onViewJobAnalytics(job.id)}
-                  className="text-blue-600 underline text-sm"
-                >
-                  Analytics
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
+      {/* Job list (beneath the KPI cards) */}
+      <section aria-labelledby="jobs-h">
+        <h2 id="jobs-h" className="mb-3 text-lg font-semibold text-primary-800">Jobs</h2>
+        <Card className="divide-y divide-primary-100 overflow-hidden">
+          {data.jobs.length === 0 && <p className="p-4 text-sm text-primary-500">No jobs yet.</p>}
+          {data.jobs.map((job) => (
+            <div key={job.id} className="flex items-center justify-between p-4 transition-colors hover:bg-primary-50/60">
+              <button onClick={() => onSelectJob(job.id)} className="flex items-center gap-2 text-left cursor-pointer">
+                <span className="font-semibold text-primary-800 hover:text-brand-700">{job.title}</span>
+                <Badge status={job.status} />
+              </button>
+              <Button size="sm" variant="ghost" onClick={() => onViewJobAnalytics(job.id)}>
+                Analytics
+              </Button>
+            </div>
+          ))}
+        </Card>
+      </section>
     </div>
   );
 }

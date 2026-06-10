@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../../services/api";
+import Card from "../../components/ui/Card";
+import Button from "../../components/ui/Button";
+import PageHeader from "../../components/ui/PageHeader";
 
 interface Message {
   role: "user" | "assistant";
@@ -13,7 +16,7 @@ interface Props {
   onBack: () => void;
 }
 
-export default function JobSetupPage({ token, jobId, onActivated, onBack }: Props) {
+export default function JobSetupPage({ token, jobId, onActivated }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<string>("in_progress");
@@ -23,9 +26,12 @@ export default function JobSetupPage({ token, jobId, onActivated, onBack }: Prop
   const [activating, setActivating] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Kick off the first AI turn on mount
+  // Kick off the first AI turn on mount. The backend seeds this turn with the
+  // recruiter-provided job description, so the assistant opens by reflecting
+  // what it already extracted and asking only about gaps.
   useEffect(() => {
     sendTurn("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -69,86 +75,84 @@ export default function JobSetupPage({ token, jobId, onActivated, onBack }: Prop
       onActivated();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Activation failed");
-    } finally {
       setActivating(false);
     }
   }
 
   return (
-    <div className="flex flex-col h-screen max-w-2xl mx-auto p-4">
-      <div className="flex items-center gap-2 mb-4">
-        <button onClick={onBack} className="text-gray-500 hover:text-gray-700 text-sm">
-          ← Back to jobs
-        </button>
-        <h1 className="text-lg font-semibold text-gray-900">AI-Guided Job Setup</h1>
-      </div>
+    <div className="mx-auto max-w-3xl">
+      <PageHeader
+        title="AI-guided job setup"
+        description="The assistant reads your job description, extracts evaluation criteria, and asks only about what's missing."
+      />
 
-      <div className="flex-1 overflow-y-auto space-y-3 pb-4">
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg text-sm ${
-                msg.role === "user"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-900"
-              }`}
-            >
-              {msg.content}
-            </div>
-          </div>
-        ))}
-        {sending && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 px-4 py-2 rounded-lg text-sm text-gray-500">
-              Thinking…
-            </div>
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      {error && <p className="text-red-600 text-sm mb-2" role="alert">{error}</p>}
-
-      {status === "completed" ? (
-        <div className="border-t pt-4">
-          <p className="text-sm text-gray-600 mb-3">
-            Setup complete. Review the criteria and activate the job.
-          </p>
-          {!!criteriaDraft && (
-            <pre className="bg-gray-50 p-3 rounded text-xs overflow-auto max-h-40 mb-3">
-              {JSON.stringify(criteriaDraft, null, 2)}
-            </pre>
+      <Card className="flex h-[calc(100vh-15rem)] flex-col overflow-hidden">
+        <div className="flex-1 space-y-3 overflow-y-auto p-5">
+          {messages.length === 0 && !sending && (
+            <p className="text-sm text-primary-400">Starting setup…</p>
           )}
-          <button
-            onClick={handleActivate}
-            disabled={activating}
-            className="w-full py-2 px-4 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
-          >
-            {activating ? "Activating…" : "Confirm & Activate Job"}
-          </button>
+          {messages.map((msg, i) => (
+            <div
+              key={i}
+              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              <div
+                className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                  msg.role === "user"
+                    ? "bg-brand-600 text-white"
+                    : "bg-primary-100 text-primary-800"
+                }`}
+              >
+                {msg.content}
+              </div>
+            </div>
+          ))}
+          {sending && (
+            <div className="flex justify-start">
+              <div className="rounded-2xl bg-primary-100 px-4 py-2.5 text-sm text-primary-400">
+                Thinking…
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
         </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="flex gap-2 border-t pt-4">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your response…"
-            disabled={sending}
-            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={sending || !input.trim()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
-          >
-            Send
-          </button>
-        </form>
-      )}
+
+        {error && (
+          <p className="border-t border-primary-100 px-5 py-2 text-sm text-red-600" role="alert">
+            {error}
+          </p>
+        )}
+
+        {status === "completed" ? (
+          <div className="border-t border-primary-100 bg-primary-50/50 p-5">
+            <p className="mb-3 text-sm text-primary-600">
+              Setup complete. Review the extracted criteria and activate the job.
+            </p>
+            {!!criteriaDraft && (
+              <pre className="mb-3 max-h-44 overflow-auto rounded-lg border border-primary-200 bg-surface p-3 text-xs text-primary-700">
+                {JSON.stringify(criteriaDraft, null, 2)}
+              </pre>
+            )}
+            <Button onClick={handleActivate} loading={activating} className="w-full bg-green-600 hover:bg-green-700">
+              Confirm &amp; activate job
+            </Button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="flex gap-2 border-t border-primary-100 p-4">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Type your response…"
+              disabled={sending}
+              className="flex-1 rounded-lg border border-primary-200 px-3 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 disabled:opacity-50"
+            />
+            <Button type="submit" loading={sending} disabled={!input.trim()}>
+              Send
+            </Button>
+          </form>
+        )}
+      </Card>
     </div>
   );
 }

@@ -1,39 +1,11 @@
 import { useEffect, useState } from "react";
-
-const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-
-interface Application {
-  id: string;
-  candidate_id: string;
-  screening_score: number | null;
-  screening_status: string;
-  status: string;
-  created_at: string;
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: "Pending",
-  qualified: "Qualified",
-  rejected: "Rejected",
-  screening: "Screening",
-  system_interrupted: "Interrupted",
-  abandoned: "Abandoned",
-  invited: "Invited",
-  interviewing: "Interviewing",
-  evaluated: "Evaluated",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  qualified: "bg-green-100 text-green-800",
-  rejected: "bg-red-100 text-red-700",
-  pending: "bg-gray-100 text-gray-700",
-  screening: "bg-yellow-100 text-yellow-800",
-  system_interrupted: "bg-orange-100 text-orange-800",
-  abandoned: "bg-gray-100 text-gray-500",
-  invited: "bg-blue-100 text-blue-800",
-  interviewing: "bg-purple-100 text-purple-800",
-  evaluated: "bg-indigo-100 text-indigo-800",
-};
+import { api, Application, ApiError } from "../../services/api";
+import Card from "../../components/ui/Card";
+import Button from "../../components/ui/Button";
+import Badge from "../../components/ui/Badge";
+import PageHeader from "../../components/ui/PageHeader";
+import Spinner from "../../components/ui/Spinner";
+import { CopyIcon, ExternalLinkIcon } from "../../components/ui/icons";
 
 interface Props {
   token: string;
@@ -42,27 +14,25 @@ interface Props {
   onBack: () => void;
 }
 
-export default function ApplicationListPage({ token, jobId, onSelectApplication, onBack }: Props) {
+export default function ApplicationListPage({ token, jobId, onSelectApplication }: Props) {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const applyLink = `${window.location.origin}/apply/${jobId}`;
 
   useEffect(() => {
-    fetch(`${BASE_URL}/jobs/${jobId}/applications`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
+    api.applications
+      .listByJob(token, jobId)
       .then(setApplications)
-      .catch((e) => setError(e.message))
+      .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load applications"))
       .finally(() => setLoading(false));
   }, [jobId, token]);
 
   async function handleInvite(applicationId: string) {
     try {
-      await fetch(`${BASE_URL}/applications/${applicationId}/invite`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await api.applications.invite(token, applicationId);
       setApplications((prev) =>
         prev.map((a) => (a.id === applicationId ? { ...a, status: "invited" } : a))
       );
@@ -71,101 +41,111 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication,
     }
   }
 
-  if (loading) return <div className="p-8 text-gray-500">Loading applications…</div>;
+  function copyLink() {
+    navigator.clipboard?.writeText(applyLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <Spinner label="Loading applications…" />
+      </div>
+    );
+  }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="flex items-center gap-2 mb-6">
-        <button onClick={onBack} className="text-gray-500 hover:text-gray-700 text-sm">
-          ← Back to jobs
-        </button>
-        <h1 className="text-2xl font-bold text-gray-900">Applications</h1>
-      </div>
+    <div>
+      <PageHeader
+        title="Applications"
+        description="Candidates who applied via the public link. Qualified candidates can be invited to interview."
+      />
 
-      <div className="mb-6 p-3 bg-blue-50 border border-blue-100 rounded-md">
-        <p className="text-sm text-gray-700 mb-1">Public application link (share with candidates):</p>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 text-xs bg-white border rounded px-2 py-1 overflow-x-auto">
-            {`${window.location.origin}/apply/${jobId}`}
+      <Card className="mb-6 p-4">
+        <p className="mb-2 text-sm font-medium text-primary-700">
+          Public application link
+        </p>
+        <p className="mb-3 text-xs text-primary-500">
+          Share this with candidates — anyone with the link can submit their name, email and CV.
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <code className="flex-1 overflow-x-auto rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-xs text-primary-700">
+            {applyLink}
           </code>
-          <button
-            onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/apply/${jobId}`)}
-            className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 whitespace-nowrap"
-          >
-            Copy
-          </button>
-          <a
-            href={`/apply/${jobId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs px-3 py-1 border border-blue-600 text-blue-700 rounded hover:bg-blue-100 whitespace-nowrap"
-          >
-            Open
-          </a>
+          <div className="flex gap-2">
+            <Button size="sm" variant="secondary" onClick={copyLink}>
+              <CopyIcon className="h-4 w-4" /> {copied ? "Copied!" : "Copy"}
+            </Button>
+            <a href={`/apply/${jobId}`} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" variant="ghost">
+                <ExternalLinkIcon className="h-4 w-4" /> Open
+              </Button>
+            </a>
+          </div>
         </div>
-      </div>
+      </Card>
 
-      {error && <p className="text-red-600 mb-4" role="alert">{error}</p>}
+      {error && (
+        <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          {error}
+        </p>
+      )}
 
       {applications.length === 0 ? (
-        <p className="text-gray-500">No applications yet.</p>
+        <p className="text-sm text-primary-500">No applications yet.</p>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left py-2 font-medium text-gray-700">ID</th>
-              <th className="text-left py-2 font-medium text-gray-700">Score</th>
-              <th className="text-left py-2 font-medium text-gray-700">Screening</th>
-              <th className="text-left py-2 font-medium text-gray-700">Status</th>
-              <th className="text-left py-2 font-medium text-gray-700">Applied</th>
-              <th className="py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {applications.map((app) => (
-              <tr key={app.id} className="border-b hover:bg-gray-50">
-                <td className="py-2">
-                  <button
-                    onClick={() => onSelectApplication(app.id)}
-                    className="text-blue-600 hover:underline font-mono text-xs"
-                  >
-                    {app.id.slice(0, 8)}…
-                  </button>
-                </td>
-                <td className="py-2">
-                  {app.screening_score !== null ? (
-                    <span className="font-semibold">{app.screening_score}</span>
-                  ) : (
-                    <span className="text-gray-400">—</span>
-                  )}
-                </td>
-                <td className="py-2">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[app.screening_status] ?? "bg-gray-100"}`}>
-                    {STATUS_LABELS[app.screening_status] ?? app.screening_status}
-                  </span>
-                </td>
-                <td className="py-2">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[app.status] ?? "bg-gray-100"}`}>
-                    {STATUS_LABELS[app.status] ?? app.status}
-                  </span>
-                </td>
-                <td className="py-2 text-gray-500">
-                  {new Date(app.created_at).toLocaleDateString()}
-                </td>
-                <td className="py-2 text-right">
-                  {app.screening_status === "qualified" && app.status === "qualified" && (
-                    <button
-                      onClick={() => handleInvite(app.id)}
-                      className="text-xs text-blue-600 hover:underline"
-                    >
-                      Invite
-                    </button>
-                  )}
-                </td>
+        <Card className="overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-primary-100 bg-primary-50/50 text-left text-xs uppercase tracking-wide text-primary-400">
+                <th className="px-5 py-3 font-semibold">Application</th>
+                <th className="px-5 py-3 font-semibold">Score</th>
+                <th className="px-5 py-3 font-semibold">Screening</th>
+                <th className="px-5 py-3 font-semibold">Status</th>
+                <th className="px-5 py-3 font-semibold">Applied</th>
+                <th className="px-5 py-3"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-primary-100">
+              {applications.map((app) => (
+                <tr key={app.id} className="transition-colors hover:bg-primary-50/60">
+                  <td className="px-5 py-3">
+                    <button
+                      onClick={() => onSelectApplication(app.id)}
+                      className="font-mono text-xs font-semibold text-brand-700 hover:underline cursor-pointer"
+                    >
+                      {app.id.slice(0, 8)}…
+                    </button>
+                  </td>
+                  <td className="px-5 py-3">
+                    {app.screening_score !== null ? (
+                      <span className="font-semibold text-primary-800">{app.screening_score}</span>
+                    ) : (
+                      <span className="text-primary-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3">
+                    <Badge status={app.screening_status} />
+                  </td>
+                  <td className="px-5 py-3">
+                    <Badge status={app.status} />
+                  </td>
+                  <td className="px-5 py-3 text-primary-500">
+                    {new Date(app.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    {app.screening_status === "qualified" && app.status === "qualified" && (
+                      <Button size="sm" variant="secondary" onClick={() => handleInvite(app.id)}>
+                        Invite
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
       )}
     </div>
   );
