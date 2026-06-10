@@ -47,17 +47,25 @@ export default function JobApplicationPage({ jobId }: Props) {
         method: "POST",
         body: form,
       });
-      if (res.status === 409) {
+      if (res.ok) {
+        setSuccess(true);
+      } else if (res.status === 409) {
         setError("You've already applied to this position.");
-      } else if (res.status === 422) {
-        const data = await res.json();
-        setError(data.detail ?? "Invalid submission.");
       } else if (res.status === 429) {
         setError("Too many submissions. Please try again later.");
-      } else if (!res.ok) {
-        setError("Submission failed. Please try again.");
       } else {
-        setSuccess(true);
+        // Surface the server's reason instead of a generic failure, so issues like
+        // "job not accepting applications" (404) or "Invalid CV" (422) are visible.
+        const data = await res.json().catch(() => null);
+        const detail =
+          typeof data?.detail === "string"
+            ? data.detail
+            : `Submission failed (error ${res.status}). Please try again.`;
+        setError(
+          res.status === 404
+            ? "This position isn't accepting applications right now. The job may not be active yet."
+            : detail
+        );
       }
     } catch {
       setError("Network error. Please check your connection.");
