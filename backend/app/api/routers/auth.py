@@ -4,6 +4,7 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from redis.asyncio import Redis
 
 from app.api.deps import get_current_user
+from app.config import get_settings
 from app.db import _get_session_factory
 from app.redis_client import get_redis
 from app.repositories.audit_log_repository import AuditLogRepository
@@ -14,6 +15,17 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 REFRESH_COOKIE = "refresh_token"
 COOKIE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days
+# Root path so the cookie is sent regardless of the route prefix the browser
+# sees. The frontend reaches auth through the reverse proxy at /api/auth/...,
+# which a path="/auth" cookie would never match (the old bug: refresh always
+# 401'd after a page refresh, dropping the session).
+COOKIE_PATH = "/"
+
+
+def _cookie_secure() -> bool:
+    # Secure cookies are not stored by browsers over plain HTTP, which breaks
+    # local dev (http://localhost). Only require Secure in production (HTTPS).
+    return get_settings().ENV == "production"
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -21,10 +33,10 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
         key=REFRESH_COOKIE,
         value=refresh_token,
         httponly=True,
-        secure=True,
+        secure=_cookie_secure(),
         samesite="strict",
         max_age=COOKIE_MAX_AGE,
-        path="/auth",
+        path=COOKIE_PATH,
     )
 
 
@@ -128,7 +140,7 @@ async def logout(
                     actor_type="user",
                 )
 
-    response.delete_cookie(key=REFRESH_COOKIE, path="/auth")
+    response.delete_cookie(key=REFRESH_COOKIE, path=COOKIE_PATH)
 
 
 @router.post("/set-password", response_model=TokenResponse)
