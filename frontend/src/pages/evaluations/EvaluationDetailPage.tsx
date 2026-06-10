@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   api,
   EvaluationDetail,
@@ -138,9 +138,43 @@ function CommunicationPanel({
   );
 }
 
-function TranscriptPanel({ transcript }: { transcript: EvaluationDetail["transcript"] }) {
-  const audioRefs = useRef<Record<number, HTMLAudioElement | null>>({});
+const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
 
+// The transcript audio endpoint requires Bearer auth, which a plain <audio src>
+// can't send. Fetch the clip with the token, then play it from an object URL.
+function AuthAudio({ url, token }: { url: string; token: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    fetch(`${API_BASE}${url}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      })
+      .catch(() => !cancelled && setFailed(true));
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [url, token]);
+
+  if (failed) return <p className="text-xs text-primary-400">Audio unavailable</p>;
+  if (!src) return <p className="text-xs text-primary-400">Loading audio…</p>;
+  return <audio src={src} controls className="h-8 w-full" />;
+}
+
+function TranscriptPanel({
+  transcript,
+  token,
+}: {
+  transcript: EvaluationDetail["transcript"];
+  token: string;
+}) {
   return (
     <section>
       <h2 className="text-lg font-semibold text-gray-900 mb-3">Transcript</h2>
@@ -167,13 +201,7 @@ function TranscriptPanel({ transcript }: { transcript: EvaluationDetail["transcr
                 <p className="text-sm text-gray-800">{turn.content_text}</p>
                 {turn.audio_url && (
                   <div className="mt-2">
-                    <audio
-                      ref={(el) => { audioRefs.current[turn.turn_index] = el; }}
-                      src={`${import.meta.env.VITE_API_URL ?? "http://localhost:8000"}${turn.audio_url}`}
-                      controls
-                      className="w-full h-8"
-                      preload="none"
-                    />
+                    <AuthAudio url={turn.audio_url} token={token} />
                   </div>
                 )}
               </div>
@@ -248,7 +276,7 @@ export default function EvaluationDetailPage({ token, evaluationId }: Props) {
       <DimensionScoresPanel dimensions={evaluation.dimension_scores} />
       <ConsistencyFlagsPanel flags={evaluation.consistency_flags} />
       <CommunicationPanel quality={evaluation.communication_quality} />
-      <TranscriptPanel transcript={evaluation.transcript} />
+      <TranscriptPanel transcript={evaluation.transcript} token={token} />
     </div>
   );
 }
