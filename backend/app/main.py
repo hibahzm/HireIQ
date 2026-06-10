@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-import structlog
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -11,7 +12,9 @@ from app.config import get_settings
 from app.middleware.logging import CorrelationIdMiddleware, configure_structlog
 from app.redis_client import close_redis
 
-logger = structlog.get_logger()
+# Use stdlib logging here (not structlog) so the catch-all can never fail to log
+# — it must always be able to return its 500 response.
+logger = logging.getLogger("app.unhandled")
 
 
 @asynccontextmanager
@@ -65,7 +68,10 @@ def create_app() -> FastAPI:
         try:
             return await call_next(request)
         except Exception:
-            logger.exception("unhandled_error", path=request.url.path, method=request.method)
+            try:
+                logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+            except Exception:
+                pass  # never let logging prevent us from returning a CORS-safe 500
             return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
     from app.api.routers.health import router as health_router
