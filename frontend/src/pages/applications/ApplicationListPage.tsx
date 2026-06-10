@@ -184,7 +184,7 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
                       </Button>
                     )}
                     {(app.screening_status === "pending" ||
-                      app.screening_status === "system_interrupted") && (
+                      app.screening_status === "failed") && (
                       <Button
                         size="sm"
                         variant="secondary"

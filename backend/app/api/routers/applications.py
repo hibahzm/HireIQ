@@ -233,10 +233,10 @@ async def rescreen_application(
     app = await repo.get_by_id(application_id)
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
-    if app.screening_status not in ("pending", "system_interrupted"):
+    if app.screening_status not in ("pending", "failed"):
         raise HTTPException(
             status_code=422,
-            detail="Only applications stuck in pending or interrupted screening can be re-run.",
+            detail="Only applications stuck in pending or failed screening can be re-run.",
         )
 
     row = (

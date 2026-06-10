@@ -78,7 +78,7 @@ async def run_screening_background(
                         {"cid": company_id},
                     )
                     await ApplicationRepository(session).update_screening_status(
-                        application_id, "system_interrupted"
+                        application_id, "failed"
                     )
         except Exception:
             logger.exception("screening.failed_status_update", application_id=application_id)
