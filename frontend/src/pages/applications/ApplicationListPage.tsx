@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, Application, ApiError } from "../../services/api";
+import { useNavigate } from "react-router-dom";
+import { api, Application, Job, ApiError } from "../../services/api";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
@@ -15,17 +16,21 @@ interface Props {
 }
 
 export default function ApplicationListPage({ token, jobId, onSelectApplication }: Props) {
+  const navigate = useNavigate();
   const [applications, setApplications] = useState<Application[]>([]);
+  const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const applyLink = `${window.location.origin}/apply/${jobId}`;
+  const isActive = job?.status === "active";
 
   useEffect(() => {
-    api.applications
-      .listByJob(token, jobId)
-      .then(setApplications)
+    Promise.all([
+      api.applications.listByJob(token, jobId).then(setApplications),
+      api.jobs.get(token, jobId).then(setJob).catch(() => {}),
+    ])
       .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load applications"))
       .finally(() => setLoading(false));
   }, [jobId, token]);
@@ -62,10 +67,30 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
         description="Candidates who applied via the public link. Qualified candidates can be invited to interview."
       />
 
+      {job && !isActive && (
+        <div className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2">
+            <Badge status={job.status} />
+            <p className="text-sm text-amber-800">
+              This job isn't <strong>active</strong> yet, so candidates can't apply — submissions
+              will be rejected. Finish AI setup and activate the job to start accepting applications.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => navigate(`/jobs/${jobId}/setup`)}
+            className="shrink-0 bg-amber-600 hover:bg-amber-700"
+          >
+            Finish setup &amp; activate
+          </Button>
+        </div>
+      )}
+
       <Card className="mb-6 p-4">
-        <p className="mb-2 text-sm font-medium text-primary-700">
-          Public application link
-        </p>
+        <div className="mb-2 flex items-center gap-2">
+          <p className="text-sm font-medium text-primary-700">Public application link</p>
+          {isActive && <Badge status="active" />}
+        </div>
         <p className="mb-3 text-xs text-primary-500">
           Share this with candidates — anyone with the link can submit their name, email and CV.
         </p>
