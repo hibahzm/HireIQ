@@ -135,14 +135,17 @@ Authenticated (any role). Lists all jobs for the current company.
 
 **Query params**: `?status=active` (optional filter by status)
 
-**Response 200**:
+**Response 200** — array of `JobResponse` (no `application_count`; that is not
+returned by the current implementation):
 ```json
 [
   {
     "id": "uuid",
+    "company_id": "uuid",
     "title": "Senior Backend Engineer",
+    "description": "…or null",
     "status": "active",
-    "application_count": 42,
+    "created_by": "uuid",
     "created_at": "2026-06-04T00:00:00Z",
     "updated_at": "2026-06-04T00:00:00Z"
   }
@@ -155,15 +158,21 @@ Authenticated (any role). Lists all jobs for the current company.
 
 Authenticated (recruiter/admin).
 
-**Request**: `{ "title": "Senior Backend Engineer" }`
+**Request**: `{ "title": "Senior Backend Engineer", "description": "Optional project / job description — fed to the AI setup agent so it pre-extracts criteria and only asks about gaps." }`
 
-**Response 201**:
+`description` is optional.
+
+**Response 201** (full `JobResponse`):
 ```json
 {
   "id": "uuid",
+  "company_id": "uuid",
   "title": "Senior Backend Engineer",
+  "description": "…or null",
   "status": "draft",
-  "created_at": "2026-06-04T00:00:00Z"
+  "created_by": "uuid",
+  "created_at": "2026-06-04T00:00:00Z",
+  "updated_at": "2026-06-04T00:00:00Z"
 }
 ```
 
@@ -171,30 +180,22 @@ Authenticated (recruiter/admin).
 
 ### `GET /jobs/{job_id}`
 
-Authenticated (any role). Returns job with criteria if available.
+Authenticated (any role).
 
-**Response 200**:
+**Response 200** (`JobResponse` — criteria are **not** embedded; the implementation
+returns the job record only):
 ```json
 {
   "id": "uuid",
+  "company_id": "uuid",
   "title": "Senior Backend Engineer",
+  "description": "…or null",
   "status": "active",
-  "criteria": {
-    "required_skills": [{"skill": "Python", "priority": "required"}],
-    "optional_skills": [],
-    "experience_level": "senior",
-    "min_years_experience": 5,
-    "evaluation_dimensions": [
-      {"name": "Technical Depth", "weight": 0.4, "description": "..."},
-      {"name": "System Design", "weight": 0.3, "description": "..."},
-      {"name": "Communication", "weight": 0.3, "description": "..."}
-    ],
-    "dealbreakers": ["No Python experience"],
-    "min_screening_score": 60
-  }
+  "created_by": "uuid",
+  "created_at": "2026-06-04T00:00:00Z",
+  "updated_at": "2026-06-04T00:00:00Z"
 }
 ```
-`criteria` is `null` if job status is `draft`.
 
 ---
 
@@ -214,9 +215,9 @@ Authenticated (recruiter/admin). Updates title or triggers status transitions (`
 
 Authenticated (recruiter/admin). Advances the AI-guided setup conversation by one turn.
 
-**Request**:
+**Request** (the field is `user_message`):
 ```json
-{ "message": "We need strong Python and PostgreSQL skills, ideally 3+ years." }
+{ "user_message": "We need strong Python and PostgreSQL skills, ideally 3+ years." }
 ```
 
 **Response 200**:
@@ -260,20 +261,17 @@ Authenticated (recruiter/admin). Transitions job from `setup` to `active` after 
 **Request** (`multipart/form-data`):
 - `full_name: string`
 - `email: string`
-- `cv: file (PDF, max 10 MB)`
+- `cv_file: file` — **PDF, DOCX, JPG, or PNG**, max 10 MB (the form field is `cv_file`)
 
-**Response 201**:
-```json
-{
-  "application_id": "uuid",
-  "message": "Application received. Check your email for confirmation."
-}
-```
+**Response 201**: the created `ApplicationResponse` (application record).
 
 **Errors**:
+- `404` if the job does not exist **or is not `active`** (the implementation returns 404, not 422, for a non-active job)
 - `409` if this email already applied to this job
-- `422` if CV is corrupted, password-protected, or unreadable after extraction attempts
-- `422` if job is not `active`
+- `413` if the CV exceeds 10 MB
+- `422` if the CV type is unsupported, or is corrupted / unreadable after extraction
+  attempts (note: image/scanned-PDF OCR requires Azure Document Intelligence to be
+  configured; when it isn't, a 422 with a "use a text-based PDF/DOCX" message is returned)
 - `429` if rate limit exceeded (5 uploads per IP per hour)
 
 ---
@@ -282,25 +280,21 @@ Authenticated (recruiter/admin). Transitions job from `setup` to `active` after 
 
 Authenticated (any role). Lists applications for a job with screening results.
 
-**Query params**: `?status=qualified&page=1&page_size=25`
+**Query params**: `?status=qualified&page=1`
 
-**Response 200**:
+**Response 200** — a **bare array** of `ApplicationResponse` (the implementation does
+not wrap results in a pagination envelope):
 ```json
-{
-  "items": [
-    {
-      "id": "uuid",
-      "candidate": { "full_name": "Jane Doe", "email": "jane@example.com" },
-      "screening_score": 82,
-      "screening_status": "qualified",
-      "status": "evaluated",
-      "created_at": "2026-06-04T00:00:00Z"
-    }
-  ],
-  "total": 120,
-  "page": 1,
-  "page_size": 25
-}
+[
+  {
+    "id": "uuid",
+    "candidate_id": "uuid",
+    "screening_score": 82,
+    "screening_status": "qualified",
+    "status": "evaluated",
+    "created_at": "2026-06-04T00:00:00Z"
+  }
+]
 ```
 
 ---
