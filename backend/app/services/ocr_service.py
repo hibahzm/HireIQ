@@ -127,17 +127,34 @@ class OcrService:
 
     async def _azure_doc_intelligence(self, file_bytes: bytes) -> tuple[str, str]:
         from app.config import get_settings
+
+        settings = get_settings()
+
+        # OCR (images, scanned/sparse PDFs) requires Azure Document Intelligence.
+        # If it isn't configured (e.g. local dev), degrade to a clear validation
+        # error — a 422 the candidate can act on — instead of an uncaught 500
+        # (which would also strip CORS headers and surface as a "network error").
+        if not settings.AZURE_FORM_RECOGNIZER_ENDPOINT or not settings.AZURE_FORM_RECOGNIZER_KEY:
+            raise OcrValidationError(
+                "could not read this file automatically. Please upload a text-based "
+                "PDF or DOCX (not a scanned image)."
+            )
+
         from azure.ai.formrecognizer.aio import DocumentAnalysisClient
         from azure.core.credentials import AzureKeyCredential
 
-        settings = get_settings()
-        client = DocumentAnalysisClient(
-            endpoint=settings.AZURE_FORM_RECOGNIZER_ENDPOINT,
-            credential=AzureKeyCredential(settings.AZURE_FORM_RECOGNIZER_KEY),
-        )
-        async with client:
-            poller = await client.begin_analyze_document("prebuilt-document", file_bytes)
-            result = await poller.result()
+        try:
+            client = DocumentAnalysisClient(
+                endpoint=settings.AZURE_FORM_RECOGNIZER_ENDPOINT,
+                credential=AzureKeyCredential(settings.AZURE_FORM_RECOGNIZER_KEY),
+            )
+            async with client:
+                poller = await client.begin_analyze_document("prebuilt-document", file_bytes)
+                result = await poller.result()
+        except OcrValidationError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — surface any OCR failure as a clean 422
+            raise OcrValidationError(f"could not read this file: {exc}") from exc
 
         text = "\n".join(p.content for p in result.paragraphs or [])
         if not text.strip():
