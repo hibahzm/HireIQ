@@ -1,4 +1,9 @@
-const WS_BASE = import.meta.env.VITE_WS_URL ?? "ws://localhost:8000";
+// Default to a same-origin `/ws` path so the WebSocket flows through the reverse
+// proxy (nginx in the container, the Vite dev-server proxy locally) rather than a
+// hardcoded localhost:8000. Override with VITE_WS_URL for a different origin.
+const WS_BASE =
+  import.meta.env.VITE_WS_URL ??
+  `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
 
 export type InboundMessage =
   | { type: "session_ready"; session_id: string; resuming: boolean; turn_count: number; max_turns: number; streaming_mode?: boolean }
@@ -20,7 +25,7 @@ export type OutboundMessage =
   | { type: "end_of_speech" };
 
 interface Callbacks {
-  onReady?: (data: { resuming: boolean; turn_count: number; streaming_mode: boolean }) => void;
+  onReady?: (data: { resuming: boolean; turn_count: number; max_turns: number; streaming_mode: boolean }) => void;
   onAiTurn?: (text: string, audio?: ArrayBuffer) => void;
   onPartial?: (text: string) => void;
   onAiText?: (text: string) => void;
@@ -60,6 +65,7 @@ export class InterviewWebSocket {
           this.callbacks.onReady?.({
             resuming: msg.resuming,
             turn_count: msg.turn_count,
+            max_turns: msg.max_turns,
             streaming_mode: msg.streaming_mode ?? false,
           });
           break;
