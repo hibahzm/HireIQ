@@ -20,7 +20,7 @@ export default function InterviewRoomPage({ token }: Props) {
   const [isRecording, setIsRecording] = useState(false);
   const [streamingMode, setStreamingMode] = useState(false);
   const [turnCount, setTurnCount] = useState(0);
-  const [maxTurns] = useState(20);
+  const [maxTurns, setMaxTurns] = useState(20);
   const wsRef = useRef<InterviewWebSocket | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -30,9 +30,10 @@ export default function InterviewRoomPage({ token }: Props) {
 
   useEffect(() => {
     const ws = new InterviewWebSocket(token, {
-      onReady: ({ resuming, turn_count, streaming_mode }) => {
+      onReady: ({ resuming, turn_count, max_turns, streaming_mode }) => {
         setStatus("ready");
         setTurnCount(turn_count);
+        setMaxTurns(max_turns);
         setStreamingMode(streaming_mode);
         if (resuming) {
           addMessage("system", `Resuming from turn ${turn_count}. Welcome back.`);
