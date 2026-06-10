@@ -29,40 +29,59 @@ async def run_screening_background(
     (not in the router) per Principle III.
     """
     from app.db import _get_session_factory
-    from app.repositories.job_repository import JobRepository
     from app.models.job_criteria import JobCriteria
     import sqlalchemy as sa
 
-    async with _get_session_factory()() as session:
-        async with session.begin():
-            await session.execute(
-                sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
-                {"cid": company_id},
-            )
-            result = await session.execute(
-                sa.select(JobCriteria).where(JobCriteria.job_id == job_id)
-            )
-            criteria_model = result.scalar_one_or_none()
-            if not criteria_model:
-                logger.warning("screening.no_criteria", job_id=job_id)
-                return
-            job_criteria = {
-                "required_skills": criteria_model.required_skills,
-                "optional_skills": criteria_model.optional_skills,
-                "experience_level": criteria_model.experience_level,
-                "evaluation_dimensions": criteria_model.evaluation_dimensions,
-                "dealbreakers": criteria_model.dealbreakers,
-                "min_screening_score": criteria_model.min_screening_score,
-            }
-            svc = ScreeningService(session)
-            await svc.screen(
-                application_id=application_id,
-                company_id=company_id,
-                job_title=job_title,
-                candidate_email=candidate_email,
-                job_criteria=job_criteria,
-                job_id=job_id,
-            )
+    try:
+        async with _get_session_factory()() as session:
+            async with session.begin():
+                await session.execute(
+                    sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
+                    {"cid": company_id},
+                )
+                result = await session.execute(
+                    sa.select(JobCriteria).where(JobCriteria.job_id == job_id)
+                )
+                criteria_model = result.scalar_one_or_none()
+                if not criteria_model:
+                    logger.warning("screening.no_criteria", job_id=job_id)
+                    return
+                job_criteria = {
+                    "required_skills": criteria_model.required_skills,
+                    "optional_skills": criteria_model.optional_skills,
+                    "experience_level": criteria_model.experience_level,
+                    "evaluation_dimensions": criteria_model.evaluation_dimensions,
+                    "dealbreakers": criteria_model.dealbreakers,
+                    "min_screening_score": criteria_model.min_screening_score,
+                }
+                svc = ScreeningService(session)
+                await svc.screen(
+                    application_id=application_id,
+                    company_id=company_id,
+                    job_title=job_title,
+                    candidate_email=candidate_email,
+                    job_criteria=job_criteria,
+                    job_id=job_id,
+                )
+    except Exception:
+        # This runs as a fire-and-forget asyncio.Task; an unhandled error here
+        # rolls back the transaction and leaves the application stuck in
+        # `pending` forever (and logs "Task exception was never retrieved").
+        # Record the failure on its own session so the recruiter sees a terminal
+        # state instead of an application that never resolves.
+        logger.exception("screening.failed", application_id=application_id, job_id=job_id)
+        try:
+            async with _get_session_factory()() as session:
+                async with session.begin():
+                    await session.execute(
+                        sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
+                        {"cid": company_id},
+                    )
+                    await ApplicationRepository(session).update_screening_status(
+                        application_id, "system_interrupted"
+                    )
+        except Exception:
+            logger.exception("screening.failed_status_update", application_id=application_id)
 
 
 class ScreeningService:

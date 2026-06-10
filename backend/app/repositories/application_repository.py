@@ -105,6 +105,13 @@ class ApplicationRepository:
             .values(status=status, updated_at=datetime.now(timezone.utc))
         )
 
+    async def update_screening_status(self, application_id: str, screening_status: str) -> None:
+        await self._session.execute(
+            sa.update(Application)
+            .where(Application.id == application_id)
+            .values(screening_status=screening_status, updated_at=datetime.now(timezone.utc))
+        )
+
     async def set_interview_token(
         self,
         application_id: str,
