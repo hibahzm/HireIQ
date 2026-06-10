@@ -98,6 +98,13 @@ class ApplicationRepository:
             )
         )
 
+    async def update_status(self, application_id: str, status: str) -> None:
+        await self._session.execute(
+            sa.update(Application)
+            .where(Application.id == application_id)
+            .values(status=status, updated_at=datetime.now(timezone.utc))
+        )
+
     async def set_interview_token(
         self,
         application_id: str,
