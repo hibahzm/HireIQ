@@ -57,3 +57,10 @@ class SetupConversationRepository:
         conv.updated_at = datetime.now(timezone.utc)
         await self._session.flush()
         return conv
+
+    async def fail(self, conversation_id: str, message: str) -> SetupConversation:
+        conv = await self.append_message(conversation_id, "assistant", message)
+        conv.status = "failed"
+        conv.updated_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return conv

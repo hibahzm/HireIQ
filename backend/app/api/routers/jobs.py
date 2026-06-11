@@ -6,12 +6,18 @@ import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_authed_session, require_recruiter_or_admin
+from app.api.deps import get_authed_session, require_admin, require_recruiter_or_admin
 from app.models.application import Application
 from app.models.job import Job as JobModel
 from app.models.user import User
 from app.repositories.job_repository import JobRepository
-from app.schemas.jobs import CreateJobRequest, JobResponse, SetupTurnRequest, SetupTurnResponse
+from app.schemas.jobs import (
+    CreateJobRequest,
+    JobCriteriaRequest,
+    JobResponse,
+    SetupTurnRequest,
+    SetupTurnResponse,
+)
 from app.services.job_service import JobService, JobServiceError
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -77,26 +83,24 @@ async def update_job(
 @router.delete("/{job_id}", status_code=204)
 async def delete_job(
     job_id: str,
-    current_user: User = Depends(require_recruiter_or_admin),
+    current_user: User = Depends(require_admin),
     session: AsyncSession = Depends(get_authed_session),
 ):
     job = await JobRepository(session).get_by_id(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    blocking_statuses = ("screening", "qualified", "invited", "interviewing")
     result = await session.execute(
         sa.select(Application.id)
         .where(Application.job_id == job_id)
-        .where(Application.status.in_(blocking_statuses))
         .limit(1)
     )
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=409,
             detail=(
-                "Cannot delete a job with active applications. "
-                "Close the job first, then delete once all applications are resolved."
+                "Cannot delete a job with applications. "
+                "Close or archive it to preserve hiring history."
             ),
         )
 
@@ -122,6 +126,26 @@ async def job_setup_turn(
     return SetupTurnResponse(**result)
 
 
+@router.put("/{job_id}/criteria", response_model=JobResponse)
+async def save_manual_criteria(
+    job_id: str,
+    body: JobCriteriaRequest,
+    current_user: User = Depends(require_recruiter_or_admin),
+    session: AsyncSession = Depends(get_authed_session),
+):
+    try:
+        job = await JobService(session).save_manual_criteria(
+            job_id=job_id,
+            company_id=current_user.company_id,
+            actor_id=current_user.id,
+            criteria=body.model_dump(),
+        )
+    except JobServiceError as exc:
+        code = 404 if "not_found" in str(exc) else 422
+        raise HTTPException(status_code=code, detail=str(exc))
+    return JobResponse(**job.__dict__)
+
+
 @router.post("/{job_id}/activate", response_model=JobResponse)
 async def activate_job(
     job_id: str,
@@ -130,6 +154,60 @@ async def activate_job(
 ):
     try:
         job = await JobService(session).activate_job(
+            job_id=job_id,
+            company_id=current_user.company_id,
+            actor_id=current_user.id,
+        )
+    except JobServiceError as exc:
+        code = 404 if "not_found" in str(exc) else 422
+        raise HTTPException(status_code=code, detail=str(exc))
+    return JobResponse(**job.__dict__)
+
+
+@router.post("/{job_id}/close", response_model=JobResponse)
+async def close_job(
+    job_id: str,
+    current_user: User = Depends(require_recruiter_or_admin),
+    session: AsyncSession = Depends(get_authed_session),
+):
+    try:
+        job = await JobService(session).close_job(
+            job_id=job_id,
+            company_id=current_user.company_id,
+            actor_id=current_user.id,
+        )
+    except JobServiceError as exc:
+        code = 404 if "not_found" in str(exc) else 422
+        raise HTTPException(status_code=code, detail=str(exc))
+    return JobResponse(**job.__dict__)
+
+
+@router.post("/{job_id}/reopen", response_model=JobResponse)
+async def reopen_job(
+    job_id: str,
+    current_user: User = Depends(require_recruiter_or_admin),
+    session: AsyncSession = Depends(get_authed_session),
+):
+    try:
+        job = await JobService(session).reopen_job(
+            job_id=job_id,
+            company_id=current_user.company_id,
+            actor_id=current_user.id,
+        )
+    except JobServiceError as exc:
+        code = 404 if "not_found" in str(exc) else 422
+        raise HTTPException(status_code=code, detail=str(exc))
+    return JobResponse(**job.__dict__)
+
+
+@router.post("/{job_id}/archive", response_model=JobResponse)
+async def archive_job(
+    job_id: str,
+    current_user: User = Depends(require_recruiter_or_admin),
+    session: AsyncSession = Depends(get_authed_session),
+):
+    try:
+        job = await JobService(session).archive_job(
             job_id=job_id,
             company_id=current_user.company_id,
             actor_id=current_user.id,

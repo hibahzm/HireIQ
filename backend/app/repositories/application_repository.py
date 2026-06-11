@@ -112,6 +112,17 @@ class ApplicationRepository:
             .values(screening_status=screening_status, updated_at=datetime.now(timezone.utc))
         )
 
+    async def update_screening_failure(self, application_id: str, reason: str) -> None:
+        await self._session.execute(
+            sa.update(Application)
+            .where(Application.id == application_id)
+            .values(
+                screening_status="failed",
+                screening_rationale=reason,
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+
     async def set_interview_token(
         self,
         application_id: str,

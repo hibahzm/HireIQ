@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import structlog
 from fastapi.encoders import jsonable_encoder
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -53,11 +54,11 @@ class JobService:
         job = await job_repo.get_by_id(job_id)
         if not job:
             raise JobServiceError("job_not_found")
-        if job.status not in ("draft", "setup"):
+        if job.status not in ("draft", "setup", "setup_failed"):
             raise JobServiceError("invalid_job_status")
 
-        # Transition to setup if still in draft
-        if job.status == "draft":
+        # Transition into setup while the agent is actively collecting criteria.
+        if job.status in ("draft", "setup_failed"):
             await job_repo.update_status(job_id, "setup")
 
         conv_repo = SetupConversationRepository(self._session)
@@ -74,22 +75,37 @@ class JobService:
                 f"genuinely missing or ambiguous:\n\n{job.description}"
             )
 
-        # Call agents service
-        import httpx
-
         payload = jsonable_encoder({
             "job_id": job_id,
             "company_id": company_id,
             "conversation_history": list(conv.messages),
             "user_message": effective_user_message,
         })
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"{self._settings.AGENTS_BASE_URL}/agents/job-setup/turn",
-                json=payload,
-                headers={"X-Internal-Secret": self._settings.AGENTS_INTERNAL_SECRET},
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{self._settings.AGENTS_BASE_URL}/agents/job-setup/turn",
+                    json=payload,
+                    headers={"X-Internal-Secret": self._settings.AGENTS_INTERNAL_SECRET},
+                )
+                resp.raise_for_status()
+        except Exception as exc:
+            message = (
+                "The setup assistant is unavailable right now. "
+                "You can retry setup or enter criteria manually."
             )
-            resp.raise_for_status()
+            await job_repo.update_status(job_id, "setup_failed")
+            await conv_repo.fail(conv.id, message)
+            await AuditLogRepository(self._session).log_event(
+                event_type="job.setup_failed",
+                actor_type="system",
+                entity_type="job",
+                entity_id=job_id,
+                company_id=company_id,
+                metadata={"error": str(exc)[:500]},
+            )
+            return {"message": message, "status": "failed", "criteria_draft": None}
+
         agent_response = resp.json()
 
         # Persist messages (skip empty kickoff turns so history stays clean)
@@ -137,7 +153,7 @@ class JobService:
         job = await job_repo.get_by_id(job_id)
         if not job:
             raise JobServiceError("job_not_found")
-        if job.status != "setup":
+        if job.status not in ("setup", "setup_failed", "closed"):
             raise JobServiceError("job_must_be_in_setup_status")
 
         # Verify criteria exist
@@ -161,3 +177,89 @@ class JobService:
             company_id=company_id,
         )
         return job
+
+    async def save_manual_criteria(
+        self,
+        *,
+        job_id: str,
+        company_id: str,
+        actor_id: str,
+        criteria: dict,
+    ) -> Job:
+        job_repo = JobRepository(self._session)
+        job = await job_repo.get_by_id(job_id)
+        if not job:
+            raise JobServiceError("job_not_found")
+        if job.status not in ("draft", "setup", "setup_failed", "closed"):
+            raise JobServiceError("invalid_job_status")
+
+        await job_repo.upsert_criteria(job_id=job_id, company_id=company_id, criteria=criteria)
+        job = await job_repo.update_status(job_id, "setup")
+        await AuditLogRepository(self._session).log_event(
+            event_type="job.criteria_manual_saved",
+            actor_type="user",
+            actor_id=actor_id,
+            entity_type="job",
+            entity_id=job_id,
+            company_id=company_id,
+        )
+        return job
+
+    async def close_job(self, *, job_id: str, company_id: str, actor_id: str) -> Job:
+        return await self._transition_job(
+            job_id=job_id,
+            company_id=company_id,
+            actor_id=actor_id,
+            target_status="closed",
+            event_type="job.closed",
+            allowed_statuses=("active", "draft", "setup", "setup_failed"),
+        )
+
+    async def reopen_job(self, *, job_id: str, company_id: str, actor_id: str) -> Job:
+        job = await self._transition_job(
+            job_id=job_id,
+            company_id=company_id,
+            actor_id=actor_id,
+            target_status="active",
+            event_type="job.reopened",
+            allowed_statuses=("closed",),
+        )
+        return job
+
+    async def archive_job(self, *, job_id: str, company_id: str, actor_id: str) -> Job:
+        return await self._transition_job(
+            job_id=job_id,
+            company_id=company_id,
+            actor_id=actor_id,
+            target_status="archived",
+            event_type="job.archived",
+            allowed_statuses=("draft", "setup", "setup_failed", "closed"),
+        )
+
+    async def _transition_job(
+        self,
+        *,
+        job_id: str,
+        company_id: str,
+        actor_id: str,
+        target_status: str,
+        event_type: str,
+        allowed_statuses: tuple[str, ...],
+    ) -> Job:
+        job_repo = JobRepository(self._session)
+        job = await job_repo.get_by_id(job_id)
+        if not job:
+            raise JobServiceError("job_not_found")
+        if job.status not in allowed_statuses:
+            raise JobServiceError(f"cannot_transition_from_{job.status}")
+
+        updated = await job_repo.update_status(job_id, target_status)
+        await AuditLogRepository(self._session).log_event(
+            event_type=event_type,
+            actor_type="user",
+            actor_id=actor_id,
+            entity_type="job",
+            entity_id=job_id,
+            company_id=company_id,
+        )
+        return updated

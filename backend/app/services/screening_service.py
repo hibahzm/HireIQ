@@ -45,7 +45,22 @@ async def run_screening_background(
                 )
                 criteria_model = result.scalar_one_or_none()
                 if not criteria_model:
+                    reason = (
+                        "Job criteria are missing. Complete job setup or save manual criteria, "
+                        "then re-run screening."
+                    )
                     logger.warning("screening.no_criteria", job_id=job_id)
+                    await ApplicationRepository(session).update_screening_failure(
+                        application_id, reason
+                    )
+                    await AuditLogRepository(session).log_event(
+                        event_type="cv.screening.failed",
+                        actor_type="system",
+                        entity_type="application",
+                        entity_id=application_id,
+                        company_id=company_id,
+                        metadata={"reason": "missing_job_criteria"},
+                    )
                     return
                 job_criteria = {
                     "required_skills": criteria_model.required_skills,
@@ -78,8 +93,12 @@ async def run_screening_background(
                         sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                         {"cid": company_id},
                     )
-                    await ApplicationRepository(session).update_screening_status(
-                        application_id, "failed"
+                    await ApplicationRepository(session).update_screening_failure(
+                        application_id,
+                        (
+                            "Screening failed because the AI screening pipeline could not finish. "
+                            "Check the backend and agent logs, then re-run screening."
+                        ),
                     )
         except Exception:
             logger.exception("screening.failed_status_update", application_id=application_id)
@@ -126,7 +145,17 @@ class ScreeningService:
         try:
             cv_text, extraction_method = await self._ocr.extract(cv_bytes)
         except OcrValidationError as exc:
+            reason = f"CV extraction failed: {exc}"
             logger.error("cv.ocr.failed", application_id=application_id, error=str(exc))
+            await app_repo.update_screening_failure(application_id, reason)
+            await audit.log_event(
+                event_type="cv.screening.failed",
+                actor_type="system",
+                entity_type="application",
+                entity_id=application_id,
+                company_id=company_id,
+                metadata={"reason": "ocr_failed", "error": str(exc)[:500]},
+            )
             return
 
         # 3. Chunk + embed
