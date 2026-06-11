@@ -16,8 +16,10 @@ import {
 const NAV = [
   { to: "/overview", label: "Overview", Icon: DashboardIcon },
   { to: "/jobs", label: "Jobs", Icon: BriefcaseIcon },
-  { to: "/users", label: "Team", Icon: UsersIcon },
 ];
+
+const ADMIN_NAV = [{ to: "/users", label: "Team", Icon: UsersIcon }];
+const MANAGER_NAV = [{ to: "/platform", label: "Platform", Icon: DashboardIcon }];
 
 function initials(email?: string): string {
   if (!email) return "··";
@@ -32,6 +34,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const crumbs = crumbsFor(location.pathname);
   const canGoBack = crumbs.length > 1;
+  const navItems =
+    user?.role === "manager"
+      ? MANAGER_NAV
+      : user?.role === "admin"
+      ? [...NAV, ...ADMIN_NAV]
+      : NAV;
 
   const sidebar = (
     <div className="flex h-full flex-col bg-primary-800 text-primary-100">
@@ -42,7 +50,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <span className="text-lg font-extrabold tracking-tight text-white">HireIQ</span>
       </div>
       <nav className="flex-1 space-y-1 px-3 py-2">
-        {NAV.map(({ to, label, Icon }) => (
+        {navItems.map(({ to, label, Icon }) => (
           <NavLink
             key={to}
             to={to}

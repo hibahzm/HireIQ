@@ -13,6 +13,7 @@ export default function UserManagementPage({ token }: Props) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"recruiter" | "admin">("recruiter");
   const [inviting, setInviting] = useState(false);
+  const activeAdminCount = users.filter((u) => u.role === "admin" && u.is_active).length;
 
   useEffect(() => {
     api.users
@@ -38,6 +39,11 @@ export default function UserManagementPage({ token }: Props) {
   }
 
   async function handleRoleChange(userId: string, role: string) {
+    const user = users.find((u) => u.id === userId);
+    if (user?.role === "admin" && role !== "admin" && user.is_active && activeAdminCount <= 1) {
+      setError("Every company must keep at least one active admin.");
+      return;
+    }
     try {
       const updated = await api.users.setRole(token, userId, role);
       setUsers((prev) => prev.map((u) => (u.id === userId ? (updated as UserProfile) : u)));
@@ -47,6 +53,11 @@ export default function UserManagementPage({ token }: Props) {
   }
 
   async function handleDeactivate(userId: string) {
+    const user = users.find((u) => u.id === userId);
+    if (user?.role === "admin" && user.is_active && activeAdminCount <= 1) {
+      setError("Every company must keep at least one active admin.");
+      return;
+    }
     if (!confirm("Deactivate this user?")) return;
     try {
       await api.users.deactivate(token, userId);

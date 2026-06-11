@@ -15,6 +15,8 @@ from app.schemas.users import CreateUserRequest, UpdateRoleRequest, UserResponse
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+COMPANY_ROLES = ("admin", "recruiter")
+
 
 @router.get("", response_model=list[UserResponse])
 async def list_users(
@@ -32,7 +34,7 @@ async def create_user(
     session: AsyncSession = Depends(get_authed_session),
     redis_client: Redis = Depends(get_redis),
 ):
-    if body.role not in ("admin", "recruiter"):
+    if body.role not in COMPANY_ROLES:
         raise HTTPException(status_code=422, detail="Role must be admin or recruiter")
 
     repo = UserRepository(session)
@@ -73,10 +75,25 @@ async def update_user_role(
     current_user: User = Depends(require_admin),
     session: AsyncSession = Depends(get_authed_session),
 ):
-    if body.role not in ("admin", "recruiter"):
+    if body.role not in COMPANY_ROLES:
         raise HTTPException(status_code=422, detail="Role must be admin or recruiter")
 
-    user = await UserRepository(session).set_role(user_id, body.role)
+    repo = UserRepository(session)
+    target = await repo.get_by_id(user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if (
+        target.role == "admin"
+        and body.role != "admin"
+        and target.is_active
+        and await repo.count_active_admins(current_user.company_id) <= 1
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Every company must keep at least one active admin.",
+        )
+
+    user = await repo.set_role(user_id, body.role)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return UserResponse(**user.__dict__)
@@ -89,6 +106,16 @@ async def deactivate_user(
     session: AsyncSession = Depends(get_authed_session),
 ):
     repo = UserRepository(session)
-    if not await repo.get_by_id(user_id):
+    target = await repo.get_by_id(user_id)
+    if not target:
         raise HTTPException(status_code=404, detail="User not found")
+    if (
+        target.role == "admin"
+        and target.is_active
+        and await repo.count_active_admins(current_user.company_id) <= 1
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Every company must keep at least one active admin.",
+        )
     await repo.deactivate(user_id)

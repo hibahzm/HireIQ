@@ -92,3 +92,9 @@ async def require_recruiter_or_admin(current_user: User = Depends(get_current_us
             detail="Recruiter or admin required",
         )
     return current_user
+
+
+async def require_manager(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != "manager":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager required")
+    return current_user

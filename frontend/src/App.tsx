@@ -18,6 +18,7 @@ import EvaluationDetailPage from "./pages/evaluations/EvaluationDetailPage";
 import FeedbackReportPage from "./pages/feedback/FeedbackReportPage";
 import CompanyOverviewPage from "./pages/analytics/CompanyOverviewPage";
 import JobAnalyticsPage from "./pages/analytics/JobAnalyticsPage";
+import PlatformOverviewPage from "./pages/platform/PlatformOverviewPage";
 
 // ── Page wrappers that pull route params and auth token ──────────────────────
 
@@ -137,6 +138,16 @@ function JobAnalyticsWrapper() {
   return <JobAnalyticsPage token={token} jobId={jobId} onBack={() => navigate("/overview")} />;
 }
 
+function PlatformOverviewWrapper() {
+  const token = useAuth().token ?? "";
+  return <PlatformOverviewPage token={token} />;
+}
+
+function HomeRedirect() {
+  const { user } = useAuth();
+  return <Navigate to={user?.role === "manager" ? "/platform" : "/overview"} replace />;
+}
+
 // ── Auth pages that set token on success ─────────────────────────────────────
 
 function LoginWrapper() {
@@ -206,11 +217,12 @@ function AppRoutes() {
         <Route path="/jobs/:jobId/evaluations" element={<ShortlistWrapper />} />
         <Route path="/evaluations/:evaluationId" element={<EvaluationDetailWrapper />} />
         <Route path="/users" element={<UserManagementWrapper />} />
+        <Route path="/platform" element={<PlatformOverviewWrapper />} />
       </Route>
 
       {/* Default — post-login landing is the company overview (FR-005) */}
-      <Route path="/" element={<Navigate to="/overview" replace />} />
-      <Route path="*" element={<Navigate to="/overview" replace />} />
+      <Route path="/" element={<HomeRedirect />} />
+      <Route path="*" element={<HomeRedirect />} />
     </Routes>
   );
 }

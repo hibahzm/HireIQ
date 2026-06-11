@@ -50,9 +50,21 @@ class UserRepository:
 
     async def list_by_company(self, company_id: str) -> list[User]:
         result = await self._session.execute(
-            sa.select(User).where(User.company_id == company_id)
+            sa.select(User).where(User.company_id == company_id, User.role != "manager")
         )
         return list(result.scalars().all())
+
+    async def count_active_admins(self, company_id: str) -> int:
+        result = await self._session.execute(
+            sa.select(sa.func.count())
+            .select_from(User)
+            .where(
+                User.company_id == company_id,
+                User.role == "admin",
+                User.is_active.is_(True),
+            )
+        )
+        return int(result.scalar_one())
 
     async def set_role(self, user_id: str, role: str) -> User | None:
         await self._session.execute(
