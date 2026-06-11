@@ -10,6 +10,7 @@ from langgraph.graph import END, StateGraph
 
 from app.guardrails import PIIRedactor, registry
 from app.prompts import SCREENING_SYSTEM
+from app.usage import append_usage_event
 
 logger = structlog.get_logger()
 
@@ -24,6 +25,7 @@ class ScreeningState(TypedDict):
     rationale: str | None
     status: str
     guardrail_triggered: bool
+    usage_events: list[dict[str, Any]]
 
 
 def _build_llm() -> ChatOpenAI:
@@ -53,6 +55,12 @@ async def score_cv(state: ScreeningState) -> ScreeningState:
     )
 
     response = await _build_llm().ainvoke([SystemMessage(content=prompt)])
+    usage_events = append_usage_event(
+        state,
+        response,
+        agent_type="cv_screening",
+        metadata={"application_id": state["application_id"]},
+    )
     raw = response.content
 
     if not registry.check_output(raw).passed:
@@ -62,6 +70,7 @@ async def score_cv(state: ScreeningState) -> ScreeningState:
             "rationale": "Output blocked by guardrails.",
             "status": "rejected",
             "guardrail_triggered": True,
+            "usage_events": usage_events,
         }
 
     try:
@@ -81,6 +90,7 @@ async def score_cv(state: ScreeningState) -> ScreeningState:
         "rationale": rationale,
         "status": status,
         "guardrail_triggered": False,
+        "usage_events": usage_events,
     }
 
 

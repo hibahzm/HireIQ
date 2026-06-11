@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import tiktoken
 
+from app.services.usage_service import estimate_usage_cost
+
 _CHUNK_SIZE_TOKENS = 512
 _CHUNK_OVERLAP_TOKENS = 64
 _MODEL = "text-embedding-3-small"
@@ -14,12 +16,24 @@ class EmbeddingService:
         self._settings = get_settings()
         self._enc = tiktoken.get_encoding(_TOKENIZER)
 
-    async def embed_text(self, text: str) -> list[float]:
+    async def embed_text(self, text: str) -> tuple[list[float], dict]:
         from openai import AsyncOpenAI
 
         client = AsyncOpenAI(api_key=self._settings.OPENAI_API_KEY)
         response = await client.embeddings.create(input=text, model=_MODEL)
-        return response.data[0].embedding
+        usage = getattr(response, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or len(self._enc.encode(text)))
+        usage_event = {
+            "agent_type": "embedding",
+            "model": _MODEL,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": 0,
+            "estimated_cost_usd": float(
+                estimate_usage_cost(model=_MODEL, prompt_tokens=prompt_tokens)
+            ),
+            "metadata": {"operation": "cv_chunk_embedding"},
+        }
+        return response.data[0].embedding, usage_event
 
     def chunk_cv(self, cv_text: str) -> list[str]:
         """Split cv_text into overlapping token-bounded chunks."""
@@ -35,11 +49,13 @@ class EmbeddingService:
             start += _CHUNK_SIZE_TOKENS - _CHUNK_OVERLAP_TOKENS
         return chunks
 
-    async def embed_chunks(self, cv_text: str) -> list[tuple[str, list[float]]]:
+    async def embed_chunks(self, cv_text: str) -> tuple[list[tuple[str, list[float]]], list[dict]]:
         """Returns list of (chunk_text, embedding) tuples."""
         chunks = self.chunk_cv(cv_text)
         result = []
+        usage_events = []
         for chunk in chunks:
-            embedding = await self.embed_text(chunk)
+            embedding, usage_event = await self.embed_text(chunk)
             result.append((chunk, embedding))
-        return result
+            usage_events.append(usage_event)
+        return result, usage_events

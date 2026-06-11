@@ -17,6 +17,7 @@ from app.repositories.interview_repository import (
 from app.services.stt_service import SttService
 from app.services.storage_service import StorageService
 from app.services.tts_service import TtsService
+from app.services.usage_service import record_usage_events
 
 logger = structlog.get_logger()
 
@@ -97,6 +98,8 @@ class InterviewService:
         import httpx
 
         payload = jsonable_encoder({
+            "company_id": company_id,
+            "session_id": session_id,
             "conversation_history": history,
             "dimensions_covered": state.get("dimensions_covered", []),
             "dimensions_remaining": state.get("dimensions_remaining", list(
@@ -120,6 +123,12 @@ class InterviewService:
             logger.error("interview.agents_call_failed", session_id=session_id, error=str(exc))
             await self.handle_system_interrupt(session_id)
             raise
+        await record_usage_events(
+            self._session,
+            company_id=company_id,
+            events=agent_result.get("usage_events"),
+            metadata={"session_id": session_id},
+        )
 
         ai_text = agent_result["ai_response"]
         guardrail_triggered = agent_result.get("guardrail_triggered", False)
@@ -240,6 +249,8 @@ class InterviewService:
         import httpx
 
         payload = jsonable_encoder({
+            "company_id": company_id,
+            "session_id": session_id,
             "conversation_history": history,
             "dimensions_covered": state.get("dimensions_covered", []),
             "dimensions_remaining": state.get("dimensions_remaining", list(
@@ -263,6 +274,12 @@ class InterviewService:
             logger.error("interview.agents_call_failed", session_id=session_id, error=str(exc))
             await self.handle_system_interrupt(session_id)
             raise
+        await record_usage_events(
+            self._session,
+            company_id=company_id,
+            events=agent_result.get("usage_events"),
+            metadata={"session_id": session_id, "mode": "streaming"},
+        )
 
         ai_text = agent_result["ai_response"]
         guardrail_triggered = agent_result.get("guardrail_triggered", False)

@@ -4,7 +4,7 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.graphs.screening_graph import ScreeningState, screening_graph
 
@@ -26,6 +26,7 @@ class CvScreenResponse(BaseModel):
     rationale: str
     status: str
     guardrail_triggered: bool
+    usage_events: list[dict[str, Any]] = Field(default_factory=list)
 
 
 @router.post("/cv-screen", response_model=CvScreenResponse)
@@ -44,6 +45,7 @@ async def cv_screen(body: CvScreenRequest) -> CvScreenResponse:
         "rationale": None,
         "status": "pending",
         "guardrail_triggered": False,
+        "usage_events": [],
     }
 
     result = await screening_graph.ainvoke(initial_state)
@@ -53,4 +55,5 @@ async def cv_screen(body: CvScreenRequest) -> CvScreenResponse:
         rationale=result["rationale"] or "",
         status=result["status"],
         guardrail_triggered=result["guardrail_triggered"],
+        usage_events=result.get("usage_events", []),
     )

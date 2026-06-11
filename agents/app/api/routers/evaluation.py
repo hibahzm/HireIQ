@@ -4,7 +4,7 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.graphs.evaluation_graph import EvaluationState, evaluation_graph
 
@@ -60,6 +60,7 @@ class EvaluateResponse(BaseModel):
     confidence_flag: bool
     confidence_reason: str | None
     feedback_summary: FeedbackSummary | None
+    usage_events: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def _parse_summary(raw: str | None) -> FeedbackSummary | None:
@@ -100,6 +101,7 @@ async def evaluate(body: EvaluateRequest) -> EvaluateResponse:
         "confidence_reason": None,
         "summary": None,
         "guardrail_triggered": False,
+        "usage_events": [],
     }
 
     result = await evaluation_graph.ainvoke(initial_state)
@@ -118,4 +120,5 @@ async def evaluate(body: EvaluateRequest) -> EvaluateResponse:
         confidence_flag=result.get("confidence_flag", False),
         confidence_reason=result.get("confidence_reason"),
         feedback_summary=_parse_summary(result.get("summary")),
+        usage_events=result.get("usage_events", []),
     )

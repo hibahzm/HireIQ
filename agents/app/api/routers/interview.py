@@ -4,7 +4,7 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.graphs.interview_graph import InterviewState, interview_graph
 
@@ -14,6 +14,8 @@ router = APIRouter(prefix="/agents/interview", tags=["interview"])
 
 
 class InterviewTurnRequest(BaseModel):
+    company_id: str | None = None
+    session_id: str | None = None
     conversation_history: list[dict[str, str]]
     dimensions_covered: list[str]
     dimensions_remaining: list[str]
@@ -29,6 +31,7 @@ class InterviewTurnResponse(BaseModel):
     dimensions_remaining: list[str]
     guardrail_triggered: bool
     blocked_redirect: str | None
+    usage_events: list[dict[str, Any]] = Field(default_factory=list)
 
 
 @router.post("/turn", response_model=InterviewTurnResponse)
@@ -36,6 +39,8 @@ async def interview_turn(body: InterviewTurnRequest) -> InterviewTurnResponse:
     structlog.contextvars.bind_contextvars(agent_type="interview")
 
     initial_state: InterviewState = {
+        "company_id": body.company_id or "",
+        "session_id": body.session_id,
         "conversation_history": body.conversation_history,
         "dimensions_covered": body.dimensions_covered,
         "dimensions_remaining": body.dimensions_remaining,
@@ -46,6 +51,7 @@ async def interview_turn(body: InterviewTurnRequest) -> InterviewTurnResponse:
         "session_complete": False,
         "guardrail_triggered": False,
         "blocked_redirect": None,
+        "usage_events": [],
     }
 
     result = await interview_graph.ainvoke(initial_state)
@@ -61,4 +67,5 @@ async def interview_turn(body: InterviewTurnRequest) -> InterviewTurnResponse:
         dimensions_remaining=result["dimensions_remaining"],
         guardrail_triggered=result["guardrail_triggered"],
         blocked_redirect=result.get("blocked_redirect"),
+        usage_events=result.get("usage_events", []),
     )

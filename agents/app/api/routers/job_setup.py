@@ -4,7 +4,7 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.graphs.job_setup_graph import JobSetupState, job_setup_graph
 
@@ -24,6 +24,7 @@ class JobSetupTurnResponse(BaseModel):
     message: str
     status: str
     criteria_draft: dict[str, Any] | None = None
+    usage_events: list[dict[str, Any]] = Field(default_factory=list)
 
 
 @router.post("/turn", response_model=JobSetupTurnResponse)
@@ -36,10 +37,13 @@ async def job_setup_turn(body: JobSetupTurnRequest) -> JobSetupTurnResponse:
         history.append({"role": "user", "content": body.user_message})
 
     initial_state: JobSetupState = {
+        "job_id": body.job_id,
+        "company_id": body.company_id,
         "conversation_history": history,
         "criteria_draft": None,
         "status": "in_progress",
         "ai_message": "",
+        "usage_events": [],
     }
 
     result = await job_setup_graph.ainvoke(initial_state)
@@ -48,4 +52,5 @@ async def job_setup_turn(body: JobSetupTurnRequest) -> JobSetupTurnResponse:
         message=result["ai_message"],
         status=result["status"],
         criteria_draft=result.get("criteria_draft"),
+        usage_events=result.get("usage_events", []),
     )

@@ -9,11 +9,14 @@ from langgraph.graph import END, StateGraph
 
 from app.guardrails import PIIRedactor, registry
 from app.prompts import INTERVIEW_SYSTEM
+from app.usage import append_usage_event
 
 logger = structlog.get_logger()
 
 
 class InterviewState(TypedDict):
+    company_id: str
+    session_id: str | None
     conversation_history: list[dict[str, str]]
     dimensions_covered: list[str]
     dimensions_remaining: list[str]
@@ -24,6 +27,7 @@ class InterviewState(TypedDict):
     session_complete: bool
     guardrail_triggered: bool
     blocked_redirect: str | None
+    usage_events: list[dict[str, Any]]
 
 
 def _build_llm() -> ChatOpenAI:
@@ -67,6 +71,12 @@ async def generate_response(state: InterviewState) -> InterviewState:
             messages.append(AIMessage(content=msg["content"]))
 
     response = await _build_llm().ainvoke(messages)
+    usage_events = append_usage_event(
+        state,
+        response,
+        agent_type="interview",
+        metadata={"session_id": state.get("session_id")},
+    )
     ai_text = response.content
 
     session_complete = "[INTERVIEW_COMPLETE]" in ai_text
@@ -82,6 +92,7 @@ async def generate_response(state: InterviewState) -> InterviewState:
         "ai_response": ai_text,
         "session_complete": session_complete,
         "guardrail_triggered": False,
+        "usage_events": usage_events,
     }
 
 

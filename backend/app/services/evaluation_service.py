@@ -16,6 +16,7 @@ from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
 from app.repositories.interview_repository import InterviewMessageRepository, InterviewSessionRepository
 from app.repositories.job_repository import JobRepository
+from app.services.usage_service import record_usage_events
 
 logger = structlog.get_logger()
 
@@ -140,6 +141,12 @@ class EvaluationService:
                 metadata={"error": str(exc)},
             )
             return
+        await record_usage_events(
+            self._session,
+            company_id=company_id,
+            events=agent_result.get("usage_events"),
+            metadata={"application_id": application_id, "session_id": session_id},
+        )
 
         # 5. Parse summary
         feedback_summary = agent_result.get("feedback_summary") or {}

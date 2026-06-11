@@ -10,6 +10,7 @@ from app.models.job import Job
 from app.repositories.audit_log_repository import AuditLogRepository
 from app.repositories.job_repository import JobRepository
 from app.repositories.setup_conversation_repository import SetupConversationRepository
+from app.services.usage_service import record_usage_events
 
 logger = structlog.get_logger()
 
@@ -107,6 +108,12 @@ class JobService:
             return {"message": message, "status": "failed", "criteria_draft": None}
 
         agent_response = resp.json()
+        await record_usage_events(
+            self._session,
+            company_id=company_id,
+            events=agent_response.get("usage_events"),
+            metadata={"job_id": job_id},
+        )
 
         # Persist messages (skip empty kickoff turns so history stays clean)
         if effective_user_message:

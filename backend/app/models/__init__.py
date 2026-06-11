@@ -11,3 +11,4 @@ from app.models.job_chunk import JobChunk  # noqa: F401
 from app.models.interview_session import InterviewSession  # noqa: F401
 from app.models.interview_message import InterviewMessage  # noqa: F401
 from app.models.evaluation import Evaluation  # noqa: F401
+from app.models.llm_usage_event import LlmUsageEvent  # noqa: F401

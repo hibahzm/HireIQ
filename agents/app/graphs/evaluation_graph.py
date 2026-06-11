@@ -16,6 +16,7 @@ from app.prompts.evaluation import (
     EVALUATION_ASSESS_CONFIDENCE,
     EVALUATION_GENERATE_SUMMARY,
 )
+from app.usage import append_usage_event
 
 logger = structlog.get_logger()
 
@@ -36,6 +37,7 @@ class EvaluationState(TypedDict):
     confidence_reason: str | None
     summary: str | None
     guardrail_triggered: bool
+    usage_events: list[dict[str, Any]]
 
 
 def _llm() -> ChatOpenAI:
@@ -66,11 +68,17 @@ async def score_dimensions(state: EvaluationState) -> EvaluationState:
         cv_text=state["cv_text"][:3000],
     )
     response = await _llm().ainvoke([SystemMessage(content=prompt)])
+    usage_events = append_usage_event(
+        state,
+        response,
+        agent_type="evaluation",
+        metadata={"application_id": state["application_id"], "operation": "score_dimensions"},
+    )
     raw = response.content
 
     if not registry.check_output(raw).passed:
         logger.warning("evaluation.guardrail_triggered.output", application_id=state["application_id"])
-        return {**state, "guardrail_triggered": True}
+        return {**state, "guardrail_triggered": True, "usage_events": usage_events}
 
     try:
         data = json.loads(raw)
@@ -85,7 +93,7 @@ async def score_dimensions(state: EvaluationState) -> EvaluationState:
     except (json.JSONDecodeError, KeyError, ValueError):
         redacted = []
 
-    return {**state, "dimension_scores": redacted}
+    return {**state, "dimension_scores": redacted, "usage_events": usage_events}
 
 
 async def flag_consistency(state: EvaluationState) -> EvaluationState:
@@ -98,10 +106,16 @@ async def flag_consistency(state: EvaluationState) -> EvaluationState:
         transcript=transcript_str[:6000],
     )
     response = await _llm().ainvoke([SystemMessage(content=prompt)])
+    usage_events = append_usage_event(
+        state,
+        response,
+        agent_type="evaluation",
+        metadata={"application_id": state["application_id"], "operation": "flag_consistency"},
+    )
     raw = response.content
 
     if not registry.check_output(raw).passed:
-        return {**state, "consistency_flags": []}
+        return {**state, "consistency_flags": [], "usage_events": usage_events}
 
     try:
         data = json.loads(raw)
@@ -118,7 +132,7 @@ async def flag_consistency(state: EvaluationState) -> EvaluationState:
     except (json.JSONDecodeError, KeyError):
         redacted = []
 
-    return {**state, "consistency_flags": redacted}
+    return {**state, "consistency_flags": redacted, "usage_events": usage_events}
 
 
 async def score_communication(state: EvaluationState) -> EvaluationState:
@@ -128,11 +142,17 @@ async def score_communication(state: EvaluationState) -> EvaluationState:
     transcript_str = _transcript_text(state["transcript"])
     prompt = EVALUATION_SCORE_COMMUNICATION.format(transcript=transcript_str[:6000])
     response = await _llm().ainvoke([SystemMessage(content=prompt)])
+    usage_events = append_usage_event(
+        state,
+        response,
+        agent_type="evaluation",
+        metadata={"application_id": state["application_id"], "operation": "score_communication"},
+    )
     raw = response.content
 
     if not registry.check_output(raw).passed:
         default = {"response_depth": 0.5, "filler_word_frequency": 0.0, "deflection_frequency": 0.0}
-        return {**state, "communication_quality": default}
+        return {**state, "communication_quality": default, "usage_events": usage_events}
 
     try:
         data = json.loads(raw)
@@ -145,7 +165,7 @@ async def score_communication(state: EvaluationState) -> EvaluationState:
     except (json.JSONDecodeError, KeyError, ValueError):
         quality = {"response_depth": 0.5, "filler_word_frequency": 0.0, "deflection_frequency": 0.0}
 
-    return {**state, "communication_quality": quality}
+    return {**state, "communication_quality": quality, "usage_events": usage_events}
 
 
 async def assess_confidence(state: EvaluationState) -> EvaluationState:
@@ -166,6 +186,12 @@ async def assess_confidence(state: EvaluationState) -> EvaluationState:
         communication_quality=json.dumps(state["communication_quality"]),
     )
     response = await _llm().ainvoke([SystemMessage(content=prompt)])
+    usage_events = append_usage_event(
+        state,
+        response,
+        agent_type="evaluation",
+        metadata={"application_id": state["application_id"], "operation": "assess_confidence"},
+    )
     raw = response.content
 
     try:
@@ -178,7 +204,12 @@ async def assess_confidence(state: EvaluationState) -> EvaluationState:
         flag = avg_evidence < 1 or turn_depth < 0.3
         reason = "Insufficient evidence to assess candidate confidently." if flag else None
 
-    return {**state, "confidence_flag": flag, "confidence_reason": reason}
+    return {
+        **state,
+        "confidence_flag": flag,
+        "confidence_reason": reason,
+        "usage_events": usage_events,
+    }
 
 
 async def generate_summary(state: EvaluationState) -> EvaluationState:
@@ -209,9 +240,21 @@ async def generate_summary(state: EvaluationState) -> EvaluationState:
         communication_quality=json.dumps(state["communication_quality"]),
     )
     response = await _llm().ainvoke([SystemMessage(content=prompt)])
+    usage_events = append_usage_event(
+        state,
+        response,
+        agent_type="evaluation",
+        metadata={"application_id": state["application_id"], "operation": "generate_summary"},
+    )
     raw = PIIRedactor.redact(response.content)
 
-    return {**state, "overall_score": overall, "recommendation": recommendation, "summary": raw}
+    return {
+        **state,
+        "overall_score": overall,
+        "recommendation": recommendation,
+        "summary": raw,
+        "usage_events": usage_events,
+    }
 
 
 def _build_graph() -> StateGraph:

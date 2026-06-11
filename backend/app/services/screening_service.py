@@ -12,6 +12,7 @@ from app.services.embedding_service import EmbeddingService
 from app.services.notification_service import NotificationService
 from app.services.ocr_service import OcrService, OcrValidationError
 from app.services.storage_service import StorageService
+from app.services.usage_service import record_usage_events
 
 logger = structlog.get_logger()
 
@@ -159,7 +160,13 @@ class ScreeningService:
             return
 
         # 3. Chunk + embed
-        chunks = await self._embedding.embed_chunks(cv_text)
+        chunks, embedding_usage_events = await self._embedding.embed_chunks(cv_text)
+        await record_usage_events(
+            self._session,
+            company_id=company_id,
+            events=embedding_usage_events,
+            metadata={"application_id": application_id, "job_id": job_id},
+        )
         cv_chunk_repo = CvChunkRepository(self._session)
         await cv_chunk_repo.bulk_insert(application_id, company_id, chunks)
 
@@ -193,6 +200,12 @@ class ScreeningService:
             )
             resp.raise_for_status()
         agent_result = resp.json()
+        await record_usage_events(
+            self._session,
+            company_id=company_id,
+            events=agent_result.get("usage_events"),
+            metadata={"application_id": application_id, "job_id": job_id},
+        )
 
         # 6. Persist results
         final_status = "qualified" if agent_result["status"] == "qualified" else "rejected"

@@ -10,15 +10,19 @@ from langgraph.graph import END, StateGraph
 
 from app.guardrails import PIIRedactor, registry
 from app.prompts import JOB_SETUP_CRITERIA_EXTRACTION, JOB_SETUP_SYSTEM
+from app.usage import append_usage_event
 
 logger = structlog.get_logger()
 
 
 class JobSetupState(TypedDict):
+    job_id: str
+    company_id: str
     conversation_history: list[dict[str, str]]
     criteria_draft: dict[str, Any] | None
     status: str  # "in_progress" | "confirming" | "completed"
     ai_message: str
+    usage_events: list[dict[str, Any]]
 
 
 def _build_llm() -> ChatOpenAI:
@@ -45,6 +49,12 @@ async def elicit_criteria(state: JobSetupState) -> JobSetupState:
             messages.append(AIMessage(content=msg["content"]))
 
     response = await _build_llm().ainvoke(messages)
+    usage_events = append_usage_event(
+        state,
+        response,
+        agent_type="job_setup",
+        metadata={"job_id": state["job_id"], "operation": "elicit_criteria"},
+    )
     ai_text = response.content
 
     if not registry.check_output(ai_text).passed:
@@ -56,7 +66,7 @@ async def elicit_criteria(state: JobSetupState) -> JobSetupState:
     if any(phrase in ai_text.lower() for phrase in ["to summarize", "here's a summary", "criteria confirmed"]):
         status = "confirming"
 
-    return {**state, "ai_message": ai_text, "status": status}
+    return {**state, "ai_message": ai_text, "status": status, "usage_events": usage_events}
 
 
 async def confirm_criteria(state: JobSetupState) -> JobSetupState:
@@ -71,6 +81,12 @@ async def confirm_criteria(state: JobSetupState) -> JobSetupState:
             HumanMessage(content=conversation_text),
         ]
     )
+    usage_events = append_usage_event(
+        state,
+        response,
+        agent_type="job_setup",
+        metadata={"job_id": state["job_id"], "operation": "confirm_criteria"},
+    )
 
     try:
         criteria = json.loads(response.content)
@@ -79,6 +95,7 @@ async def confirm_criteria(state: JobSetupState) -> JobSetupState:
             **state,
             "ai_message": "Let me clarify a few more details. What are the required skills?",
             "status": "in_progress",
+            "usage_events": usage_events,
         }
 
     return {
@@ -86,6 +103,7 @@ async def confirm_criteria(state: JobSetupState) -> JobSetupState:
         "criteria_draft": criteria,
         "status": "completed",
         "ai_message": "I've captured the criteria. Please review them above and click Confirm to activate the job.",
+        "usage_events": usage_events,
     }
 
 
