@@ -126,6 +126,8 @@ export const api = {
   platform: {
     overview: (token: string) =>
       request<PlatformOverview>("GET", "/platform/overview", undefined, token),
+    deleteCompany: (token: string, companyId: string) =>
+      request<void>("DELETE", `/platform/companies/${companyId}`, undefined, token),
   },
 };
 
@@ -268,14 +270,23 @@ export interface PlatformOverview {
     name: string;
     activity_events: number;
     job_events: number;
+    prompt_tokens: number;
+    completion_tokens: number;
+    estimated_cost_usd: number;
     last_activity_at: string | null;
   }>;
   usage: Array<{
     company_id: string | null;
+    company_name: string | null;
     agent_type: string;
     prompt_tokens: number;
     completion_tokens: number;
     estimated_cost_usd: number;
   }>;
-  audit_events: Array<{ event_type: string; count: number }>;
+  audit_events: Array<{
+    company_id: string | null;
+    company_name: string | null;
+    event_type: string;
+    count: number;
+  }>;
 }

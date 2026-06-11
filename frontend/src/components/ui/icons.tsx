@@ -105,3 +105,13 @@ export const CloseIcon = (p: IconProps) => (
     <line x1="6" y1="6" x2="18" y2="18" />
   </Svg>
 );
+
+export const TrashIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6 18.2 19.2A2 2 0 0 1 16.2 21H7.8a2 2 0 0 1-2-1.8L5 6" />
+    <path d="M10 11v6" />
+    <path d="M14 11v6" />
+    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+  </Svg>
+);
