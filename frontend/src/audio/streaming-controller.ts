@@ -14,6 +14,20 @@ import type { InterviewWebSocket } from "../services/interview-ws";
 
 const TARGET_RATE = 16000;
 const FRAME_MS = 32; // ~512 samples @16k per VAD frame
+const CAPTURE_PROCESSOR_NAME = "capture-processor";
+const CAPTURE_WORKLET_SOURCE = `
+class CaptureProcessor extends AudioWorkletProcessor {
+  process(inputs) {
+    const channel = inputs[0] && inputs[0][0];
+    if (channel && channel.length) {
+      this.port.postMessage({ samples: channel.slice(0), sampleRate });
+    }
+    return true;
+  }
+}
+
+registerProcessor("${CAPTURE_PROCESSOR_NAME}", CaptureProcessor);
+`;
 
 export class StreamingController {
   private ctx: AudioContext | null = null;
@@ -21,6 +35,9 @@ export class StreamingController {
   private vad: VadEngine | null = null;
   private speaking = false; // AI is playing → suspend capture (half-duplex)
   private capturing = false;
+  private sourceNode: MediaStreamAudioSourceNode | null = null;
+  private captureNode: AudioNode | null = null;
+  private silentGain: GainNode | null = null;
 
   // Playback
   private mediaSource: MediaSource | null = null;
@@ -34,12 +51,15 @@ export class StreamingController {
 
   /** Start continuous capture + VAD. Resolves once the mic + worklet are live. */
   async start(): Promise<void> {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("This browser cannot access a microphone on the current page.");
+    }
+
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     this.ctx = new AudioContext();
-    await this.ctx.audioWorklet.addModule(new URL("./capture-worklet.ts", import.meta.url));
-
-    const source = this.ctx.createMediaStreamSource(this.stream);
-    const node = new AudioWorkletNode(this.ctx, "capture-processor");
+    if (this.ctx.state === "suspended") {
+      await this.ctx.resume().catch(() => {});
+    }
 
     this.vad = new VadEngine({
       silenceMs: 800,
@@ -52,16 +72,66 @@ export class StreamingController {
       this.vad = null;
     }
 
+    this.sourceNode = this.ctx.createMediaStreamSource(this.stream);
+    this.silentGain = this.ctx.createGain();
+    this.silentGain.gain.value = 0;
+    this.silentGain.connect(this.ctx.destination);
+
+    try {
+      await this.startAudioWorkletCapture();
+    } catch {
+      this.startScriptProcessorCapture();
+    }
+
+    this.capturing = true;
+  }
+
+  private async startAudioWorkletCapture(): Promise<void> {
+    if (!this.ctx?.audioWorklet || !this.sourceNode || !this.silentGain) {
+      throw new Error("AudioWorklet is not available.");
+    }
+
+    const blobUrl = URL.createObjectURL(
+      new Blob([CAPTURE_WORKLET_SOURCE], { type: "application/javascript" }),
+    );
+    try {
+      await this.ctx.audioWorklet.addModule(blobUrl);
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+    }
+
+    const node = new AudioWorkletNode(this.ctx, CAPTURE_PROCESSOR_NAME);
     node.port.onmessage = (ev: MessageEvent) => {
       const { samples, sampleRate } = ev.data as { samples: Float32Array; sampleRate: number };
-      if (!this.capturing || this.speaking) return;
-      const pcm16 = downsampleToPcm16(samples, sampleRate, TARGET_RATE);
-      this.ws.sendAudioFrame(pcm16.buffer as ArrayBuffer);
-      void this.vad?.process(samples, FRAME_MS);
+      this.handleSamples(samples, sampleRate);
     };
 
-    source.connect(node);
-    this.capturing = true;
+    this.sourceNode.connect(node);
+    node.connect(this.silentGain);
+    this.captureNode = node;
+  }
+
+  private startScriptProcessorCapture(): void {
+    if (!this.ctx || !this.sourceNode || !this.silentGain) {
+      throw new Error("Audio capture could not be initialized.");
+    }
+
+    const node = this.ctx.createScriptProcessor(2048, 1, 1);
+    node.onaudioprocess = (ev) => {
+      const samples = ev.inputBuffer.getChannelData(0).slice(0);
+      this.handleSamples(samples, this.ctx?.sampleRate ?? ev.inputBuffer.sampleRate);
+    };
+
+    this.sourceNode.connect(node);
+    node.connect(this.silentGain);
+    this.captureNode = node;
+  }
+
+  private handleSamples(samples: Float32Array, sampleRate: number): void {
+    if (!this.capturing || this.speaking) return;
+    const pcm16 = downsampleToPcm16(samples, sampleRate, TARGET_RATE);
+    this.ws.sendAudioFrame(pcm16.buffer as ArrayBuffer);
+    void this.vad?.process(samples, FRAME_MS);
   }
 
   private handleEndOfSpeech(): void {
@@ -113,8 +183,16 @@ export class StreamingController {
 
   stop(): void {
     this.capturing = false;
+    this.captureNode?.disconnect();
+    this.sourceNode?.disconnect();
+    this.silentGain?.disconnect();
+    this.captureNode = null;
+    this.sourceNode = null;
+    this.silentGain = null;
     this.stream?.getTracks().forEach((t) => t.stop());
     void this.ctx?.close();
+    this.stream = null;
+    this.ctx = null;
   }
 }
 

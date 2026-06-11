@@ -38,13 +38,8 @@ export default function InterviewRoomPage({ token }: Props) {
         if (resuming) {
           addMessage("system", `Resuming from turn ${turn_count}. Welcome back.`);
         }
-        if (streaming_mode && audioRef.current) {
-          const controller = new StreamingController(ws, audioRef.current);
-          streamingRef.current = controller;
-          controller.start().catch(() => {
-            addMessage("system", "Couldn't start the microphone — switching to text input.");
-            setUseTextFallback(true);
-          });
+        if (streaming_mode) {
+          void startStreamingVoice(ws);
         }
       },
       // Turn-based (full-blob) AI turn
@@ -99,6 +94,39 @@ export default function InterviewRoomPage({ token }: Props) {
 
   function addMessage(speaker: "candidate" | "ai" | "system", text: string) {
     setMessages((prev) => [...prev, { speaker, text }]);
+  }
+
+  async function startStreamingVoice(ws = wsRef.current) {
+    if (!ws || !audioRef.current) return;
+
+    streamingRef.current?.stop();
+    const controller = new StreamingController(ws, audioRef.current);
+    streamingRef.current = controller;
+
+    try {
+      await controller.start();
+      setUseTextFallback(false);
+    } catch (err) {
+      console.error("interview.streaming_start_failed", err);
+      const reason = err instanceof Error && err.message ? ` (${err.message})` : "";
+      addMessage("system", `Couldn't start the microphone${reason} — switching to text input.`);
+      streamingRef.current = null;
+      setUseTextFallback(true);
+    }
+  }
+
+  function handleModeToggle() {
+    if (useTextFallback) {
+      if (streamingMode) {
+        void startStreamingVoice();
+      } else {
+        setUseTextFallback(false);
+      }
+      return;
+    }
+    streamingRef.current?.stop();
+    streamingRef.current = null;
+    setUseTextFallback(true);
   }
 
   function handleSendText(e: React.FormEvent) {
@@ -210,7 +238,7 @@ export default function InterviewRoomPage({ token }: Props) {
         <div className="border-t pt-4">
           <div className="flex items-center gap-2 mb-2">
             <button
-              onClick={() => setUseTextFallback(!useTextFallback)}
+              onClick={handleModeToggle}
               className="text-xs text-gray-500 hover:text-gray-700"
             >
               {useTextFallback ? "Switch to voice" : "Switch to text"}
