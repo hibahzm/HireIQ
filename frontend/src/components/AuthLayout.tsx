@@ -5,22 +5,38 @@ interface Props {
   footer?: React.ReactNode;
 }
 
+import Logo from "./ui/Logo";
+
 /** Centered branded card for signed-out pages (login / register / set-password). */
 export default function AuthLayout({ title, subtitle, children, footer }: Props) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-canvas px-4 py-10">
-      <div className="mb-6 flex items-center gap-2">
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-base font-extrabold text-white">
-          H
-        </span>
-        <span className="text-xl font-extrabold tracking-tight text-primary-800">HireIQ</span>
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-canvas px-4 py-10">
+      {/* Ambient brand glow behind the card */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-32 left-1/2 h-96 w-[36rem] -translate-x-1/2 rounded-full bg-brand-200/40 blur-3xl"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-brand-100/60 blur-3xl"
+      />
+
+      <div className="relative mb-6 animate-fade-in-up">
+        <Logo size={44} animated />
       </div>
-      <div className="w-full max-w-md rounded-xl border border-primary-100 bg-surface p-8 shadow-card">
+      <div
+        className="relative w-full max-w-md animate-fade-in-up rounded-xl border border-primary-100 bg-surface/95 p-8 shadow-card backdrop-blur"
+        style={{ animationDelay: "120ms" }}
+      >
         <h1 className="text-xl font-bold text-primary-800">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-primary-500">{subtitle}</p>}
         <div className="mt-6">{children}</div>
       </div>
-      {footer && <div className="mt-4 text-sm text-primary-500">{footer}</div>}
+      {footer && (
+        <div className="relative mt-4 animate-fade-in text-sm text-primary-500" style={{ animationDelay: "300ms" }}>
+          {footer}
+        </div>
+      )}
     </div>
   );
 }

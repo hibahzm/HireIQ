@@ -11,11 +11,11 @@ interface Props extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const VARIANTS: Record<Variant, string> = {
   primary:
-    "bg-brand-600 text-white hover:bg-brand-700 disabled:hover:bg-brand-600 shadow-sm",
+    "bg-brand-600 text-white hover:bg-brand-700 hover:shadow-md hover:shadow-brand-600/25 disabled:hover:bg-brand-600 disabled:hover:shadow-sm shadow-sm",
   secondary:
-    "bg-white text-primary-700 border border-primary-200 hover:bg-primary-50",
+    "bg-white text-primary-700 border border-primary-200 hover:bg-primary-50 hover:border-primary-300",
   ghost: "bg-transparent text-primary-600 hover:bg-primary-100",
-  danger: "bg-red-600 text-white hover:bg-red-700",
+  danger: "bg-red-600 text-white hover:bg-red-700 hover:shadow-md hover:shadow-red-600/25",
 };
 
 const SIZES: Record<Size, string> = {
@@ -31,7 +31,7 @@ const Button = forwardRef<HTMLButtonElement, Props>(function Button(
     <button
       ref={ref}
       disabled={disabled || loading}
-      className={`inline-flex items-center justify-center rounded-lg font-semibold transition-colors duration-150 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+      className={`inline-flex items-center justify-center rounded-lg font-semibold transition-all duration-150 cursor-pointer active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
       {...props}
     >
       {loading && (

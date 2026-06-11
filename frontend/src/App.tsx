@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate, useParams 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import PrivateRoute from "./components/PrivateRoute";
 import AppShell from "./components/AppShell";
+import SplashScreen from "./components/ui/SplashScreen";
 
 import LoginPage from "./pages/auth/LoginPage";
 import RegisterPage from "./pages/auth/RegisterPage";
@@ -146,10 +147,10 @@ function PlatformOverviewWrapper() {
 function HomeRedirect() {
   const { status, user } = useAuth();
   if (status === "loading") {
-    return <div className="p-6 text-sm text-primary-500">Loading...</div>;
+    return <SplashScreen />;
   }
   if (status === "anonymous") return <Navigate to="/login" replace />;
-  if (!user) return <div className="p-6 text-sm text-primary-500">Loading...</div>;
+  if (!user) return <SplashScreen />;
   return <Navigate to={user?.role === "manager" ? "/platform" : "/overview"} replace />;
 }
 

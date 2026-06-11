@@ -12,6 +12,7 @@ import {
   MenuIcon,
   UsersIcon,
 } from "./ui/icons";
+import { LogoMark } from "./ui/Logo";
 
 const NAV = [
   { to: "/overview", label: "Overview", Icon: DashboardIcon },
@@ -43,11 +44,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const sidebar = (
     <div className="flex h-full flex-col bg-primary-800 text-primary-100">
-      <div className="flex h-16 items-center gap-2 px-5">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-extrabold text-white">
-          H
+      <div className="flex h-16 items-center gap-2.5 px-5">
+        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/95 p-1 shadow-sm">
+          <LogoMark size={26} />
         </span>
-        <span className="text-lg font-extrabold tracking-tight text-white">HireIQ</span>
+        <span className="text-lg font-extrabold tracking-tight">
+          <span className="text-white">Hire</span>
+          <span className="text-brand-400">IQ</span>
+        </span>
       </div>
       <nav className="flex-1 space-y-1 px-3 py-2">
         {navItems.map(({ to, label, Icon }) => (
@@ -56,15 +60,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             to={to}
             onClick={() => setMobileOpen(false)}
             className={({ isActive }) =>
-              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150 ${
+              `group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150 ${
                 isActive
                   ? "bg-primary-700 text-white"
                   : "text-primary-300 hover:bg-primary-700/60 hover:text-white"
               }`
             }
           >
-            <Icon />
-            {label}
+            {({ isActive }) => (
+              <>
+                {isActive && (
+                  <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-brand-400 animate-scale-in" />
+                )}
+                <Icon className="transition-transform duration-150 group-hover:scale-110" />
+                {label}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
@@ -89,11 +100,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {mobileOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div
-            className="absolute inset-0 bg-primary-900/50"
+            className="absolute inset-0 bg-primary-900/50 animate-fade-in"
             onClick={() => setMobileOpen(false)}
             aria-hidden="true"
           />
-          <div className="absolute inset-y-0 left-0 w-64">{sidebar}</div>
+          <div className="absolute inset-y-0 left-0 w-64 animate-slide-in-left shadow-2xl">{sidebar}</div>
         </div>
       )}
 
@@ -147,7 +158,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <p className="text-xs capitalize leading-tight text-primary-400">{user.role}</p>
               )}
             </div>
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-700">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-700 text-sm font-bold text-white shadow-sm ring-2 ring-brand-100">
               {initials(user?.email)}
             </span>
           </div>
@@ -164,7 +175,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         )}
 
-        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        {/* Keyed by pathname so content re-animates on every navigation */}
+        <main key={location.pathname} className="mx-auto max-w-7xl animate-fade-in-up px-4 py-6 sm:px-6 lg:px-8">
+          {children}
+        </main>
       </div>
     </div>
   );
