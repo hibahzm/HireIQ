@@ -66,33 +66,54 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                     "min_screening_score": criteria_model.min_screening_score,
                 }
 
+    async def _send_json(payload: dict) -> bool:
+        try:
+            await websocket.send_json(payload)
+        except (RuntimeError, WebSocketDisconnect) as exc:
+            logger.info("interview.ws_disconnected", session_id=session_id, error=str(exc))
+            return False
+        return True
+
+    async def _close_websocket(code: int) -> None:
+        try:
+            await websocket.close(code=code)
+        except RuntimeError:
+            pass
+
     # Send session_ready (streaming_mode tells the client whether to start continuous capture)
-    await websocket.send_json({
+    if not await _send_json({
         "type": "session_ready",
         "session_id": session_id,
         "resuming": is_resuming,
         "turn_count": interview_session.turn_count,
         "max_turns": interview_session.max_turns,
         "streaming_mode": streaming_mode,
-    })
+    }):
+        return
 
-    async def _stream_ai_response(text: str) -> None:
+    async def _stream_ai_response(text: str, *, counts_as_turn: bool = True) -> bool:
         """Send the guardrail-approved AI text, then stream its TTS audio in chunks."""
-        await websocket.send_json({"type": "ai_turn_text", "text": text})
+        if not await _send_json({
+            "type": "ai_turn_text",
+            "text": text,
+            "counts_as_turn": counts_as_turn,
+        }):
+            return False
         seq = 0
         try:
             from app.services.streaming_tts_service import StreamingTtsService
 
             async for chunk in StreamingTtsService().stream(text):
-                await websocket.send_json({
+                if not await _send_json({
                     "type": "ai_audio_chunk",
                     "audio": base64.b64encode(chunk).decode(),
                     "seq": seq,
-                })
+                }):
+                    return False
                 seq += 1
         except Exception as exc:
             logger.warning("interview.tts_stream_failed", session_id=session_id, error=str(exc))
-        await websocket.send_json({"type": "ai_audio_end"})
+        return await _send_json({"type": "ai_audio_end"})
 
     async def _log_streaming_fallback() -> None:
         """Record an audit event when the streaming path degrades to turn-based (Constitution VII)."""
@@ -115,6 +136,17 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                     )
         except Exception:
             pass
+
+    if streaming_mode and not is_resuming and interview_session.turn_count == 0:
+        if not await _stream_ai_response(
+            (
+                "Hello, welcome to your AI interview. "
+                "Please start by telling me about your background and the experience "
+                "most relevant to this role."
+            ),
+            counts_as_turn=False,
+        ):
+            return
 
     # Streaming-mode per-utterance state (lives across audio_frame messages)
     stt_service = None
@@ -139,10 +171,11 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                     except Exception as exc:
                         logger.error("interview.stt_init_failed", session_id=session_id, error=str(exc))
                         await _log_streaming_fallback()
-                        await websocket.send_json({
+                        if not await _send_json({
                             "type": "service_error",
                             "message": "Streaming voice is unavailable. Your session is preserved — reconnect to continue.",
-                        })
+                        }):
+                            return
                         break
                 frame = base64.b64decode(msg.get("audio", ""))
                 pcm_buffer.extend(frame)
@@ -155,7 +188,8 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
             if streaming_mode and msg_type == "end_of_speech":
                 if stt_service is None:
                     continue
-                await websocket.send_json({"type": "turn_processing"})
+                if not await _send_json({"type": "turn_processing"}):
+                    return
                 try:
                     candidate_text = await stt_service.finalize()
                 except Exception as exc:
@@ -165,8 +199,11 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                 stt_service = None
                 pcm_buffer = bytearray()
                 if not candidate_text:
-                    await websocket.send_json({"type": "ai_turn_text", "text": "I didn't catch that — could you say it again?"})
-                    await websocket.send_json({"type": "ai_audio_end"})
+                    if not await _stream_ai_response(
+                        "I didn't catch that - could you say it again?",
+                        counts_as_turn=False,
+                    ):
+                        return
                     continue
                 async with _get_session_factory()() as session:
                     async with session.begin():
@@ -187,18 +224,22 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                             )
                         except Exception as exc:
                             logger.error("interview.streaming_turn_failed", session_id=session_id, error=str(exc))
-                            await websocket.send_json({
+                            if not await _send_json({
                                 "type": "service_error",
                                 "message": "An error occurred. Your session is preserved. Please reconnect to resume.",
-                            })
+                            }):
+                                return
                             break
                 if result.get("guardrail_triggered"):
-                    await websocket.send_json({"type": "turn_blocked", "message": result["ai_response"]})
+                    if not await _send_json({"type": "turn_blocked", "message": result["ai_response"]}):
+                        return
                 else:
-                    await _stream_ai_response(result["ai_response"])
+                    if not await _stream_ai_response(result["ai_response"]):
+                        return
                     if result.get("session_complete"):
-                        await websocket.send_json({"type": "interview_complete"})
-                        await websocket.close(code=1000)
+                        if not await _send_json({"type": "interview_complete"}):
+                            return
+                        await _close_websocket(code=1000)
                         return
                 continue
 
@@ -206,7 +247,8 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
             if msg_type not in ("text_input", "audio_input"):
                 continue
 
-            await websocket.send_json({"type": "turn_processing"})
+            if not await _send_json({"type": "turn_processing"}):
+                return
 
             async with _get_session_factory()() as session:
                 async with session.begin():
@@ -237,17 +279,19 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                         )
                     except Exception as exc:
                         logger.error("interview.turn_failed", session_id=session_id, error=str(exc))
-                        await websocket.send_json({
+                        if not await _send_json({
                             "type": "service_error",
                             "message": "An error occurred. Your session is preserved. Please reconnect to resume.",
-                        })
+                        }):
+                            return
                         break
 
             if result.get("guardrail_triggered"):
-                await websocket.send_json({
+                if not await _send_json({
                     "type": "turn_blocked",
                     "message": result["ai_response"],
-                })
+                }):
+                    return
             elif result.get("session_complete"):
                 # Send final AI turn
                 response_msg: dict = {
@@ -256,9 +300,11 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                 }
                 if result.get("audio_bytes"):
                     response_msg["audio"] = base64.b64encode(result["audio_bytes"]).decode()
-                await websocket.send_json(response_msg)
-                await websocket.send_json({"type": "interview_complete"})
-                await websocket.close(code=1000)
+                if not await _send_json(response_msg):
+                    return
+                if not await _send_json({"type": "interview_complete"}):
+                    return
+                await _close_websocket(code=1000)
                 return
             else:
                 response_msg = {
@@ -267,10 +313,11 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                 }
                 if result.get("audio_bytes"):
                     response_msg["audio"] = base64.b64encode(result["audio_bytes"]).decode()
-                await websocket.send_json(response_msg)
+                if not await _send_json(response_msg):
+                    return
 
     except WebSocketDisconnect:
         logger.info("interview.ws_disconnected", session_id=session_id)
     except Exception as exc:
         logger.error("interview.ws_error", session_id=session_id, error=str(exc))
-        await websocket.close(code=1011)
+        await _close_websocket(code=1011)

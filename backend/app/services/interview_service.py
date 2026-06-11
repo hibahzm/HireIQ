@@ -407,7 +407,11 @@ class InterviewService:
     async def _load_redis_state(self, session_id: str) -> dict:
         raw = await self._redis.get(self._redis_key(session_id))
         if raw:
-            return json.loads(raw)
+            try:
+                state = json.loads(raw)
+            except (TypeError, json.JSONDecodeError):
+                return {}
+            return state if isinstance(state, dict) else {}
         return {}
 
     async def _save_redis_state(self, session_id: str, state: dict) -> None:

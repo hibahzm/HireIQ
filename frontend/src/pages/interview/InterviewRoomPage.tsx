@@ -12,11 +12,14 @@ interface Message {
 }
 
 export default function InterviewRoomPage({ token }: Props) {
-  const [status, setStatus] = useState<"connecting" | "ready" | "complete" | "expired" | "error">("connecting");
+  const [started, setStarted] = useState(false);
+  const [status, setStatus] = useState<"idle" | "connecting" | "ready" | "complete" | "expired" | "error">("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [textInput, setTextInput] = useState("");
   const [useTextFallback, setUseTextFallback] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [aiSpeaking, setAiSpeaking] = useState(false);
+  const [audioBlocked, setAudioBlocked] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [streamingMode, setStreamingMode] = useState(false);
   const [turnCount, setTurnCount] = useState(0);
@@ -26,9 +29,14 @@ export default function InterviewRoomPage({ token }: Props) {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamingRef = useRef<StreamingController | null>(null);
+  const audioBlockShownRef = useRef(false);
+  const streamingModeRef = useRef(false);
+  const textFallbackRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!started) return;
+
     const ws = new InterviewWebSocket(token, {
       onReady: ({ resuming, turn_count, max_turns, streaming_mode }) => {
         setStatus("ready");
@@ -42,9 +50,17 @@ export default function InterviewRoomPage({ token }: Props) {
           void startStreamingVoice(ws);
         }
       },
+      onProcessing: () => {
+        setProcessing(true);
+        setAiSpeaking(false);
+        if (streamingModeRef.current && !textFallbackRef.current) {
+          addMessage("candidate", "[Voice response]");
+        }
+      },
       // Turn-based (full-blob) AI turn
       onAiTurn: (text, audioBuffer) => {
         setProcessing(false);
+        setAiSpeaking(false);
         addMessage("ai", text);
         if (audioBuffer && audioRef.current) {
           const blob = new Blob([audioBuffer], { type: "audio/mp3" });
@@ -54,27 +70,39 @@ export default function InterviewRoomPage({ token }: Props) {
         setTurnCount((n) => n + 1);
       },
       // Streaming AI turn: text first, then audio chunks
-      onAiText: (text) => {
+      onAiText: (text, countsAsTurn) => {
         setProcessing(false);
+        setAiSpeaking(true);
         addMessage("ai", text);
         streamingRef.current?.beginPlayback();
-        setTurnCount((n) => n + 1);
+        if (countsAsTurn) {
+          setTurnCount((n) => n + 1);
+        }
       },
       onAiAudioChunk: (chunk) => streamingRef.current?.pushChunk(chunk),
-      onAiAudioEnd: () => streamingRef.current?.endPlayback(),
+      onAiAudioEnd: () => {
+        setAiSpeaking(false);
+        streamingRef.current?.endPlayback();
+      },
       onBlocked: (message) => {
         setProcessing(false);
+        setAiSpeaking(false);
         addMessage("system", message);
         streamingRef.current?.endPlayback(); // release half-duplex
       },
       onComplete: () => {
         setStatus("complete");
+        setAiSpeaking(false);
         streamingRef.current?.stop();
         addMessage("system", "Interview complete. Thank you for your time!");
       },
-      onExpired: () => setStatus("expired"),
+      onExpired: () => {
+        setAiSpeaking(false);
+        setStatus("expired");
+      },
       onError: (message) => {
         setProcessing(false);
+        setAiSpeaking(false);
         addMessage("system", `Error: ${message}`);
       },
     });
@@ -86,7 +114,15 @@ export default function InterviewRoomPage({ token }: Props) {
       streamingRef.current?.stop();
       ws.close();
     };
-  }, [token]);
+  }, [token, started]);
+
+  useEffect(() => {
+    streamingModeRef.current = streamingMode;
+  }, [streamingMode]);
+
+  useEffect(() => {
+    textFallbackRef.current = useTextFallback;
+  }, [useTextFallback]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -96,11 +132,33 @@ export default function InterviewRoomPage({ token }: Props) {
     setMessages((prev) => [...prev, { speaker, text }]);
   }
 
+  function handleStartInterview() {
+    setStatus("connecting");
+    setStarted(true);
+  }
+
+  async function handleEnableAudio() {
+    try {
+      await audioRef.current?.play();
+      setAudioBlocked(false);
+    } catch {
+      setAudioBlocked(true);
+    }
+  }
+
   async function startStreamingVoice(ws = wsRef.current) {
     if (!ws || !audioRef.current) return;
 
     streamingRef.current?.stop();
-    const controller = new StreamingController(ws, audioRef.current);
+    const controller = new StreamingController(ws, audioRef.current, {
+      onPlaybackBlocked: () => {
+        setAudioBlocked(true);
+        if (!audioBlockShownRef.current) {
+          audioBlockShownRef.current = true;
+          addMessage("system", "Audio playback is blocked. Use Enable audio to hear the interviewer.");
+        }
+      },
+    });
     streamingRef.current = controller;
 
     try {
@@ -109,7 +167,8 @@ export default function InterviewRoomPage({ token }: Props) {
     } catch (err) {
       console.error("interview.streaming_start_failed", err);
       const reason = err instanceof Error && err.message ? ` (${err.message})` : "";
-      addMessage("system", `Couldn't start the microphone${reason} — switching to text input.`);
+      setAiSpeaking(false);
+      addMessage("system", `Couldn't start the microphone${reason} - switching to text input.`);
       streamingRef.current = null;
       setUseTextFallback(true);
     }
@@ -126,6 +185,7 @@ export default function InterviewRoomPage({ token }: Props) {
     }
     streamingRef.current?.stop();
     streamingRef.current = null;
+    setAiSpeaking(false);
     setUseTextFallback(true);
   }
 
@@ -166,6 +226,30 @@ export default function InterviewRoomPage({ token }: Props) {
     recorderRef.current?.stop();
     recorderRef.current = null;
     setIsRecording(false);
+  }
+
+  const streamingStatusText = aiSpeaking
+    ? "AI is speaking..."
+    : processing
+      ? "Thinking..."
+      : "Listening - just speak naturally";
+  const streamingDotClass = aiSpeaking ? "bg-blue-500" : processing ? "bg-amber-500" : "bg-green-500";
+
+  if (status === "idle") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="max-w-md w-full p-8 bg-white rounded-lg shadow text-center">
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">AI Interview</h1>
+          <p className="text-gray-600 mb-6">Ready when you are.</p>
+          <button
+            onClick={handleStartInterview}
+            className="px-5 py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+          >
+            Start interview
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (status === "expired") {
@@ -243,6 +327,14 @@ export default function InterviewRoomPage({ token }: Props) {
             >
               {useTextFallback ? "Switch to voice" : "Switch to text"}
             </button>
+            {audioBlocked && (
+              <button
+                onClick={handleEnableAudio}
+                className="text-xs text-blue-600 hover:text-blue-700"
+              >
+                Enable audio
+              </button>
+            )}
           </div>
 
           {useTextFallback ? (
@@ -266,8 +358,8 @@ export default function InterviewRoomPage({ token }: Props) {
           ) : streamingMode ? (
             <div className="flex justify-center" aria-live="polite">
               <div className="px-6 py-3 bg-gray-100 text-gray-700 rounded-full flex items-center gap-2 text-sm">
-                <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
-                {processing ? "Thinking…" : "Listening — just speak naturally"}
+                <span className={`w-2.5 h-2.5 ${streamingDotClass} rounded-full animate-pulse`} />
+                {streamingStatusText}
               </div>
             </div>
           ) : (

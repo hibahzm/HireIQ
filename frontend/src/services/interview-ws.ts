@@ -10,7 +10,7 @@ export type InboundMessage =
   | { type: "turn_processing" }
   | { type: "ai_turn"; text: string; audio?: string }
   | { type: "partial_transcript"; text: string }
-  | { type: "ai_turn_text"; text: string }
+  | { type: "ai_turn_text"; text: string; counts_as_turn?: boolean }
   | { type: "ai_audio_chunk"; audio: string; seq: number }
   | { type: "ai_audio_end" }
   | { type: "turn_blocked"; message: string }
@@ -26,9 +26,10 @@ export type OutboundMessage =
 
 interface Callbacks {
   onReady?: (data: { resuming: boolean; turn_count: number; max_turns: number; streaming_mode: boolean }) => void;
+  onProcessing?: () => void;
   onAiTurn?: (text: string, audio?: ArrayBuffer) => void;
   onPartial?: (text: string) => void;
-  onAiText?: (text: string) => void;
+  onAiText?: (text: string, countsAsTurn: boolean) => void;
   onAiAudioChunk?: (chunk: ArrayBuffer, seq: number) => void;
   onAiAudioEnd?: () => void;
   onBlocked?: (message: string) => void;
@@ -69,6 +70,9 @@ export class InterviewWebSocket {
             streaming_mode: msg.streaming_mode ?? false,
           });
           break;
+        case "turn_processing":
+          this.callbacks.onProcessing?.();
+          break;
         case "ai_turn": {
           const audioBuffer = msg.audio ? b64ToArrayBuffer(msg.audio) : undefined;
           this.callbacks.onAiTurn?.(msg.text, audioBuffer);
@@ -78,7 +82,7 @@ export class InterviewWebSocket {
           this.callbacks.onPartial?.(msg.text);
           break;
         case "ai_turn_text":
-          this.callbacks.onAiText?.(msg.text);
+          this.callbacks.onAiText?.(msg.text, msg.counts_as_turn ?? true);
           break;
         case "ai_audio_chunk":
           this.callbacks.onAiAudioChunk?.(b64ToArrayBuffer(msg.audio), msg.seq);

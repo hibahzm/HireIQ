@@ -1,19 +1,19 @@
 // Orchestrates the browser side of a streaming voice interview:
 //  - continuous mic capture via an AudioWorklet (no record/stop button)
-//  - client-side VAD (silero-vad) → end-of-speech
+//  - client-side energy VAD → end-of-speech
 //  - downsample to PCM16 16 kHz frames streamed over the WebSocket
 //  - chunked AI audio playback via MediaSource (starts on first chunk)
 //  - half-duplex: capture is suspended while the AI is speaking (no barge-in in V2-3)
 //
-// This module is browser-only and is not exercised by unit tests (the pure end-of-speech
-// logic lives in SilenceTracker / vad.ts, which is tested). Runtime tuning of the silero-vad
-// I/O is finalized against the real model during integration.
+// This module is browser-only and is not exercised by unit tests. The pure
+// end-of-speech state machine lives in SilenceTracker / vad.ts, which is tested.
 
-import { VadEngine } from "./vad";
+import { SilenceTracker } from "./vad";
 import type { InterviewWebSocket } from "../services/interview-ws";
 
 const TARGET_RATE = 16000;
-const FRAME_MS = 32; // ~512 samples @16k per VAD frame
+const END_OF_SPEECH_SILENCE_MS = 1200;
+const MIN_ENERGY_SPEECH_THRESHOLD = 0.015;
 const CAPTURE_PROCESSOR_NAME = "capture-processor";
 const CAPTURE_WORKLET_SOURCE = `
 class CaptureProcessor extends AudioWorkletProcessor {
@@ -29,10 +29,18 @@ class CaptureProcessor extends AudioWorkletProcessor {
 registerProcessor("${CAPTURE_PROCESSOR_NAME}", CaptureProcessor);
 `;
 
+interface StreamingControllerOptions {
+  onPlaybackBlocked?: () => void;
+}
+
 export class StreamingController {
   private ctx: AudioContext | null = null;
   private stream: MediaStream | null = null;
-  private vad: VadEngine | null = null;
+  private readonly speechTracker = new SilenceTracker({
+    silenceMs: END_OF_SPEECH_SILENCE_MS,
+    speechThreshold: 0.5,
+  });
+  private noiseFloor = 0.006;
   private speaking = false; // AI is playing → suspend capture (half-duplex)
   private capturing = false;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
@@ -47,6 +55,7 @@ export class StreamingController {
   constructor(
     private readonly ws: InterviewWebSocket,
     private readonly audioEl: HTMLAudioElement,
+    private readonly options: StreamingControllerOptions = {},
   ) {}
 
   /** Start continuous capture + VAD. Resolves once the mic + worklet are live. */
@@ -59,17 +68,6 @@ export class StreamingController {
     this.ctx = new AudioContext();
     if (this.ctx.state === "suspended") {
       await this.ctx.resume().catch(() => {});
-    }
-
-    this.vad = new VadEngine({
-      silenceMs: 800,
-      onEndOfSpeech: () => this.handleEndOfSpeech(),
-    });
-    try {
-      await this.vad.init();
-    } catch {
-      // Model missing/unsupported — capture still streams; backend endpointing/fallback applies.
-      this.vad = null;
     }
 
     this.sourceNode = this.ctx.createMediaStreamSource(this.stream);
@@ -131,7 +129,26 @@ export class StreamingController {
     if (!this.capturing || this.speaking) return;
     const pcm16 = downsampleToPcm16(samples, sampleRate, TARGET_RATE);
     this.ws.sendAudioFrame(pcm16.buffer as ArrayBuffer);
-    void this.vad?.process(samples, FRAME_MS);
+
+    const frameMs = Math.max(1, (samples.length / sampleRate) * 1000);
+    if (this.speechTracker.update(this.energySpeechProbability(samples), frameMs) === "end_of_speech") {
+      this.handleEndOfSpeech();
+    }
+  }
+
+  private energySpeechProbability(samples: Float32Array): number {
+    let sumSquares = 0;
+    for (let i = 0; i < samples.length; i++) {
+      sumSquares += samples[i] * samples[i];
+    }
+    const rms = Math.sqrt(sumSquares / Math.max(1, samples.length));
+    const threshold = Math.max(MIN_ENERGY_SPEECH_THRESHOLD, this.noiseFloor * 3);
+
+    if (rms < threshold) {
+      this.noiseFloor = this.noiseFloor * 0.98 + rms * 0.02;
+    }
+
+    return rms >= threshold ? 1 : 0;
   }
 
   private handleEndOfSpeech(): void {
@@ -139,7 +156,7 @@ export class StreamingController {
     this.ws.sendEndOfSpeech();
     // Enter half-duplex until the AI finishes speaking.
     this.speaking = true;
-    this.vad?.reset();
+    this.speechTracker.reset();
   }
 
   // ── AI audio playback (MediaSource chunked) ──────────────────────────────
@@ -154,7 +171,9 @@ export class StreamingController {
       this.sourceBuffer.addEventListener("updateend", () => this.flush());
       this.flush();
     });
-    this.audioEl.play().catch(() => {});
+    this.audioEl.play().catch(() => {
+      this.options.onPlaybackBlocked?.();
+    });
   }
 
   pushChunk(chunk: ArrayBuffer): void {
@@ -178,11 +197,16 @@ export class StreamingController {
     }
     // Resume capturing for the next candidate turn (half-duplex release).
     this.speaking = false;
-    this.vad?.reset();
+    this.speechTracker.reset();
   }
 
   stop(): void {
     this.capturing = false;
+    this.speaking = false;
+    this.speechTracker.reset();
+    this.audioEl.pause();
+    this.audioEl.removeAttribute("src");
+    this.audioEl.load();
     this.captureNode?.disconnect();
     this.sourceNode?.disconnect();
     this.silentGain?.disconnect();
