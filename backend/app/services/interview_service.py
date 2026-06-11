@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.repositories.audit_log_repository import AuditLogRepository
 from app.repositories.interview_repository import (
+    DEFAULT_INTERVIEW_MAX_TURNS,
     InterviewMessageRepository,
     InterviewSessionRepository,
 )
@@ -58,6 +59,7 @@ class InterviewService:
         agent_result: dict,
         history: list[dict[str, str]],
         new_turn_count: int,
+        max_turns: int,
     ) -> dict:
         updated_state = agent_result.get("updated_state") or {}
         dimensions_remaining = (
@@ -75,7 +77,16 @@ class InterviewService:
             ),
             "dimensions_remaining": dimensions_remaining,
             "turn_count": new_turn_count,
+            "max_turns": max_turns,
         }
+
+    @staticmethod
+    def _effective_max_turns(value: int | None = None) -> int:
+        try:
+            max_turns = int(value or DEFAULT_INTERVIEW_MAX_TURNS)
+        except (TypeError, ValueError):
+            max_turns = DEFAULT_INTERVIEW_MAX_TURNS
+        return min(max_turns, DEFAULT_INTERVIEW_MAX_TURNS)
 
     async def handle_turn(
         self,
@@ -86,6 +97,7 @@ class InterviewService:
         audio_bytes: bytes | None = None,
         mode: str = "text",
         job_criteria: dict,
+        max_turns: int | None = None,
     ) -> dict:
         """
         Process one interview turn. Returns dict with ai_response, session_complete,
@@ -97,6 +109,7 @@ class InterviewService:
 
         # Load Redis state
         state = await self._load_redis_state(session_id)
+        effective_max_turns = self._effective_max_turns(max_turns or state.get("max_turns"))
 
         # STT if voice mode
         audio_key = None
@@ -151,7 +164,7 @@ class InterviewService:
                 self._dimension_names(job_criteria),
             ),
             "turn_count": state.get("turn_count", 0),
-            "max_turns": state.get("max_turns", 20),
+            "max_turns": effective_max_turns,
             "job_criteria": job_criteria,
         })
 
@@ -217,6 +230,7 @@ class InterviewService:
             agent_result=agent_result,
             history=history,
             new_turn_count=new_turn_count,
+            max_turns=effective_max_turns,
         )
         await self._save_redis_state(session_id, new_state)
         await session_repo.increment_turn(session_id)
@@ -264,6 +278,7 @@ class InterviewService:
         candidate_text: str,
         candidate_pcm: bytes | None,
         job_criteria: dict,
+        max_turns: int | None = None,
     ) -> dict:
         """
         Process one streaming turn from an already-finalized transcript. Runs the same
@@ -277,6 +292,7 @@ class InterviewService:
         audit = AuditLogRepository(self._session)
 
         state = await self._load_redis_state(session_id)
+        effective_max_turns = self._effective_max_turns(max_turns or state.get("max_turns"))
 
         # Assemble + store the candidate's streamed audio so audio_blob_key has parity
         # with the turn-based path (FR-006 / SC-003).
@@ -302,7 +318,7 @@ class InterviewService:
                 self._dimension_names(job_criteria),
             ),
             "turn_count": state.get("turn_count", 0),
-            "max_turns": state.get("max_turns", 20),
+            "max_turns": effective_max_turns,
             "job_criteria": job_criteria,
         })
 
@@ -364,6 +380,7 @@ class InterviewService:
             agent_result=agent_result,
             history=history,
             new_turn_count=new_turn_count,
+            max_turns=effective_max_turns,
         )
         await self._save_redis_state(session_id, new_state)
         await session_repo.increment_turn(session_id)

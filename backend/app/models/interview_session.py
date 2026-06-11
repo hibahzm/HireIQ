@@ -19,7 +19,7 @@ class InterviewSession(Base):
     streaming_mode: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
     status: Mapped[str] = mapped_column(Text, server_default="pending", nullable=False)
     turn_count: Mapped[int] = mapped_column(SmallInteger, server_default="0", nullable=False)
-    max_turns: Mapped[int] = mapped_column(SmallInteger, server_default="20", nullable=False)
+    max_turns: Mapped[int] = mapped_column(SmallInteger, server_default="6", nullable=False)
     last_active_at: Mapped[datetime | None] = mapped_column(nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)

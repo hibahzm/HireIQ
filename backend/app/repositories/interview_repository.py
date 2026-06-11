@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.interview_message import InterviewMessage
 from app.models.interview_session import InterviewSession
 
+DEFAULT_INTERVIEW_MAX_TURNS = 6
+
 
 class InterviewSessionRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -44,17 +46,28 @@ class InterviewSessionRepository:
         if not row:
             return None
         session = self._from_row(row)
-        if session.streaming_mode and not row["streaming_mode"]:
+        needs_streaming_sync = session.streaming_mode and not row["streaming_mode"]
+        needs_turn_cap = session.max_turns > DEFAULT_INTERVIEW_MAX_TURNS
+        if needs_streaming_sync or needs_turn_cap:
             await self._session.execute(
                 sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                 {"cid": session.company_id},
             )
+        if needs_streaming_sync:
             await self._session.execute(
                 sa.update(InterviewSession)
                 .where(InterviewSession.id == session.id)
                 .values(streaming_mode=True, updated_at=datetime.now(timezone.utc))
             )
             await self._session.flush()
+        if needs_turn_cap:
+            await self._session.execute(
+                sa.update(InterviewSession)
+                .where(InterviewSession.id == session.id)
+                .values(max_turns=DEFAULT_INTERVIEW_MAX_TURNS, updated_at=datetime.now(timezone.utc))
+            )
+            await self._session.flush()
+            session.max_turns = DEFAULT_INTERVIEW_MAX_TURNS
         return session
 
     async def get_or_create_for_token(self, token: str) -> InterviewSession | None:
@@ -88,7 +101,7 @@ class InterviewSessionRepository:
             streaming_mode=bool(row["streaming_interview"]),
             status="pending",
             turn_count=0,
-            max_turns=20,
+            max_turns=DEFAULT_INTERVIEW_MAX_TURNS,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )

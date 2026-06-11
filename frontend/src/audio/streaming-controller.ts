@@ -1,6 +1,6 @@
 // Orchestrates the browser side of a streaming voice interview:
 //  - continuous mic capture via an AudioWorklet (no record/stop button)
-//  - client-side energy VAD → end-of-speech
+//  - client-side energy VAD -> end-of-speech
 //  - downsample to PCM16 16 kHz frames streamed over the WebSocket
 //  - chunked AI audio playback via MediaSource (starts on first chunk)
 //  - half-duplex: capture is suspended while the AI is speaking (no barge-in in V2-3)
@@ -8,12 +8,15 @@
 // This module is browser-only and is not exercised by unit tests. The pure
 // end-of-speech state machine lives in SilenceTracker / vad.ts, which is tested.
 
-import { SilenceTracker } from "./vad";
 import type { InterviewWebSocket } from "../services/interview-ws";
 
 const TARGET_RATE = 16000;
-const END_OF_SPEECH_SILENCE_MS = 1200;
-const MIN_ENERGY_SPEECH_THRESHOLD = 0.015;
+const START_OF_SPEECH_MS = 450;
+const END_OF_SPEECH_SILENCE_MS = 1800;
+const POST_PLAYBACK_GRACE_MS = 700;
+const PRE_ROLL_MS = 700;
+const MIN_ENERGY_SPEECH_THRESHOLD = 0.025;
+const NOISE_MULTIPLIER = 4;
 const CAPTURE_PROCESSOR_NAME = "capture-processor";
 const CAPTURE_WORKLET_SOURCE = `
 class CaptureProcessor extends AudioWorkletProcessor {
@@ -36,12 +39,14 @@ interface StreamingControllerOptions {
 export class StreamingController {
   private ctx: AudioContext | null = null;
   private stream: MediaStream | null = null;
-  private readonly speechTracker = new SilenceTracker({
-    silenceMs: END_OF_SPEECH_SILENCE_MS,
-    speechThreshold: 0.5,
-  });
-  private noiseFloor = 0.006;
-  private speaking = false; // AI is playing → suspend capture (half-duplex)
+  private noiseFloor = 0.004;
+  private speechMs = 0;
+  private silenceMs = 0;
+  private preRollMs = 0;
+  private acceptingSpeechAt = 0;
+  private utteranceActive = false;
+  private readonly preRoll: Array<{ pcm: ArrayBuffer; durationMs: number }> = [];
+  private speaking = false; // AI is playing -> suspend capture (half-duplex)
   private capturing = false;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private captureNode: AudioNode | null = null;
@@ -82,6 +87,7 @@ export class StreamingController {
     }
 
     this.capturing = true;
+    this.acceptingSpeechAt = performance.now() + POST_PLAYBACK_GRACE_MS;
   }
 
   private async startAudioWorkletCapture(): Promise<void> {
@@ -128,40 +134,88 @@ export class StreamingController {
   private handleSamples(samples: Float32Array, sampleRate: number): void {
     if (!this.capturing || this.speaking) return;
     const pcm16 = downsampleToPcm16(samples, sampleRate, TARGET_RATE);
-    this.ws.sendAudioFrame(pcm16.buffer as ArrayBuffer);
-
     const frameMs = Math.max(1, (samples.length / sampleRate) * 1000);
-    if (this.speechTracker.update(this.energySpeechProbability(samples), frameMs) === "end_of_speech") {
-      this.handleEndOfSpeech();
+    const isSpeech = this.isSpeechFrame(samples);
+
+    if (performance.now() < this.acceptingSpeechAt) {
+      this.resetUtteranceState();
+      return;
+    }
+
+    const frame = int16ToArrayBuffer(pcm16);
+    if (this.utteranceActive) {
+      this.ws.sendAudioFrame(frame);
+      if (isSpeech) {
+        this.silenceMs = 0;
+      } else {
+        this.silenceMs += frameMs;
+        if (this.silenceMs >= END_OF_SPEECH_SILENCE_MS) {
+          this.handleEndOfSpeech();
+        }
+      }
+      return;
+    }
+
+    this.bufferPreRoll(frame, frameMs);
+    if (isSpeech) {
+      this.speechMs += frameMs;
+      if (this.speechMs >= START_OF_SPEECH_MS) {
+        this.utteranceActive = true;
+        this.silenceMs = 0;
+        for (const item of this.preRoll) {
+          this.ws.sendAudioFrame(item.pcm);
+        }
+      }
+    } else {
+      this.speechMs = 0;
     }
   }
 
-  private energySpeechProbability(samples: Float32Array): number {
+  private isSpeechFrame(samples: Float32Array): boolean {
     let sumSquares = 0;
     for (let i = 0; i < samples.length; i++) {
       sumSquares += samples[i] * samples[i];
     }
     const rms = Math.sqrt(sumSquares / Math.max(1, samples.length));
-    const threshold = Math.max(MIN_ENERGY_SPEECH_THRESHOLD, this.noiseFloor * 3);
+    const threshold = Math.max(MIN_ENERGY_SPEECH_THRESHOLD, this.noiseFloor * NOISE_MULTIPLIER);
+    const speech = rms >= threshold;
 
-    if (rms < threshold) {
-      this.noiseFloor = this.noiseFloor * 0.98 + rms * 0.02;
+    if (!speech) {
+      this.noiseFloor = this.noiseFloor * 0.995 + rms * 0.005;
     }
 
-    return rms >= threshold ? 1 : 0;
+    return speech;
+  }
+
+  private bufferPreRoll(pcm: ArrayBuffer, durationMs: number): void {
+    this.preRoll.push({ pcm, durationMs });
+    this.preRollMs += durationMs;
+    while (this.preRollMs > PRE_ROLL_MS && this.preRoll.length) {
+      const removed = this.preRoll.shift();
+      this.preRollMs -= removed?.durationMs ?? 0;
+    }
+  }
+
+  private resetUtteranceState(): void {
+    this.speechMs = 0;
+    this.silenceMs = 0;
+    this.preRollMs = 0;
+    this.utteranceActive = false;
+    this.preRoll.length = 0;
   }
 
   private handleEndOfSpeech(): void {
-    if (!this.capturing || this.speaking) return;
+    if (!this.capturing || this.speaking || !this.utteranceActive) return;
     this.ws.sendEndOfSpeech();
     // Enter half-duplex until the AI finishes speaking.
     this.speaking = true;
-    this.speechTracker.reset();
+    this.resetUtteranceState();
   }
 
   // ── AI audio playback (MediaSource chunked) ──────────────────────────────
   beginPlayback(): void {
     this.speaking = true;
+    this.resetUtteranceState();
     this.pending = [];
     this.mediaSource = new MediaSource();
     this.audioEl.src = URL.createObjectURL(this.mediaSource);
@@ -197,13 +251,14 @@ export class StreamingController {
     }
     // Resume capturing for the next candidate turn (half-duplex release).
     this.speaking = false;
-    this.speechTracker.reset();
+    this.resetUtteranceState();
+    this.acceptingSpeechAt = performance.now() + POST_PLAYBACK_GRACE_MS;
   }
 
   stop(): void {
     this.capturing = false;
     this.speaking = false;
-    this.speechTracker.reset();
+    this.resetUtteranceState();
     this.audioEl.pause();
     this.audioEl.removeAttribute("src");
     this.audioEl.load();
@@ -241,5 +296,11 @@ function floatToPcm16(input: Float32Array): Int16Array {
     const s = Math.max(-1, Math.min(1, input[i]));
     out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
   }
+  return out;
+}
+
+function int16ToArrayBuffer(input: Int16Array): ArrayBuffer {
+  const out = new ArrayBuffer(input.byteLength);
+  new Uint8Array(out).set(new Uint8Array(input.buffer, input.byteOffset, input.byteLength));
   return out;
 }

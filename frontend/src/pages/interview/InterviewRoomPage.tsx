@@ -15,13 +15,13 @@ export default function InterviewRoomPage({ token }: Props) {
   const [started, setStarted] = useState(false);
   const [status, setStatus] = useState<"idle" | "connecting" | "ready" | "complete" | "expired" | "error">("idle");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [textInput, setTextInput] = useState("");
-  const [useTextFallback, setUseTextFallback] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
+  const [voiceUnavailable, setVoiceUnavailable] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [streamingMode, setStreamingMode] = useState(false);
+  const [sessionId, setSessionId] = useState("");
   const [turnCount, setTurnCount] = useState(0);
   const [maxTurns, setMaxTurns] = useState(20);
   const wsRef = useRef<InterviewWebSocket | null>(null);
@@ -31,15 +31,15 @@ export default function InterviewRoomPage({ token }: Props) {
   const streamingRef = useRef<StreamingController | null>(null);
   const audioBlockShownRef = useRef(false);
   const streamingModeRef = useRef(false);
-  const textFallbackRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!started) return;
 
     const ws = new InterviewWebSocket(token, {
-      onReady: ({ resuming, turn_count, max_turns, streaming_mode }) => {
+      onReady: ({ session_id, resuming, turn_count, max_turns, streaming_mode }) => {
         setStatus("ready");
+        setSessionId(session_id);
         setTurnCount(turn_count);
         setMaxTurns(max_turns);
         setStreamingMode(streaming_mode);
@@ -53,7 +53,7 @@ export default function InterviewRoomPage({ token }: Props) {
       onProcessing: () => {
         setProcessing(true);
         setAiSpeaking(false);
-        if (streamingModeRef.current && !textFallbackRef.current) {
+        if (streamingModeRef.current) {
           addMessage("candidate", "[Voice response]");
         }
       },
@@ -121,10 +121,6 @@ export default function InterviewRoomPage({ token }: Props) {
   }, [streamingMode]);
 
   useEffect(() => {
-    textFallbackRef.current = useTextFallback;
-  }, [useTextFallback]);
-
-  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -163,40 +159,15 @@ export default function InterviewRoomPage({ token }: Props) {
 
     try {
       await controller.start();
-      setUseTextFallback(false);
+      setVoiceUnavailable(false);
     } catch (err) {
       console.error("interview.streaming_start_failed", err);
       const reason = err instanceof Error && err.message ? ` (${err.message})` : "";
       setAiSpeaking(false);
-      addMessage("system", `Couldn't start the microphone${reason} - switching to text input.`);
+      addMessage("system", `Couldn't start the microphone${reason}. Microphone access is required for this interview.`);
       streamingRef.current = null;
-      setUseTextFallback(true);
+      setVoiceUnavailable(true);
     }
-  }
-
-  function handleModeToggle() {
-    if (useTextFallback) {
-      if (streamingMode) {
-        void startStreamingVoice();
-      } else {
-        setUseTextFallback(false);
-      }
-      return;
-    }
-    streamingRef.current?.stop();
-    streamingRef.current = null;
-    setAiSpeaking(false);
-    setUseTextFallback(true);
-  }
-
-  function handleSendText(e: React.FormEvent) {
-    e.preventDefault();
-    const text = textInput.trim();
-    if (!text || processing) return;
-    setTextInput("");
-    setProcessing(true);
-    addMessage("candidate", text);
-    wsRef.current?.sendText(text);
   }
 
   async function handleStartRecording() {
@@ -217,8 +188,7 @@ export default function InterviewRoomPage({ token }: Props) {
       recorderRef.current = recorder;
       setIsRecording(true);
     } catch {
-      addMessage("system", "Microphone access denied. Use text input instead.");
-      setUseTextFallback(true);
+      addMessage("system", "Microphone access denied. Microphone access is required for this interview.");
     }
   }
 
@@ -232,8 +202,16 @@ export default function InterviewRoomPage({ token }: Props) {
     ? "AI is speaking..."
     : processing
       ? "Thinking..."
+      : voiceUnavailable
+        ? "Microphone unavailable"
       : "Listening - just speak naturally";
-  const streamingDotClass = aiSpeaking ? "bg-blue-500" : processing ? "bg-amber-500" : "bg-green-500";
+  const streamingDotClass = voiceUnavailable
+    ? "bg-red-500"
+    : aiSpeaking
+      ? "bg-blue-500"
+      : processing
+        ? "bg-amber-500"
+        : "bg-green-500";
 
   if (status === "idle") {
     return (
@@ -279,8 +257,9 @@ export default function InterviewRoomPage({ token }: Props) {
     <div className="flex flex-col h-screen max-w-2xl mx-auto p-4">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-lg font-semibold text-gray-900">AI Interview</h1>
-        <div className="text-sm text-gray-500">
-          Turn {turnCount} of {maxTurns}
+        <div className="text-right text-sm text-gray-500">
+          {sessionId && <div className="font-mono text-xs">Session {sessionId.slice(0, 8)}</div>}
+          <div>Turn {turnCount} of {maxTurns}</div>
         </div>
       </div>
 
@@ -321,12 +300,6 @@ export default function InterviewRoomPage({ token }: Props) {
       {status === "ready" && (
         <div className="border-t pt-4">
           <div className="flex items-center gap-2 mb-2">
-            <button
-              onClick={handleModeToggle}
-              className="text-xs text-gray-500 hover:text-gray-700"
-            >
-              {useTextFallback ? "Switch to voice" : "Switch to text"}
-            </button>
             {audioBlocked && (
               <button
                 onClick={handleEnableAudio}
@@ -337,25 +310,7 @@ export default function InterviewRoomPage({ token }: Props) {
             )}
           </div>
 
-          {useTextFallback ? (
-            <form onSubmit={handleSendText} className="flex gap-2">
-              <input
-                type="text"
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                placeholder="Type your response…"
-                disabled={processing}
-                className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              />
-              <button
-                type="submit"
-                disabled={processing || !textInput.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
-              >
-                Send
-              </button>
-            </form>
-          ) : streamingMode ? (
+          {streamingMode ? (
             <div className="flex justify-center" aria-live="polite">
               <div className="px-6 py-3 bg-gray-100 text-gray-700 rounded-full flex items-center gap-2 text-sm">
                 <span className={`w-2.5 h-2.5 ${streamingDotClass} rounded-full animate-pulse`} />

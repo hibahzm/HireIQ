@@ -221,6 +221,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                                 candidate_text=candidate_text,
                                 candidate_pcm=captured_pcm,
                                 job_criteria=job_criteria,
+                                max_turns=interview_session.max_turns,
                             )
                         except Exception as exc:
                             logger.error("interview.streaming_turn_failed", session_id=session_id, error=str(exc))
@@ -276,6 +277,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                             audio_bytes=audio_bytes,
                             mode=mode,
                             job_criteria=job_criteria,
+                            max_turns=interview_session.max_turns,
                         )
                     except Exception as exc:
                         logger.error("interview.turn_failed", session_id=session_id, error=str(exc))

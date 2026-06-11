@@ -25,7 +25,7 @@ export type OutboundMessage =
   | { type: "end_of_speech" };
 
 interface Callbacks {
-  onReady?: (data: { resuming: boolean; turn_count: number; max_turns: number; streaming_mode: boolean }) => void;
+  onReady?: (data: { session_id: string; resuming: boolean; turn_count: number; max_turns: number; streaming_mode: boolean }) => void;
   onProcessing?: () => void;
   onAiTurn?: (text: string, audio?: ArrayBuffer) => void;
   onPartial?: (text: string) => void;
@@ -64,6 +64,7 @@ export class InterviewWebSocket {
       switch (msg.type) {
         case "session_ready":
           this.callbacks.onReady?.({
+            session_id: msg.session_id,
             resuming: msg.resuming,
             turn_count: msg.turn_count,
             max_turns: msg.max_turns,
