@@ -93,7 +93,7 @@ class NotificationService:
         if self._settings.EMAIL_BACKEND == "resend":
             await self._send_resend(to, subject, text=body)
         else:
-            logger.info("email.console", to=to, subject=subject, body=body[:100])
+            logger.info("email.console", to=to, subject=subject, body=body)
 
     async def _send_html(self, to: str, subject: str, html: str) -> None:
         if self._settings.EMAIL_BACKEND == "resend":

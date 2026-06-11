@@ -22,6 +22,7 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
   const [rescreening, setRescreening] = useState<string | null>(null);
 
   const applyLink = `${window.location.origin}/apply/${jobId}`;
@@ -38,13 +39,34 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
 
   async function handleInvite(applicationId: string) {
     try {
-      await api.applications.invite(token, applicationId);
+      const invite = await api.applications.invite(token, applicationId);
       setApplications((prev) =>
-        prev.map((a) => (a.id === applicationId ? { ...a, status: "invited" } : a))
+        prev.map((a) =>
+          a.id === applicationId
+            ? {
+                ...a,
+                status: "invited",
+                interview_token: invite.interview_token,
+                interview_token_expires_at: invite.expires_at,
+              }
+            : a
+        )
       );
     } catch {
       setError("Failed to send invite");
     }
+  }
+
+  function interviewLink(app: Application) {
+    return app.interview_token ? `${window.location.origin}/interview/${app.interview_token}` : "";
+  }
+
+  function copyInterviewLink(app: Application) {
+    const link = interviewLink(app);
+    if (!link) return;
+    navigator.clipboard?.writeText(link);
+    setCopiedInviteId(app.id);
+    setTimeout(() => setCopiedInviteId((id) => (id === app.id ? null : id)), 1500);
   }
 
   async function handleRescreen(applicationId: string) {
@@ -54,7 +76,9 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
       await api.applications.rescreen(token, applicationId);
       setApplications((prev) =>
         prev.map((a) =>
-          a.id === applicationId ? { ...a, screening_status: "pending", screening_score: null } : a
+          a.id === applicationId
+            ? { ...a, screening_status: "pending", screening_score: null, screening_rationale: null }
+            : a
         )
       );
     } catch {
@@ -170,6 +194,11 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
                   </td>
                   <td className="px-5 py-3">
                     <Badge status={app.screening_status} />
+                    {app.screening_status === "failed" && app.screening_rationale && (
+                      <p className="mt-1 max-w-xs text-xs leading-snug text-red-600">
+                        {app.screening_rationale}
+                      </p>
+                    )}
                   </td>
                   <td className="px-5 py-3">
                     <Badge status={app.status} />
@@ -178,6 +207,23 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
                     {new Date(app.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-5 py-3 text-right">
+                    {app.status === "invited" && app.interview_token && (
+                      <div className="inline-flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => copyInterviewLink(app)}
+                        >
+                          <CopyIcon className="h-4 w-4" />{" "}
+                          {copiedInviteId === app.id ? "Copied!" : "Copy interview"}
+                        </Button>
+                        <a href={interviewLink(app)} target="_blank" rel="noopener noreferrer">
+                          <Button size="sm" variant="ghost">
+                            <ExternalLinkIcon className="h-4 w-4" /> Open
+                          </Button>
+                        </a>
+                      </div>
+                    )}
                     {app.screening_status === "qualified" && app.status === "qualified" && (
                       <Button size="sm" variant="secondary" onClick={() => handleInvite(app.id)}>
                         Invite

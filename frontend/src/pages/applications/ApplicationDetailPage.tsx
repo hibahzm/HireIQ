@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../../services/api";
+import Button from "../../components/ui/Button";
+import { CopyIcon, ExternalLinkIcon } from "../../components/ui/icons";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
 
@@ -37,6 +39,7 @@ export default function ApplicationDetailPage({ token, applicationId, onInvite }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
+  const [copiedInvite, setCopiedInvite] = useState(false);
 
   useEffect(() => {
     fetch(`${BASE_URL}/applications/${applicationId}`, {
@@ -59,14 +62,28 @@ export default function ApplicationDetailPage({ token, applicationId, onInvite }
     setInviting(true);
     setError(null);
     try {
-      await api.applications.invite(token, app.id);
-      setApp({ ...app, status: "invited" });
+      const invite = await api.applications.invite(token, app.id);
+      setApp({
+        ...app,
+        status: "invited",
+        interview_token: invite.interview_token,
+      });
       onInvite?.(app.id);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to send invitation");
     } finally {
       setInviting(false);
     }
+  }
+
+  const interviewLink =
+    app?.interview_token ? `${window.location.origin}/interview/${app.interview_token}` : "";
+
+  function copyInterviewLink() {
+    if (!interviewLink) return;
+    navigator.clipboard?.writeText(interviewLink);
+    setCopiedInvite(true);
+    setTimeout(() => setCopiedInvite(false), 1500);
   }
 
   if (loading) return <div className="text-primary-500">Loading…</div>;
@@ -131,7 +148,26 @@ export default function ApplicationDetailPage({ token, applicationId, onInvite }
       {error && <p className="mt-4 text-sm text-red-600" role="alert">{error}</p>}
 
       {app.status === "invited" ? (
-        <p className="mt-6 text-sm font-medium text-green-700">Interview invitation sent.</p>
+        <div className="mt-6 rounded-lg border border-green-200 bg-green-50 p-4">
+          <p className="mb-3 text-sm font-medium text-green-800">Interview invitation sent.</p>
+          {interviewLink && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <code className="flex-1 overflow-x-auto rounded-md border border-green-200 bg-white px-3 py-2 text-xs text-green-800">
+                {interviewLink}
+              </code>
+              <div className="flex gap-2">
+                <Button size="sm" variant="secondary" onClick={copyInterviewLink}>
+                  <CopyIcon className="h-4 w-4" /> {copiedInvite ? "Copied!" : "Copy"}
+                </Button>
+                <a href={interviewLink} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" variant="ghost">
+                    <ExternalLinkIcon className="h-4 w-4" /> Open
+                  </Button>
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
         app.screening_status === "qualified" &&
         app.status === "qualified" && (

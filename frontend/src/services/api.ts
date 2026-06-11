@@ -71,14 +71,24 @@ export const api = {
         data,
         token
       ),
+    saveCriteria: (token: string, id: string, data: JobCriteriaInput) =>
+      request<Job>("PUT", `/jobs/${id}/criteria`, data, token),
     activate: (token: string, id: string) =>
       request<Job>("POST", `/jobs/${id}/activate`, undefined, token),
+    close: (token: string, id: string) =>
+      request<Job>("POST", `/jobs/${id}/close`, undefined, token),
+    reopen: (token: string, id: string) =>
+      request<Job>("POST", `/jobs/${id}/reopen`, undefined, token),
+    archive: (token: string, id: string) =>
+      request<Job>("POST", `/jobs/${id}/archive`, undefined, token),
+    delete: (token: string, id: string) =>
+      request<void>("DELETE", `/jobs/${id}`, undefined, token),
   },
   applications: {
     listByJob: (token: string, jobId: string) =>
       request<Application[]>("GET", `/jobs/${jobId}/applications`, undefined, token),
     invite: (token: string, applicationId: string) =>
-      request<void>("POST", `/applications/${applicationId}/invite`, undefined, token),
+      request<InterviewInviteResponse>("POST", `/applications/${applicationId}/invite`, undefined, token),
     rescreen: (token: string, applicationId: string) =>
       request<{ status: string; application_id: string }>(
         "POST",
@@ -113,7 +123,16 @@ export const api = {
     overview: (token: string) =>
       request<CompanyOverview>("GET", "/analytics/overview", undefined, token),
   },
+  platform: {
+    overview: (token: string) =>
+      request<PlatformOverview>("GET", "/platform/overview", undefined, token),
+  },
 };
+
+export interface InterviewInviteResponse {
+  interview_token: string;
+  expires_at: string;
+}
 
 export interface Job {
   id: string;
@@ -130,9 +149,22 @@ export interface Application {
   id: string;
   candidate_id: string;
   screening_score: number | null;
+  screening_rationale?: string | null;
   screening_status: string;
   status: string;
+  interview_token?: string | null;
+  interview_token_expires_at?: string | null;
   created_at: string;
+}
+
+export interface JobCriteriaInput {
+  required_skills: Array<Record<string, unknown>>;
+  optional_skills?: Array<Record<string, unknown>>;
+  experience_level?: string;
+  min_years_experience?: number | null;
+  evaluation_dimensions: Array<Record<string, unknown>>;
+  dealbreakers?: Array<Record<string, unknown>>;
+  min_screening_score?: number;
 }
 
 export interface UserProfile {
@@ -228,4 +260,22 @@ export interface CompanyOverview {
   screening_pass_rate: number | null;
   avg_evaluation_score: number | null;
   jobs: Array<{ id: string; title: string; status: string }>;
+}
+
+export interface PlatformOverview {
+  companies: Array<{
+    id: string;
+    name: string;
+    activity_events: number;
+    job_events: number;
+    last_activity_at: string | null;
+  }>;
+  usage: Array<{
+    company_id: string | null;
+    agent_type: string;
+    prompt_tokens: number;
+    completion_tokens: number;
+    estimated_cost_usd: number;
+  }>;
+  audit_events: Array<{ event_type: string; count: number }>;
 }

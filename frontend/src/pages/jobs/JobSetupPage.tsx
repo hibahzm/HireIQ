@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, ApiError } from "../../services/api";
+import { api, ApiError, type JobCriteriaInput } from "../../services/api";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import PageHeader from "../../components/ui/PageHeader";
@@ -24,6 +24,16 @@ export default function JobSetupPage({ token, jobId, onActivated }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [activating, setActivating] = useState(false);
+  const [savingManual, setSavingManual] = useState(false);
+  const [manualCriteria, setManualCriteria] = useState(`{
+  "required_skills": [{"skill": "Node.js", "priority": "required"}],
+  "optional_skills": [],
+  "experience_level": "mid",
+  "min_years_experience": 2,
+  "evaluation_dimensions": [{"name": "Technical depth", "weight": 50}, {"name": "Communication", "weight": 50}],
+  "dealbreakers": [],
+  "min_screening_score": 60
+}`);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Kick off the first AI turn on mount. The backend seeds this turn with the
@@ -76,6 +86,29 @@ export default function JobSetupPage({ token, jobId, onActivated }: Props) {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Activation failed");
       setActivating(false);
+    }
+  }
+
+  async function handleRetrySetup() {
+    setStatus("in_progress");
+    await sendTurn("");
+  }
+
+  async function handleSaveManualCriteria() {
+    setSavingManual(true);
+    setError(null);
+    try {
+      const parsed = JSON.parse(manualCriteria) as JobCriteriaInput;
+      if (!Array.isArray(parsed.required_skills) || !Array.isArray(parsed.evaluation_dimensions)) {
+        throw new Error("required_skills and evaluation_dimensions must be arrays");
+      }
+      await api.jobs.saveCriteria(token, jobId, parsed);
+      setCriteriaDraft(parsed);
+      setStatus("completed");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save criteria");
+    } finally {
+      setSavingManual(false);
     }
   }
 
@@ -133,9 +166,35 @@ export default function JobSetupPage({ token, jobId, onActivated }: Props) {
                 {JSON.stringify(criteriaDraft, null, 2)}
               </pre>
             )}
-            <Button onClick={handleActivate} loading={activating} className="w-full bg-green-600 hover:bg-green-700">
+            <Button
+              onClick={handleActivate}
+              loading={activating}
+              className="w-full bg-green-600 hover:bg-green-700"
+            >
               Confirm &amp; activate job
             </Button>
+          </div>
+        ) : status === "failed" ? (
+          <div className="space-y-4 border-t border-primary-100 bg-red-50/40 p-5">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button type="button" onClick={handleRetrySetup} loading={sending}>
+                Retry setup
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleSaveManualCriteria}
+                loading={savingManual}
+              >
+                Save manual criteria
+              </Button>
+            </div>
+            <textarea
+              value={manualCriteria}
+              onChange={(e) => setManualCriteria(e.target.value)}
+              rows={9}
+              className="block w-full rounded-lg border border-primary-200 bg-white px-3 py-2.5 font-mono text-xs leading-relaxed text-primary-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+            />
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex gap-2 border-t border-primary-100 p-4">

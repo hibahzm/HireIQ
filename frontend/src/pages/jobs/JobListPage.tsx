@@ -7,6 +7,7 @@ import PageHeader from "../../components/ui/PageHeader";
 import EmptyState from "../../components/ui/EmptyState";
 import Spinner from "../../components/ui/Spinner";
 import { BriefcaseIcon, CopyIcon, PlusIcon } from "../../components/ui/icons";
+import { useAuth } from "../../context/AuthContext";
 
 interface Props {
   token: string;
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
+  const { user } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -23,6 +25,8 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
   const [newDescription, setNewDescription] = useState("");
   const [creating, setCreating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [actingId, setActingId] = useState<string | null>(null);
+  const isAdmin = user?.role === "admin";
 
   useEffect(() => {
     api.jobs
@@ -56,6 +60,33 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
     navigator.clipboard?.writeText(link);
     setCopiedId(jobId);
     setTimeout(() => setCopiedId((c) => (c === jobId ? null : c)), 1500);
+  }
+
+  async function runJobAction(jobId: string, action: () => Promise<Job>, message: string) {
+    setActingId(jobId);
+    setError(null);
+    try {
+      const updated = await action();
+      setJobs((prev) => prev.map((job) => (job.id === jobId ? updated : job)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : message);
+    } finally {
+      setActingId(null);
+    }
+  }
+
+  async function handleDelete(job: Job) {
+    if (!confirm(`Delete "${job.title}"? This only works before applications exist.`)) return;
+    setActingId(job.id);
+    setError(null);
+    try {
+      await api.jobs.delete(token, job.id);
+      setJobs((prev) => prev.filter((j) => j.id !== job.id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete job");
+    } finally {
+      setActingId(null);
+    }
   }
 
   if (loading) {
@@ -195,11 +226,73 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
                     </button>
                   </td>
                   <td className="px-5 py-3 text-right">
-                    {(job.status === "draft" || job.status === "setup") && (
-                      <Button size="sm" variant="secondary" onClick={() => onSetupJob(job.id)}>
-                        Setup
-                      </Button>
-                    )}
+                    <div className="inline-flex flex-wrap justify-end gap-2">
+                      {(job.status === "draft" ||
+                        job.status === "setup" ||
+                        job.status === "setup_failed") && (
+                        <Button size="sm" variant="secondary" onClick={() => onSetupJob(job.id)}>
+                          Setup
+                        </Button>
+                      )}
+                      {job.status === "active" && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          loading={actingId === job.id}
+                          onClick={() =>
+                            runJobAction(
+                              job.id,
+                              () => api.jobs.close(token, job.id),
+                              "Failed to close job",
+                            )
+                          }
+                        >
+                          Close
+                        </Button>
+                      )}
+                      {job.status === "closed" && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          loading={actingId === job.id}
+                          onClick={() =>
+                            runJobAction(
+                              job.id,
+                              () => api.jobs.reopen(token, job.id),
+                              "Failed to reopen job",
+                            )
+                          }
+                        >
+                          Reopen
+                        </Button>
+                      )}
+                      {["draft", "setup", "setup_failed", "closed"].includes(job.status) && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          loading={actingId === job.id}
+                          onClick={() =>
+                            runJobAction(
+                              job.id,
+                              () => api.jobs.archive(token, job.id),
+                              "Failed to archive job",
+                            )
+                          }
+                        >
+                          Archive
+                        </Button>
+                      )}
+                      {isAdmin && ["draft", "setup", "setup_failed", "archived"].includes(job.status) && (
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          loading={actingId === job.id}
+                          onClick={() => handleDelete(job)}
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
