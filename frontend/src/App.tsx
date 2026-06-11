@@ -144,7 +144,12 @@ function PlatformOverviewWrapper() {
 }
 
 function HomeRedirect() {
-  const { user } = useAuth();
+  const { status, user } = useAuth();
+  if (status === "loading") {
+    return <div className="p-6 text-sm text-primary-500">Loading...</div>;
+  }
+  if (status === "anonymous") return <Navigate to="/login" replace />;
+  if (!user) return <div className="p-6 text-sm text-primary-500">Loading...</div>;
   return <Navigate to={user?.role === "manager" ? "/platform" : "/overview"} replace />;
 }
 
@@ -155,7 +160,7 @@ function LoginWrapper() {
   const navigate = useNavigate();
   return (
     <LoginPage
-      onSuccess={(t) => { setToken(t); navigate("/overview"); }}
+      onSuccess={(t) => { setToken(t); navigate("/"); }}
       onRegister={() => navigate("/register")}
     />
   );
@@ -166,7 +171,7 @@ function RegisterWrapper() {
   const navigate = useNavigate();
   return (
     <RegisterPage
-      onSuccess={(t) => { setToken(t); navigate("/overview"); }}
+      onSuccess={(t) => { setToken(t); navigate("/"); }}
       onLogin={() => navigate("/login")}
     />
   );
@@ -177,7 +182,7 @@ function SetPasswordWrapper() {
   const navigate = useNavigate();
   return (
     <SetPasswordPage
-      onSuccess={(t) => { setToken(t); navigate("/overview"); }}
+      onSuccess={(t) => { setToken(t); navigate("/"); }}
     />
   );
 }

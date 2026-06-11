@@ -45,6 +45,22 @@ function secondsUntilExpiry(token: string): number | null {
   }
 }
 
+function userFromToken(token: string): AuthUser | null {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    if (!payload.sub || !payload.company_id || !payload.role) return null;
+    return {
+      id: payload.sub,
+      company_id: payload.company_id,
+      email: "",
+      role: payload.role,
+      is_active: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setTokenState] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -68,6 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const applyToken = useCallback(
     (accessToken: string) => {
       setTokenState(accessToken);
+      setUser(userFromToken(accessToken));
       setStatus("authenticated");
       void loadUser(accessToken);
 
