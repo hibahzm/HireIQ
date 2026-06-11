@@ -17,9 +17,11 @@ class InterviewSessionRepository:
     @staticmethod
     def _from_row(row) -> InterviewSession:
         data = dict(row)
+        job_streaming_interview = bool(data.pop("job_streaming_interview", False))
         for key in ("id", "application_id", "company_id"):
             if data.get(key) is not None:
                 data[key] = str(data[key])
+        data["streaming_mode"] = bool(data.get("streaming_mode") or job_streaming_interview)
         return InterviewSession(**data)
 
     async def get_by_interview_token(self, token: str) -> InterviewSession | None:
@@ -27,8 +29,10 @@ class InterviewSessionRepository:
         result = await self._session.execute(
             sa.text(
                 """
-                SELECT s.* FROM interview_sessions s
+                SELECT s.*, COALESCE(j.streaming_interview, false) AS job_streaming_interview
+                FROM interview_sessions s
                 JOIN applications a ON a.id = s.application_id
+                JOIN jobs j ON j.id = a.job_id
                 WHERE a.interview_token = :token
                   AND a.interview_token_expires_at > now()
                 LIMIT 1
@@ -39,7 +43,19 @@ class InterviewSessionRepository:
         row = result.mappings().first()
         if not row:
             return None
-        return self._from_row(row)
+        session = self._from_row(row)
+        if session.streaming_mode and not row["streaming_mode"]:
+            await self._session.execute(
+                sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
+                {"cid": session.company_id},
+            )
+            await self._session.execute(
+                sa.update(InterviewSession)
+                .where(InterviewSession.id == session.id)
+                .values(streaming_mode=True, updated_at=datetime.now(timezone.utc))
+            )
+            await self._session.flush()
+        return session
 
     async def get_or_create_for_token(self, token: str) -> InterviewSession | None:
         existing = await self.get_by_interview_token(token)

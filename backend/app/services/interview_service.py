@@ -33,6 +33,50 @@ class InterviewService:
         self._tts = TtsService()
         self._storage = StorageService()
 
+    @staticmethod
+    def _dimension_names(job_criteria: dict) -> list[str]:
+        names: list[str] = []
+        for dimension in job_criteria.get("evaluation_dimensions") or []:
+            value = None
+            if isinstance(dimension, dict):
+                value = (
+                    dimension.get("name")
+                    or dimension.get("dimension")
+                    or dimension.get("label")
+                    or dimension.get("title")
+                )
+            elif isinstance(dimension, str):
+                value = dimension
+            if value:
+                names.append(str(value))
+        return names
+
+    @staticmethod
+    def _updated_interview_state(
+        *,
+        previous_state: dict,
+        agent_result: dict,
+        history: list[dict[str, str]],
+        new_turn_count: int,
+    ) -> dict:
+        updated_state = agent_result.get("updated_state") or {}
+        dimensions_remaining = (
+            agent_result.get("dimensions_remaining")
+            or updated_state.get("dimensions_remaining")
+            or previous_state.get("dimensions_remaining")
+            or []
+        )
+        return {
+            **previous_state,
+            "conversation_history": history,
+            "dimensions_covered": updated_state.get(
+                "dimensions_covered",
+                previous_state.get("dimensions_covered", []),
+            ),
+            "dimensions_remaining": dimensions_remaining,
+            "turn_count": new_turn_count,
+        }
+
     async def handle_turn(
         self,
         *,
@@ -102,9 +146,10 @@ class InterviewService:
             "session_id": session_id,
             "conversation_history": history,
             "dimensions_covered": state.get("dimensions_covered", []),
-            "dimensions_remaining": state.get("dimensions_remaining", list(
-                d.get("name", "") for d in job_criteria.get("evaluation_dimensions", [])
-            )),
+            "dimensions_remaining": state.get(
+                "dimensions_remaining",
+                self._dimension_names(job_criteria),
+            ),
             "turn_count": state.get("turn_count", 0),
             "max_turns": state.get("max_turns", 20),
             "job_criteria": job_criteria,
@@ -167,13 +212,12 @@ class InterviewService:
         # Update state
         new_turn_count = state.get("turn_count", 0) + 1
         history.append({"role": "assistant", "content": ai_text})
-        new_state = {
-            **state,
-            "conversation_history": history,
-            "dimensions_covered": agent_result["updated_state"].get("dimensions_covered", []),
-            "dimensions_remaining": agent_result.get("dimensions_remaining", []),
-            "turn_count": new_turn_count,
-        }
+        new_state = self._updated_interview_state(
+            previous_state=state,
+            agent_result=agent_result,
+            history=history,
+            new_turn_count=new_turn_count,
+        )
         await self._save_redis_state(session_id, new_state)
         await session_repo.increment_turn(session_id)
 
@@ -253,9 +297,10 @@ class InterviewService:
             "session_id": session_id,
             "conversation_history": history,
             "dimensions_covered": state.get("dimensions_covered", []),
-            "dimensions_remaining": state.get("dimensions_remaining", list(
-                d.get("name", "") for d in job_criteria.get("evaluation_dimensions", [])
-            )),
+            "dimensions_remaining": state.get(
+                "dimensions_remaining",
+                self._dimension_names(job_criteria),
+            ),
             "turn_count": state.get("turn_count", 0),
             "max_turns": state.get("max_turns", 20),
             "job_criteria": job_criteria,
@@ -314,13 +359,12 @@ class InterviewService:
 
         new_turn_count = state.get("turn_count", 0) + 1
         history.append({"role": "assistant", "content": ai_text})
-        new_state = {
-            **state,
-            "conversation_history": history,
-            "dimensions_covered": agent_result["updated_state"].get("dimensions_covered", []),
-            "dimensions_remaining": agent_result.get("dimensions_remaining", []),
-            "turn_count": new_turn_count,
-        }
+        new_state = self._updated_interview_state(
+            previous_state=state,
+            agent_result=agent_result,
+            history=history,
+            new_turn_count=new_turn_count,
+        )
         await self._save_redis_state(session_id, new_state)
         await session_repo.increment_turn(session_id)
 
