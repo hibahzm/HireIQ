@@ -1,9 +1,10 @@
+# syntax=docker/dockerfile:1.7
 FROM python:3.12-slim AS builder
 # uv for fast, reproducible installs (pin to a specific release for reproducibility)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /app
 COPY pyproject.toml .
-RUN uv pip install --system --no-cache .
+RUN --mount=type=cache,target=/root/.cache/uv uv pip install --system .
 
 FROM python:3.12-slim
 WORKDIR /app
