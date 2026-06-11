@@ -10,7 +10,7 @@ from app.config import get_settings
 _redis: Redis | None = None
 
 
-async def get_redis() -> AsyncGenerator[Redis, None]:
+async def get_redis_client() -> Redis:
     global _redis
     if _redis is None:
         settings = get_settings()
@@ -19,7 +19,12 @@ async def get_redis() -> AsyncGenerator[Redis, None]:
             encoding="utf-8",
             decode_responses=True,
         )
-    yield _redis
+    return _redis
+
+
+async def get_redis() -> AsyncGenerator[Redis, None]:
+    redis = await get_redis_client()
+    yield redis
 
 
 async def close_redis() -> None:

@@ -7,7 +7,7 @@ import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.db import _get_session_factory
-from app.redis_client import _redis as get_redis_instance
+from app.redis_client import get_redis_client
 from app.repositories.interview_repository import InterviewSessionRepository
 
 logger = structlog.get_logger()
@@ -34,6 +34,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
             company_id = interview_session.company_id
             is_resuming = interview_session.turn_count > 0
             streaming_mode = interview_session.streaming_mode
+            current_turn_count = interview_session.turn_count
 
             # Load job criteria
             import sqlalchemy as sa
@@ -151,6 +152,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
     # Streaming-mode per-utterance state (lives across audio_frame messages)
     stt_service = None
     pcm_buffer = bytearray()
+    redis_client = await get_redis_client()
 
     # Main message loop
     try:
@@ -215,13 +217,14 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                         from app.services.interview_service import InterviewService
 
                         try:
-                            result = await InterviewService(session, get_redis_instance).handle_streaming_turn(
+                            result = await InterviewService(session, redis_client).handle_streaming_turn(
                                 session_id=session_id,
                                 company_id=company_id,
                                 candidate_text=candidate_text,
                                 candidate_pcm=captured_pcm,
                                 job_criteria=job_criteria,
                                 max_turns=interview_session.max_turns,
+                                current_turn_count=current_turn_count,
                             )
                         except Exception as exc:
                             logger.error("interview.streaming_turn_failed", session_id=session_id, error=str(exc))
@@ -232,9 +235,11 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                                 return
                             break
                 if result.get("guardrail_triggered"):
+                    current_turn_count += 1
                     if not await _send_json({"type": "turn_blocked", "message": result["ai_response"]}):
                         return
                 else:
+                    current_turn_count += 1
                     if not await _stream_ai_response(result["ai_response"]):
                         return
                     if result.get("session_complete"):
@@ -259,9 +264,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                         {"cid": str(company_id)},
                     )
                     from app.services.interview_service import InterviewService
-                    redis = get_redis_instance
-
-                    svc = InterviewService(session, redis)
+                    svc = InterviewService(session, redis_client)
 
                     audio_bytes = None
                     mode = "text"
@@ -278,6 +281,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                             mode=mode,
                             job_criteria=job_criteria,
                             max_turns=interview_session.max_turns,
+                            current_turn_count=current_turn_count,
                         )
                     except Exception as exc:
                         logger.error("interview.turn_failed", session_id=session_id, error=str(exc))
@@ -289,12 +293,14 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                         break
 
             if result.get("guardrail_triggered"):
+                current_turn_count += 1
                 if not await _send_json({
                     "type": "turn_blocked",
                     "message": result["ai_response"],
                 }):
                     return
             elif result.get("session_complete"):
+                current_turn_count += 1
                 # Send final AI turn
                 response_msg: dict = {
                     "type": "ai_turn",
@@ -309,6 +315,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                 await _close_websocket(code=1000)
                 return
             else:
+                current_turn_count += 1
                 response_msg = {
                     "type": "ai_turn",
                     "text": result["ai_response"],

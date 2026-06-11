@@ -88,6 +88,38 @@ class InterviewService:
             max_turns = DEFAULT_INTERVIEW_MAX_TURNS
         return min(max_turns, DEFAULT_INTERVIEW_MAX_TURNS)
 
+    @staticmethod
+    def _effective_turn_count(state_value: object, fallback: int | None = None) -> int:
+        try:
+            state_turn_count = max(int(state_value or 0), 0)
+        except (TypeError, ValueError):
+            state_turn_count = 0
+        try:
+            fallback_turn_count = max(int(fallback or 0), 0)
+        except (TypeError, ValueError):
+            fallback_turn_count = 0
+        return max(state_turn_count, fallback_turn_count)
+
+    async def _conversation_history(
+        self,
+        message_repo: InterviewMessageRepository,
+        session_id: str,
+        state: dict,
+    ) -> list[dict[str, str]]:
+        history = state.get("conversation_history")
+        if isinstance(history, list) and history:
+            return list(history)
+
+        messages = await message_repo.list_by_session(session_id)
+        return [
+            {
+                "role": "user" if message.speaker == "candidate" else "assistant",
+                "content": message.content_text,
+            }
+            for message in messages
+            if message.content_text
+        ]
+
     async def handle_turn(
         self,
         *,
@@ -98,6 +130,7 @@ class InterviewService:
         mode: str = "text",
         job_criteria: dict,
         max_turns: int | None = None,
+        current_turn_count: int | None = None,
     ) -> dict:
         """
         Process one interview turn. Returns dict with ai_response, session_complete,
@@ -110,6 +143,7 @@ class InterviewService:
         # Load Redis state
         state = await self._load_redis_state(session_id)
         effective_max_turns = self._effective_max_turns(max_turns or state.get("max_turns"))
+        state_turn_count = self._effective_turn_count(state.get("turn_count"), current_turn_count)
 
         # STT if voice mode
         audio_key = None
@@ -145,7 +179,7 @@ class InterviewService:
             candidate_text = candidate_input or ""
 
         # Append candidate message to state history
-        history = state.get("conversation_history", [])
+        history = await self._conversation_history(message_repo, session_id, state)
         history.append({"role": "user", "content": candidate_text})
 
         # Update session status to in_progress on first turn
@@ -163,7 +197,7 @@ class InterviewService:
                 "dimensions_remaining",
                 self._dimension_names(job_criteria),
             ),
-            "turn_count": state.get("turn_count", 0),
+            "turn_count": state_turn_count,
             "max_turns": effective_max_turns,
             "job_criteria": job_criteria,
         })
@@ -193,7 +227,7 @@ class InterviewService:
         session_complete = agent_result.get("session_complete", False)
 
         # Persist candidate turn
-        turn_index = state.get("turn_count", 0) * 2
+        turn_index = state_turn_count * 2
         await message_repo.append_message(
             session_id=session_id,
             company_id=company_id,
@@ -223,7 +257,7 @@ class InterviewService:
             )
 
         # Update state
-        new_turn_count = state.get("turn_count", 0) + 1
+        new_turn_count = state_turn_count + 1
         history.append({"role": "assistant", "content": ai_text})
         new_state = self._updated_interview_state(
             previous_state=state,
@@ -279,6 +313,7 @@ class InterviewService:
         candidate_pcm: bytes | None,
         job_criteria: dict,
         max_turns: int | None = None,
+        current_turn_count: int | None = None,
     ) -> dict:
         """
         Process one streaming turn from an already-finalized transcript. Runs the same
@@ -293,6 +328,7 @@ class InterviewService:
 
         state = await self._load_redis_state(session_id)
         effective_max_turns = self._effective_max_turns(max_turns or state.get("max_turns"))
+        state_turn_count = self._effective_turn_count(state.get("turn_count"), current_turn_count)
 
         # Assemble + store the candidate's streamed audio so audio_blob_key has parity
         # with the turn-based path (FR-006 / SC-003).
@@ -301,7 +337,7 @@ class InterviewService:
             audio_key = f"interviews/{session_id}/{str(uuid.uuid4())}.wav"
             await self._storage.upload(audio_key, self._pcm_to_wav(candidate_pcm))
 
-        history = state.get("conversation_history", [])
+        history = await self._conversation_history(message_repo, session_id, state)
         history.append({"role": "user", "content": candidate_text})
 
         await session_repo.update_status(session_id, "in_progress")
@@ -317,7 +353,7 @@ class InterviewService:
                 "dimensions_remaining",
                 self._dimension_names(job_criteria),
             ),
-            "turn_count": state.get("turn_count", 0),
+            "turn_count": state_turn_count,
             "max_turns": effective_max_turns,
             "job_criteria": job_criteria,
         })
@@ -346,7 +382,7 @@ class InterviewService:
         guardrail_triggered = agent_result.get("guardrail_triggered", False)
         session_complete = agent_result.get("session_complete", False)
 
-        turn_index = state.get("turn_count", 0) * 2
+        turn_index = state_turn_count * 2
         await message_repo.append_message(
             session_id=session_id,
             company_id=company_id,
@@ -373,7 +409,7 @@ class InterviewService:
                 company_id=company_id,
             )
 
-        new_turn_count = state.get("turn_count", 0) + 1
+        new_turn_count = state_turn_count + 1
         history.append({"role": "assistant", "content": ai_text})
         new_state = self._updated_interview_state(
             previous_state=state,
@@ -422,7 +458,14 @@ class InterviewService:
         return f"interview_session:{session_id}"
 
     async def _load_redis_state(self, session_id: str) -> dict:
-        raw = await self._redis.get(self._redis_key(session_id))
+        if self._redis is None:
+            logger.warning("interview.redis_unavailable", session_id=session_id)
+            return {}
+        try:
+            raw = await self._redis.get(self._redis_key(session_id))
+        except Exception as exc:
+            logger.warning("interview.redis_load_failed", session_id=session_id, error=str(exc))
+            return {}
         if raw:
             try:
                 state = json.loads(raw)
@@ -432,11 +475,17 @@ class InterviewService:
         return {}
 
     async def _save_redis_state(self, session_id: str, state: dict) -> None:
-        await self._redis.set(
-            self._redis_key(session_id),
-            json.dumps(state),
-            ex=REDIS_SESSION_TTL,
-        )
+        if self._redis is None:
+            logger.warning("interview.redis_unavailable", session_id=session_id)
+            return
+        try:
+            await self._redis.set(
+                self._redis_key(session_id),
+                json.dumps(state),
+                ex=REDIS_SESSION_TTL,
+            )
+        except Exception as exc:
+            logger.warning("interview.redis_save_failed", session_id=session_id, error=str(exc))
 
     async def _trigger_evaluation(self, session_id: str, company_id: str) -> None:
         from app.db import _get_session_factory
