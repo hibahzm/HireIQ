@@ -17,7 +17,7 @@ class Job(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(Text, server_default="draft", nullable=False)
-    streaming_interview: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
+    streaming_interview: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
     created_by: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now(), nullable=False)

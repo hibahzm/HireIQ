@@ -14,6 +14,14 @@ class InterviewSessionRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    @staticmethod
+    def _from_row(row) -> InterviewSession:
+        data = dict(row)
+        for key in ("id", "application_id", "company_id"):
+            if data.get(key) is not None:
+                data[key] = str(data[key])
+        return InterviewSession(**data)
+
     async def get_by_interview_token(self, token: str) -> InterviewSession | None:
         """Bypasses RLS — token is the authenticator for candidate access."""
         result = await self._session.execute(
@@ -31,7 +39,7 @@ class InterviewSessionRepository:
         row = result.mappings().first()
         if not row:
             return None
-        return InterviewSession(**dict(row))
+        return self._from_row(row)
 
     async def get_or_create_for_token(self, token: str) -> InterviewSession | None:
         existing = await self.get_by_interview_token(token)

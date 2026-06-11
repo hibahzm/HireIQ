@@ -23,6 +23,7 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [useRealtimeInterview, setUseRealtimeInterview] = useState(true);
   const [creating, setCreating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
@@ -45,6 +46,7 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
       const job = await api.jobs.create(token, {
         title: newTitle.trim(),
         description: newDescription.trim() || undefined,
+        streaming_interview: useRealtimeInterview,
       });
       // Continue straight into AI-guided setup, where the agent reads the
       // description and only asks about whatever is missing.
@@ -153,6 +155,15 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
                 className="mt-1 block w-full rounded-lg border border-primary-200 px-3 py-2.5 text-sm leading-relaxed focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
               />
             </div>
+            <label className="flex items-center gap-3 rounded-lg border border-primary-200 px-3 py-2.5 text-sm text-primary-700">
+              <input
+                type="checkbox"
+                checked={useRealtimeInterview}
+                onChange={(e) => setUseRealtimeInterview(e.target.checked)}
+                className="h-4 w-4 rounded border-primary-300 text-brand-600 focus:ring-brand-500"
+              />
+              <span>Realtime voice interview</span>
+            </label>
             <div className="flex gap-2">
               <Button type="submit" loading={creating} disabled={!newTitle.trim()}>
                 Create &amp; start setup
@@ -164,6 +175,7 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
                   setShowForm(false);
                   setNewTitle("");
                   setNewDescription("");
+                  setUseRealtimeInterview(true);
                 }}
               >
                 Cancel
@@ -193,6 +205,7 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
               <tr className="border-b border-primary-100 bg-primary-50/50 text-left text-xs uppercase tracking-wide text-primary-400">
                 <th className="px-5 py-3 font-semibold">Title</th>
                 <th className="px-5 py-3 font-semibold">Status</th>
+                <th className="px-5 py-3 font-semibold">Interview</th>
                 <th className="px-5 py-3 font-semibold">Created</th>
                 <th className="px-5 py-3 font-semibold">Apply link</th>
                 <th className="px-5 py-3"></th>
@@ -211,6 +224,9 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
                   </td>
                   <td className="px-5 py-3">
                     <Badge status={job.status} />
+                  </td>
+                  <td className="px-5 py-3 text-primary-500">
+                    {job.streaming_interview ? "Realtime" : "Recorded"}
                   </td>
                   <td className="px-5 py-3 text-primary-500">
                     {new Date(job.created_at).toLocaleDateString()}

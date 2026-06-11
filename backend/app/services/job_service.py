@@ -25,11 +25,21 @@ class JobService:
         self._settings = get_settings()
 
     async def create_job(
-        self, *, company_id: str, title: str, created_by: str, description: str | None = None
+        self,
+        *,
+        company_id: str,
+        title: str,
+        created_by: str,
+        description: str | None = None,
+        streaming_interview: bool = True,
     ) -> Job:
         repo = JobRepository(self._session)
         job = await repo.create(
-            company_id=company_id, title=title, created_by=created_by, description=description
+            company_id=company_id,
+            title=title,
+            created_by=created_by,
+            description=description,
+            streaming_interview=streaming_interview,
         )
 
         audit = AuditLogRepository(self._session)

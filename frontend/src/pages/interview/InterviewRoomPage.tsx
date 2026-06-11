@@ -258,7 +258,7 @@ export default function InterviewRoomPage({ token }: Props) {
                   disabled={processing}
                   className="px-6 py-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50"
                 >
-                  Hold to record
+                  Start recording
                 </button>
               )}
             </div>

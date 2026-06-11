@@ -15,13 +15,20 @@ class JobRepository:
         self._session = session
 
     async def create(
-        self, *, company_id: str, title: str, created_by: str, description: str | None = None
+        self,
+        *,
+        company_id: str,
+        title: str,
+        created_by: str,
+        description: str | None = None,
+        streaming_interview: bool = True,
     ) -> Job:
         job = Job(
             id=str(uuid.uuid4()),
             company_id=company_id,
             title=title,
             description=description,
+            streaming_interview=streaming_interview,
             status="draft",
             created_by=created_by,
             created_at=datetime.now(timezone.utc),

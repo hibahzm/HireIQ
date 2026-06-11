@@ -45,6 +45,7 @@ async def create_job(
         company_id=current_user.company_id,
         title=body.title,
         description=body.description,
+        streaming_interview=body.streaming_interview,
         created_by=current_user.id,
     )
     return JobResponse(**job.__dict__)
@@ -72,7 +73,12 @@ async def update_job(
     await session.execute(
         sa.update(JobModel)
         .where(JobModel.id == job_id)
-        .values(title=body.title, updated_at=datetime.now(timezone.utc))
+        .values(
+            title=body.title,
+            description=body.description,
+            streaming_interview=body.streaming_interview,
+            updated_at=datetime.now(timezone.utc),
+        )
     )
     job = await JobRepository(session).get_by_id(job_id)
     if not job:

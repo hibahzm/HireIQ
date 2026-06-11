@@ -61,7 +61,7 @@ export const api = {
   jobs: {
     list: (token: string, status?: string) =>
       request<Job[]>("GET", `/jobs${status ? `?status=${status}` : ""}`, undefined, token),
-    create: (token: string, data: { title: string; description?: string }) =>
+    create: (token: string, data: { title: string; description?: string; streaming_interview?: boolean }) =>
       request<Job>("POST", "/jobs", data, token),
     get: (token: string, id: string) => request<Job>("GET", `/jobs/${id}`, undefined, token),
     setupTurn: (token: string, id: string, data: { user_message: string }) =>
@@ -141,6 +141,7 @@ export interface Job {
   company_id: string;
   title: string;
   description?: string | null;
+  streaming_interview: boolean;
   status: string;
   created_by: string;
   created_at: string;

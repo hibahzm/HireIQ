@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class CreateJobRequest(BaseModel):
     title: str
     description: str | None = None
+    streaming_interview: bool = True
 
 
 class JobResponse(BaseModel):
@@ -16,6 +17,7 @@ class JobResponse(BaseModel):
     company_id: str
     title: str
     description: str | None = None
+    streaming_interview: bool
     status: str
     created_by: str
     created_at: datetime
