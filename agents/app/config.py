@@ -62,6 +62,8 @@ class Settings(BaseSettings):
             mapping = {
                 "OPENAI_API_KEY": "openai_api_key",
                 "AGENTS_INTERNAL_SECRET": "agents_internal_secret",
+                "AZURE_SPEECH_KEY": "azure_speech_key",
+                "AZURE_SPEECH_REGION": "azure_speech_region",
             }
             for attr, key in mapping.items():
                 value = _read_vault_secret(
@@ -77,6 +79,7 @@ class Settings(BaseSettings):
                 "OPENAI_API_KEY": "openai-api-key",
                 "AGENTS_INTERNAL_SECRET": "agents-internal-secret",
                 "AZURE_SPEECH_KEY": "azure-speech-key",
+                "AZURE_SPEECH_REGION": "azure-speech-region",
             }
             for attr, secret_name in mapping.items():
                 value = _read_azure_secret(secret_name)

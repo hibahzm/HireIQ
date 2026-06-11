@@ -14,9 +14,11 @@ logger = structlog.get_logger()
 
 def configure_structlog() -> None:
     settings = get_settings()
+    # PrintLoggerFactory is used in both dev and containers. It does not expose
+    # `logger.name`, so stdlib.add_logger_name would make guardrail log calls
+    # crash the agent request instead of logging a warning.
     shared_processors = [
         structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
