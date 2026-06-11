@@ -13,6 +13,8 @@ export default function UserManagementPage({ token }: Props) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"recruiter" | "admin">("recruiter");
   const [inviting, setInviting] = useState(false);
+  const [lastInviteLink, setLastInviteLink] = useState<string | null>(null);
+  const [copiedInviteLink, setCopiedInviteLink] = useState(false);
   const activeAdminCount = users.filter((u) => u.role === "admin" && u.is_active).length;
 
   useEffect(() => {
@@ -30,12 +32,20 @@ export default function UserManagementPage({ token }: Props) {
     try {
       const user = await api.users.create(token, { email: inviteEmail, role: inviteRole });
       setUsers((prev) => [...prev, user as UserProfile]);
+      setLastInviteLink(user.invite_link ?? null);
       setInviteEmail("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Invite failed");
     } finally {
       setInviting(false);
     }
+  }
+
+  function copyInviteLink() {
+    if (!lastInviteLink) return;
+    navigator.clipboard?.writeText(lastInviteLink);
+    setCopiedInviteLink(true);
+    setTimeout(() => setCopiedInviteLink(false), 1500);
   }
 
   async function handleRoleChange(userId: string, role: string) {
@@ -102,6 +112,24 @@ export default function UserManagementPage({ token }: Props) {
       </form>
 
       {error && <p className="text-red-600 mb-4 text-sm" role="alert">{error}</p>}
+
+      {lastInviteLink && (
+        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-3">
+          <p className="mb-2 text-sm font-medium text-green-800">Invite created. Share this set-password link:</p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <code className="flex-1 overflow-x-auto rounded-md border border-green-200 bg-white px-3 py-2 text-xs text-green-800">
+              {lastInviteLink}
+            </code>
+            <button
+              type="button"
+              onClick={copyInviteLink}
+              className="rounded-md border border-green-200 bg-white px-3 py-2 text-xs font-medium text-green-800 hover:bg-green-100"
+            >
+              {copiedInviteLink ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <table className="w-full text-sm">
         <thead>

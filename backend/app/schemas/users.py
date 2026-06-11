@@ -22,3 +22,7 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class UserInviteResponse(UserResponse):
+    invite_link: str | None = None

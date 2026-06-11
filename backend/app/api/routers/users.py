@@ -11,7 +11,7 @@ from app.config import get_settings
 from app.models.user import User
 from app.redis_client import get_redis
 from app.repositories.user_repository import UserRepository
-from app.schemas.users import CreateUserRequest, UpdateRoleRequest, UserResponse
+from app.schemas.users import CreateUserRequest, UpdateRoleRequest, UserInviteResponse, UserResponse
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -27,7 +27,7 @@ async def list_users(
     return [UserResponse(**u.__dict__) for u in users]
 
 
-@router.post("", response_model=UserResponse, status_code=201)
+@router.post("", response_model=UserInviteResponse, status_code=201)
 async def create_user(
     body: CreateUserRequest,
     current_user: User = Depends(require_admin),
@@ -51,6 +51,8 @@ async def create_user(
         role=body.role,
     )
 
+    invite_link = None
+
     try:
         from app.services.auth_service import AuthService
         from app.services.notification_service import NotificationService
@@ -65,7 +67,7 @@ async def create_user(
     except Exception:
         pass  # Do not fail user creation if invite email fails
 
-    return UserResponse(**user.__dict__)
+    return UserInviteResponse(**user.__dict__, invite_link=invite_link)
 
 
 @router.put("/{user_id}/role", response_model=UserResponse)

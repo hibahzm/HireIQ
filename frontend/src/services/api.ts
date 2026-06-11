@@ -101,7 +101,7 @@ export const api = {
     list: (token: string) =>
       request<UserProfile[]>("GET", "/users", undefined, token),
     create: (token: string, data: { email: string; role: string }) =>
-      request<UserProfile>("POST", "/users", data, token),
+      request<UserInviteResponse>("POST", "/users", data, token),
     setRole: (token: string, id: string, role: string) =>
       request<UserProfile>("PUT", `/users/${id}/role`, { role }, token),
     deactivate: (token: string, id: string) =>
@@ -176,6 +176,10 @@ export interface UserProfile {
   email: string;
   role: string;
   is_active: boolean;
+}
+
+export interface UserInviteResponse extends UserProfile {
+  invite_link?: string | null;
 }
 
 export interface ShortlistItem {
