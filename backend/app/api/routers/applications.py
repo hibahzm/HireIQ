@@ -18,6 +18,7 @@ from app.redis_client import get_redis
 from app.repositories.application_repository import ApplicationRepository
 from app.repositories.audit_log_repository import AuditLogRepository
 from app.repositories.candidate_repository import CandidateRepository
+from app.repositories.evaluation_repository import EvaluationRepository
 from app.schemas.applications import ApplicationResponse
 from app.services.notification_service import NotificationService
 from app.services.ocr_service import OcrService, OcrValidationError
@@ -40,6 +41,16 @@ ACCEPTED_CV_TYPES = {
     "image/png": ".png",
 }
 UNSUPPORTED_CV_MESSAGE = "Unsupported file type. Accepted: PDF, DOCX, JPG, PNG."
+
+
+async def _application_response(
+    session: AsyncSession,
+    application,
+) -> ApplicationResponse:
+    response = ApplicationResponse(**application.__dict__)
+    evaluation = await EvaluationRepository(session).get_by_application_id(application.id)
+    response.evaluation_id = evaluation.id if evaluation else None
+    return response
 
 
 @router.post("/jobs/{job_id}/applications", response_model=ApplicationResponse, status_code=201)
@@ -159,7 +170,7 @@ async def list_applications(
     apps = await ApplicationRepository(session).list_by_job(
         job_id, status_filter=status, page=page
     )
-    return [ApplicationResponse(**a.__dict__) for a in apps]
+    return [await _application_response(session, a) for a in apps]
 
 
 @router.get("/applications/{application_id}", response_model=ApplicationResponse)
@@ -171,7 +182,7 @@ async def get_application(
     app = await ApplicationRepository(session).get_by_id(application_id)
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
-    return ApplicationResponse(**app.__dict__)
+    return await _application_response(session, app)
 
 
 @router.post("/applications/{application_id}/invite", status_code=200)

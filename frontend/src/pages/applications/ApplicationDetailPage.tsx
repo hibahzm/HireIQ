@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../../services/api";
 import Button from "../../components/ui/Button";
 import { CopyIcon, ExternalLinkIcon } from "../../components/ui/icons";
@@ -7,6 +8,7 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
 
 interface ApplicationDetail {
   id: string;
+  job_id: string;
   candidate_id: string;
   cv_extraction_method: string | null;
   screening_score: number | null;
@@ -14,6 +16,7 @@ interface ApplicationDetail {
   screening_status: string;
   status: string;
   interview_token: string | null;
+  evaluation_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -35,6 +38,7 @@ interface Props {
 }
 
 export default function ApplicationDetailPage({ token, applicationId, onInvite }: Props) {
+  const navigate = useNavigate();
   const [app, setApp] = useState<ApplicationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -146,6 +150,17 @@ export default function ApplicationDetailPage({ token, applicationId, onInvite }
       </dl>
 
       {error && <p className="mt-4 text-sm text-red-600" role="alert">{error}</p>}
+
+      {app.evaluation_id && (
+        <div className="mt-6">
+          <Button
+            variant="secondary"
+            onClick={() => navigate(`/evaluations/${app.evaluation_id}`)}
+          >
+            View interview evaluation
+          </Button>
+        </div>
+      )}
 
       {app.status === "invited" ? (
         <div className="mt-6 rounded-lg border border-green-200 bg-green-50 p-4">

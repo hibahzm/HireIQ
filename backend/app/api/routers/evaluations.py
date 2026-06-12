@@ -170,7 +170,13 @@ async def get_turn_audio(
     if audio_bytes is None:
         raise HTTPException(status_code=404, detail="Audio not found in storage")
 
+    media_type = "audio/mpeg"
+    if blob_key.endswith(".wav"):
+        media_type = "audio/wav"
+    elif blob_key.endswith(".webm"):
+        media_type = "audio/webm"
+
     return StreamingResponse(
         iter([audio_bytes]),
-        media_type="audio/mpeg",
+        media_type=media_type,
     )

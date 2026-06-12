@@ -22,6 +22,7 @@ class ApplicationResponse(BaseModel):
     screening_status: str = "pending"
     interview_token: str | None = None
     interview_token_expires_at: datetime | None = None
+    evaluation_id: str | None = None
     status: str = "applied"
     created_at: datetime
     updated_at: datetime

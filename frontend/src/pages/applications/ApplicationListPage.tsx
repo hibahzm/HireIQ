@@ -224,6 +224,15 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
                         </a>
                       </div>
                     )}
+                    {app.evaluation_id && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => navigate(`/evaluations/${app.evaluation_id}`)}
+                      >
+                        View evaluation
+                      </Button>
+                    )}
                     {app.screening_status === "qualified" && app.status === "qualified" && (
                       <Button size="sm" variant="secondary" onClick={() => handleInvite(app.id)}>
                         Invite

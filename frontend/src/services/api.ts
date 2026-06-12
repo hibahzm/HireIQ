@@ -150,6 +150,7 @@ export interface Job {
 
 export interface Application {
   id: string;
+  job_id: string;
   candidate_id: string;
   screening_score: number | null;
   screening_rationale?: string | null;
@@ -157,6 +158,7 @@ export interface Application {
   status: string;
   interview_token?: string | null;
   interview_token_expires_at?: string | null;
+  evaluation_id?: string | null;
   created_at: string;
 }
 
