@@ -18,8 +18,8 @@ async def get_job_analytics(
     current_user: User = Depends(require_recruiter_or_admin),
     session: AsyncSession = Depends(get_authed_session),
 ):
-    """Per-job hiring-funnel analytics. Tenant-scoped via RLS; aggregates only."""
-    service = AnalyticsService(AnalyticsRepository(session))
+    """Per-job hiring-funnel analytics. Tenant-scoped explicitly + via RLS; aggregates only."""
+    service = AnalyticsService(AnalyticsRepository(session, current_user.company_id))
     try:
         return await service.get_job_analytics(job_id)
     except JobNotFoundError:
@@ -32,5 +32,5 @@ async def get_company_overview(
     session: AsyncSession = Depends(get_authed_session),
 ):
     """Company-wide KPIs for the current calendar month + the job list."""
-    service = AnalyticsService(AnalyticsRepository(session))
+    service = AnalyticsService(AnalyticsRepository(session, current_user.company_id))
     return await service.get_company_overview()

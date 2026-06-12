@@ -36,10 +36,15 @@ class ApplicationRepository:
         await self._session.flush()
         return app
 
-    async def get_by_id(self, application_id: str) -> Application | None:
-        result = await self._session.execute(
-            sa.select(Application).where(Application.id == application_id)
-        )
+    async def get_by_id(
+        self, application_id: str, company_id: str | None = None
+    ) -> Application | None:
+        # company_id: explicit tenant scoping in addition to RLS (a privileged
+        # DB role silently bypasses RLS policies).
+        q = sa.select(Application).where(Application.id == application_id)
+        if company_id:
+            q = q.where(Application.company_id == company_id)
+        result = await self._session.execute(q)
         return result.scalar_one_or_none()
 
     async def get_by_job_and_email(self, job_id: str, email: str) -> Application | None:

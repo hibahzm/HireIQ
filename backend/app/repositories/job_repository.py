@@ -38,10 +38,13 @@ class JobRepository:
         await self._session.flush()
         return job
 
-    async def get_by_id(self, job_id: str) -> Job | None:
-        result = await self._session.execute(
-            sa.select(Job).where(Job.id == job_id)
-        )
+    async def get_by_id(self, job_id: str, company_id: str | None = None) -> Job | None:
+        # Pass company_id from authenticated routes: explicit tenant scoping in
+        # addition to RLS (a privileged DB role silently bypasses RLS policies).
+        q = sa.select(Job).where(Job.id == job_id)
+        if company_id:
+            q = q.where(Job.company_id == company_id)
+        result = await self._session.execute(q)
         return result.scalar_one_or_none()
 
     async def list_by_company(self, company_id: str, status_filter: str | None = None) -> list[Job]:

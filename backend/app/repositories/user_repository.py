@@ -35,10 +35,13 @@ class UserRepository:
         await self._session.flush()
         return user
 
-    async def get_by_id(self, user_id: str) -> User | None:
-        result = await self._session.execute(
-            sa.select(User).where(User.id == user_id)
-        )
+    async def get_by_id(self, user_id: str, company_id: str | None = None) -> User | None:
+        # company_id: explicit tenant scoping in addition to RLS (a privileged
+        # DB role silently bypasses RLS policies).
+        q = sa.select(User).where(User.id == user_id)
+        if company_id:
+            q = q.where(User.company_id == company_id)
+        result = await self._session.execute(q)
         return result.scalar_one_or_none()
 
     @staticmethod

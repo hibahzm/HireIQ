@@ -16,19 +16,21 @@ _SCORE_BANDS = [
 class AnalyticsRepository:
     """
     All analytics aggregation SQL lives here (Clean Architecture / Principle III).
-    Every method runs on the caller's RLS-scoped session, so results are tenant-isolated
-    without any client-supplied company_id (Principle VI / FR-007).
+    Every query filters by the authenticated company_id explicitly (defense in
+    depth, Principle VI / FR-007) — RLS alone is not enough because a privileged
+    DB role (e.g. the dev Docker superuser) silently bypasses RLS policies.
     """
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, company_id: str) -> None:
         self._session = session
+        self._company_id = str(company_id)
 
     # ---- per-job (US1) ----------------------------------------------------
 
     async def job_exists(self, job_id: str) -> bool:
         result = await self._session.execute(
-            sa.text("SELECT 1 FROM jobs WHERE id = :job_id"),
-            {"job_id": job_id},
+            sa.text("SELECT 1 FROM jobs WHERE id = :job_id AND company_id = :cid"),
+            {"job_id": job_id, "cid": self._company_id},
         )
         return result.first() is not None
 
@@ -47,10 +49,10 @@ class AnalyticsRepository:
                     ON i.application_id = a.id AND i.completed_at IS NOT NULL
                 LEFT JOIN evaluations e
                     ON e.application_id = a.id
-                WHERE a.job_id = :job_id
+                WHERE a.job_id = :job_id AND a.company_id = :cid
                 """
             ),
-            {"job_id": job_id},
+            {"job_id": job_id, "cid": self._company_id},
         )
         row = result.mappings().one()
         return {k: int(row[k]) for k in ("received", "qualified", "interviewed", "evaluated")}
@@ -62,10 +64,10 @@ class AnalyticsRepository:
                 SELECT AVG(e.overall_score) AS avg_score
                 FROM evaluations e
                 JOIN applications a ON a.id = e.application_id
-                WHERE a.job_id = :job_id
+                WHERE a.job_id = :job_id AND a.company_id = :cid
                 """
             ),
-            {"job_id": job_id},
+            {"job_id": job_id, "cid": self._company_id},
         )
         avg = result.scalar_one_or_none()
         return float(avg) if avg is not None else None
@@ -83,13 +85,13 @@ class AnalyticsRepository:
                     SELECT CASE {case_sql} END AS band
                     FROM evaluations e
                     JOIN applications a ON a.id = e.application_id
-                    WHERE a.job_id = :job_id
+                    WHERE a.job_id = :job_id AND a.company_id = :cid
                 ) t
                 WHERE band IS NOT NULL
                 GROUP BY band
                 """
             ),
-            {"job_id": job_id},
+            {"job_id": job_id, "cid": self._company_id},
         )
         counts = {r["band"]: int(r["count"]) for r in result.mappings()}
         # Always return every band (0-filled) in fixed order.
@@ -110,12 +112,12 @@ class AnalyticsRepository:
                         ON s.entity_id = a.id AND s.event_type = 'cv.screening.started'
                     JOIN audit_logs c
                         ON c.entity_id = a.id AND c.event_type = 'cv.screening.completed'
-                    WHERE a.job_id = :job_id
+                    WHERE a.job_id = :job_id AND a.company_id = :cid
                     GROUP BY a.id
                 ) t
                 """
             ),
-            {"job_id": job_id},
+            {"job_id": job_id, "cid": self._company_id},
         )
         return self._percentiles(result)
 
@@ -134,11 +136,11 @@ class AnalyticsRepository:
                         ON i.application_id = a.id AND i.completed_at IS NOT NULL
                     JOIN evaluations e
                         ON e.application_id = a.id
-                    WHERE a.job_id = :job_id
+                    WHERE a.job_id = :job_id AND a.company_id = :cid
                 ) t
                 """
             ),
-            {"job_id": job_id},
+            {"job_id": job_id, "cid": self._company_id},
         )
         return self._percentiles(result)
 
@@ -153,9 +155,11 @@ class AnalyticsRepository:
                     COUNT(*) AS total,
                     COUNT(*) FILTER (WHERE screening_status = 'qualified') AS qualified
                 FROM applications
-                WHERE created_at >= date_trunc('month', now())
+                WHERE company_id = :cid
+                  AND created_at >= date_trunc('month', now())
                 """
-            )
+            ),
+            {"cid": self._company_id},
         )
         row = result.mappings().one()
         return {"total": int(row["total"]), "qualified": int(row["qualified"])}
@@ -167,9 +171,11 @@ class AnalyticsRepository:
                 SELECT AVG(e.overall_score) AS avg_score
                 FROM evaluations e
                 JOIN applications a ON a.id = e.application_id
-                WHERE a.created_at >= date_trunc('month', now())
+                WHERE a.company_id = :cid
+                  AND a.created_at >= date_trunc('month', now())
                 """
-            )
+            ),
+            {"cid": self._company_id},
         )
         avg = result.scalar_one_or_none()
         return float(avg) if avg is not None else None
@@ -177,8 +183,10 @@ class AnalyticsRepository:
     async def company_jobs(self) -> list[dict]:
         result = await self._session.execute(
             sa.text(
-                "SELECT id, title, status FROM jobs ORDER BY created_at DESC"
-            )
+                "SELECT id, title, status FROM jobs "
+                "WHERE company_id = :cid ORDER BY created_at DESC"
+            ),
+            {"cid": self._company_id},
         )
         return [
             {"id": str(r["id"]), "title": r["title"], "status": r["status"]}

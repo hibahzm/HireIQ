@@ -59,7 +59,7 @@ async def get_job(
     current_user: User = Depends(require_recruiter_or_admin),
     session: AsyncSession = Depends(get_authed_session),
 ):
-    job = await JobRepository(session).get_by_id(job_id)
+    job = await JobRepository(session).get_by_id(job_id, current_user.company_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return JobResponse(**job.__dict__)
@@ -82,7 +82,7 @@ async def update_job(
             updated_at=datetime.now(timezone.utc),
         )
     )
-    job = await JobRepository(session).get_by_id(job_id)
+    job = await JobRepository(session).get_by_id(job_id, current_user.company_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return JobResponse(**job.__dict__)
@@ -94,7 +94,7 @@ async def delete_job(
     current_user: User = Depends(require_admin),
     session: AsyncSession = Depends(get_authed_session),
 ):
-    job = await JobRepository(session).get_by_id(job_id)
+    job = await JobRepository(session).get_by_id(job_id, current_user.company_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -122,7 +122,7 @@ async def get_setup_conversation(
     session: AsyncSession = Depends(get_authed_session),
 ):
     """Return the persisted setup chat so an interrupted setup resumes where it stopped."""
-    job = await JobRepository(session).get_by_id(job_id)
+    job = await JobRepository(session).get_by_id(job_id, current_user.company_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 

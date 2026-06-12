@@ -87,10 +87,10 @@ async def list_evaluations(
     # RLS hides other tenants' jobs — unknown/foreign job ids 404 (SC-005).
     from app.repositories.job_repository import JobRepository
 
-    if not await JobRepository(session).get_by_id(job_id):
+    if not await JobRepository(session).get_by_id(job_id, current_user.company_id):
         raise HTTPException(status_code=404, detail="Job not found")
 
-    rows = await EvaluationRepository(session).list_by_job_ranked(job_id)
+    rows = await EvaluationRepository(session).list_by_job_ranked(job_id, current_user.company_id)
     return [
         ShortlistItem(
             evaluation_id=str(r["evaluation_id"]),
@@ -112,7 +112,7 @@ async def get_evaluation(
     session: AsyncSession = Depends(get_authed_session),
 ) -> EvaluationDetailResponse:
     repo = EvaluationRepository(session)
-    evaluation = await repo.get_by_id(evaluation_id)
+    evaluation = await repo.get_by_id(evaluation_id, current_user.company_id)
     if not evaluation:
         raise HTTPException(status_code=404, detail="Evaluation not found")
 
@@ -162,7 +162,9 @@ async def get_turn_audio(
     session: AsyncSession = Depends(get_authed_session),
 ) -> StreamingResponse:
     # Verify the evaluation belongs to this tenant
-    evaluation = await EvaluationRepository(session).get_by_id(evaluation_id)
+    evaluation = await EvaluationRepository(session).get_by_id(
+        evaluation_id, current_user.company_id
+    )
     if not evaluation:
         raise HTTPException(status_code=404, detail="Evaluation not found")
 

@@ -62,7 +62,7 @@ class JobService:
         actor_id: str,
     ) -> dict:
         job_repo = JobRepository(self._session)
-        job = await job_repo.get_by_id(job_id)
+        job = await job_repo.get_by_id(job_id, company_id)
         if not job:
             raise JobServiceError("job_not_found")
         if job.status not in ("draft", "setup", "setup_failed"):
@@ -188,7 +188,7 @@ class JobService:
 
     async def activate_job(self, *, job_id: str, company_id: str, actor_id: str) -> Job:
         job_repo = JobRepository(self._session)
-        job = await job_repo.get_by_id(job_id)
+        job = await job_repo.get_by_id(job_id, company_id)
         if not job:
             raise JobServiceError("job_not_found")
         if job.status not in ("setup", "setup_failed", "closed", "archived", "active"):
@@ -221,7 +221,7 @@ class JobService:
         criteria: dict,
     ) -> Job:
         job_repo = JobRepository(self._session)
-        job = await job_repo.get_by_id(job_id)
+        job = await job_repo.get_by_id(job_id, company_id)
         if not job:
             raise JobServiceError("job_not_found")
         if job.status not in ("draft", "setup", "setup_failed", "closed"):
@@ -251,7 +251,7 @@ class JobService:
 
     async def reopen_job(self, *, job_id: str, company_id: str, actor_id: str) -> Job:
         job_repo = JobRepository(self._session)
-        job = await job_repo.get_by_id(job_id)
+        job = await job_repo.get_by_id(job_id, company_id)
         if not job:
             raise JobServiceError("job_not_found")
         if job.status not in ("closed", "archived"):
@@ -300,7 +300,7 @@ class JobService:
         allowed_statuses: tuple[str, ...],
     ) -> Job:
         job_repo = JobRepository(self._session)
-        job = await job_repo.get_by_id(job_id)
+        job = await job_repo.get_by_id(job_id, company_id)
         if not job:
             raise JobServiceError("job_not_found")
         if job.status not in allowed_statuses:

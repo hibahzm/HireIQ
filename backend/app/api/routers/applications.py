@@ -182,7 +182,7 @@ async def list_applications(
     # empty 200 (SC-005: don't reveal that the job id exists).
     from app.repositories.job_repository import JobRepository
 
-    if not await JobRepository(session).get_by_id(job_id):
+    if not await JobRepository(session).get_by_id(job_id, current_user.company_id):
         raise HTTPException(status_code=404, detail="Job not found")
 
     apps = await ApplicationRepository(session).list_by_job(
@@ -197,7 +197,9 @@ async def get_application(
     current_user: User = Depends(require_recruiter_or_admin),
     session: AsyncSession = Depends(get_authed_session),
 ):
-    app = await ApplicationRepository(session).get_by_id(application_id)
+    app = await ApplicationRepository(session).get_by_id(
+        application_id, current_user.company_id
+    )
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
     return await _application_response(session, app)
@@ -211,7 +213,7 @@ async def invite_to_interview(
     redis_client: Redis = Depends(get_redis),
 ):
     repo = ApplicationRepository(session)
-    app = await repo.get_by_id(application_id)
+    app = await repo.get_by_id(application_id, current_user.company_id)
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
     if app.screening_status != "qualified":
@@ -259,7 +261,7 @@ async def rescreen_application(
 ):
     """Re-run the screening pipeline for an application stuck before it completed."""
     repo = ApplicationRepository(session)
-    app = await repo.get_by_id(application_id)
+    app = await repo.get_by_id(application_id, current_user.company_id)
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
     if app.screening_status not in ("pending", "failed"):

@@ -81,7 +81,7 @@ async def update_user_role(
         raise HTTPException(status_code=422, detail="Role must be admin or recruiter")
 
     repo = UserRepository(session)
-    target = await repo.get_by_id(user_id)
+    target = await repo.get_by_id(user_id, current_user.company_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     if (
@@ -108,7 +108,7 @@ async def deactivate_user(
     session: AsyncSession = Depends(get_authed_session),
 ):
     repo = UserRepository(session)
-    target = await repo.get_by_id(user_id)
+    target = await repo.get_by_id(user_id, current_user.company_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     if (

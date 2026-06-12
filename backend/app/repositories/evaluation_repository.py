@@ -47,10 +47,15 @@ class EvaluationRepository:
         await self._session.flush()
         return ev
 
-    async def get_by_id(self, evaluation_id: str) -> Evaluation | None:
-        result = await self._session.execute(
-            sa.select(Evaluation).where(Evaluation.id == evaluation_id)
-        )
+    async def get_by_id(
+        self, evaluation_id: str, company_id: str | None = None
+    ) -> Evaluation | None:
+        # company_id: explicit tenant scoping in addition to RLS (a privileged
+        # DB role silently bypasses RLS policies).
+        q = sa.select(Evaluation).where(Evaluation.id == evaluation_id)
+        if company_id:
+            q = q.where(Evaluation.company_id == company_id)
+        result = await self._session.execute(q)
         return result.scalar_one_or_none()
 
     async def get_by_application_id(self, application_id: str) -> Evaluation | None:
@@ -59,11 +64,17 @@ class EvaluationRepository:
         )
         return result.scalar_one_or_none()
 
-    async def list_by_job_ranked(self, job_id: str) -> list[dict[str, Any]]:
+    async def list_by_job_ranked(
+        self, job_id: str, company_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Return ranked shortlist for a job joined with candidate name."""
+        company_clause = "AND e.company_id = :cid" if company_id else ""
+        params: dict[str, Any] = {"job_id": job_id}
+        if company_id:
+            params["cid"] = str(company_id)
         result = await self._session.execute(
             sa.text(
-                """
+                f"""
                 SELECT
                     e.id            AS evaluation_id,
                     e.application_id,
@@ -75,11 +86,11 @@ class EvaluationRepository:
                 FROM evaluations e
                 JOIN applications a ON a.id = e.application_id
                 JOIN candidates c   ON c.id = a.candidate_id
-                WHERE a.job_id = :job_id
+                WHERE a.job_id = :job_id {company_clause}
                 ORDER BY e.overall_score DESC
                 """
             ),
-            {"job_id": job_id},
+            params,
         )
         return [dict(r) for r in result.mappings().all()]
 
