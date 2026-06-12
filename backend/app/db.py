@@ -28,10 +28,19 @@ def _get_engine():
     global _engine
     if _engine is None:
         settings = get_settings()
+        kwargs: dict = {}
+        if settings.ENV == "test":
+            # pytest-asyncio runs each test on a fresh event loop; pooled asyncpg
+            # connections are loop-bound and would leak (until Postgres
+            # max_connections) or error with "Event loop is closed" when reused.
+            from sqlalchemy.pool import NullPool
+
+            kwargs["poolclass"] = NullPool
         _engine = create_async_engine(
             settings.DATABASE_URL,
             echo=settings.ENV == "development",
             pool_pre_ping=True,
+            **kwargs,
         )
     return _engine
 

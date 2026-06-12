@@ -60,6 +60,9 @@ APP_URL = os.environ.get(
 # non-superuser role and in test mode. Set this *before* app modules import.
 os.environ["ENV"] = "test"
 os.environ["DATABASE_URL"] = APP_URL
+# backend/storage is often root-owned (created by the Docker volume) — store
+# test blobs somewhere always writable instead.
+os.environ.setdefault("STORAGE_LOCAL_PATH", "/tmp/hireiq-test-storage")
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -124,6 +127,15 @@ async def _truncate_all() -> None:
         tables = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
         if tables:
             async with engine.connect() as conn:
+                # Background tasks (fire-and-forget screening) abandoned when a
+                # test's event loop closed can leave transactions open; TRUNCATE
+                # would wait on their locks forever. Kill stragglers first.
+                await conn.execute(
+                    sa.text(
+                        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                        "WHERE datname = current_database() AND pid <> pg_backend_pid()"
+                    )
+                )
                 await conn.execute(sa.text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
     finally:
         await engine.dispose()
@@ -163,6 +175,46 @@ def _database():
 def _clean_tables(_database):
     asyncio.run(_truncate_all())
     yield
+
+
+async def _flush_rate_limits() -> None:
+    """The submission rate limit (5/IP/hr) lives in the shared dev Redis; every
+    test request comes from the same ASGI test client "IP", so leftover counters
+    from previous tests/runs would 429 unrelated tests."""
+    import redis.asyncio as aioredis
+
+    client = aioredis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
+    try:
+        keys = [key async for key in client.scan_iter("ratelimit:cv:*")]
+        if keys:
+            await client.delete(*keys)
+    except Exception:
+        pass  # Redis optional in some environments
+    finally:
+        await client.aclose()
+
+
+@pytest.fixture(autouse=True)
+def _clean_rate_limits(_database):
+    asyncio.run(_flush_rate_limits())
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_async_singletons(_database):
+    """
+    The app's DB engine and Redis client are module singletons whose pooled
+    connections are bound to the event loop they were created on. pytest-asyncio
+    gives every test a fresh loop, so a singleton leaking across tests produces
+    'RuntimeError: Event loop is closed' 500s in later tests.
+    """
+    yield
+    import app.db as db
+    from app import redis_client
+
+    db._engine = None
+    db._session_factory = None
+    redis_client._redis = None
 
 
 # ── App + seed fixtures ─────────────────────────────────────────────────────
@@ -224,10 +276,12 @@ async def _seed_active_job(company_id: str, created_by: str) -> str:
     engine = create_async_engine(ADMIN_URL, isolation_level="AUTOCOMMIT")
     try:
         async with engine.connect() as conn:
+            # streaming_interview=false: these fixtures exercise the turn-based
+            # contract; the streaming tests opt in via monkeypatched sessions.
             await conn.execute(
                 sa.text(
-                    "INSERT INTO jobs (id, company_id, title, status, created_by) "
-                    "VALUES (:id, :cid, :title, 'active', :cb)"
+                    "INSERT INTO jobs (id, company_id, title, status, created_by, streaming_interview) "
+                    "VALUES (:id, :cid, :title, 'active', :cb, false)"
                 ),
                 {"id": job_id, "cid": company_id, "title": "Senior Backend Engineer", "cb": created_by},
             )
