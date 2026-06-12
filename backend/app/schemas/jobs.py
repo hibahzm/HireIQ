@@ -35,6 +35,15 @@ class SetupTurnResponse(BaseModel):
     job_status: str | None = None
 
 
+class SetupConversationResponse(BaseModel):
+    """Persisted setup chat so the recruiter can resume after closing the tab."""
+
+    messages: list[dict[str, Any]] = Field(default_factory=list)
+    status: str = "in_progress"  # conversation: in_progress | completed | failed
+    job_status: str
+    criteria: dict[str, Any] | None = None
+
+
 class JobCriteriaRequest(BaseModel):
     required_skills: list[dict[str, Any]] = Field(default_factory=list)
     optional_skills: list[dict[str, Any]] = Field(default_factory=list)

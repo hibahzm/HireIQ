@@ -36,11 +36,44 @@ export default function JobSetupPage({ token, jobId, onActivated }: Props) {
 }`);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Kick off the first AI turn on mount. The backend seeds this turn with the
-  // recruiter-provided job description, so the assistant opens by reflecting
-  // what it already extracted and asking only about gaps.
+  // Restore a previously started setup chat (closing the tab mid-setup loses
+  // nothing — the conversation is persisted server-side). Only when no prior
+  // conversation exists do we kick off the first AI turn, which the backend
+  // seeds with the recruiter-provided job description.
   useEffect(() => {
-    sendTurn("");
+    let cancelled = false;
+    (async () => {
+      try {
+        const conv = await api.jobs.setupConversation(token, jobId);
+        if (cancelled) return;
+        const restored = conv.messages.filter(
+          (m) =>
+            !(m.role === "user" && m.content.startsWith("Here is the job description for this role."))
+        );
+        if (restored.length) setMessages(restored);
+        if (conv.criteria) setCriteriaDraft(conv.criteria);
+        if (conv.job_status === "active") {
+          setStatus("activated");
+          return;
+        }
+        if (conv.status === "completed" && conv.criteria) {
+          setStatus("completed");
+          return;
+        }
+        if (conv.status === "failed") {
+          setStatus("failed");
+          return;
+        }
+        if (!conv.messages.length) {
+          await sendTurn("");
+        }
+      } catch {
+        if (!cancelled) await sendTurn("");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

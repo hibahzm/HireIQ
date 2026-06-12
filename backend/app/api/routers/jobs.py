@@ -11,10 +11,12 @@ from app.models.application import Application
 from app.models.job import Job as JobModel
 from app.models.user import User
 from app.repositories.job_repository import JobRepository
+from app.repositories.setup_conversation_repository import SetupConversationRepository
 from app.schemas.jobs import (
     CreateJobRequest,
     JobCriteriaRequest,
     JobResponse,
+    SetupConversationResponse,
     SetupTurnRequest,
     SetupTurnResponse,
 )
@@ -111,6 +113,44 @@ async def delete_job(
         )
 
     await session.execute(sa.delete(JobModel).where(JobModel.id == job_id))
+
+
+@router.get("/{job_id}/setup/conversation", response_model=SetupConversationResponse)
+async def get_setup_conversation(
+    job_id: str,
+    current_user: User = Depends(require_recruiter_or_admin),
+    session: AsyncSession = Depends(get_authed_session),
+):
+    """Return the persisted setup chat so an interrupted setup resumes where it stopped."""
+    job = await JobRepository(session).get_by_id(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    conv = await SetupConversationRepository(session).get_by_job_id(job_id)
+
+    from app.models.job_criteria import JobCriteria
+
+    criteria_row = (
+        await session.execute(sa.select(JobCriteria).where(JobCriteria.job_id == job_id))
+    ).scalar_one_or_none()
+    criteria = None
+    if criteria_row:
+        criteria = {
+            "required_skills": criteria_row.required_skills,
+            "optional_skills": criteria_row.optional_skills,
+            "experience_level": criteria_row.experience_level,
+            "min_years_experience": criteria_row.min_years_experience,
+            "evaluation_dimensions": criteria_row.evaluation_dimensions,
+            "dealbreakers": criteria_row.dealbreakers,
+            "min_screening_score": criteria_row.min_screening_score,
+        }
+
+    return SetupConversationResponse(
+        messages=list(conv.messages) if conv else [],
+        status=conv.status if conv else "in_progress",
+        job_status=job.status,
+        criteria=criteria,
+    )
 
 
 @router.post("/{job_id}/setup/turn", response_model=SetupTurnResponse)

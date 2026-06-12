@@ -13,6 +13,12 @@ class SetupConversationRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def get_by_job_id(self, job_id: str) -> SetupConversation | None:
+        result = await self._session.execute(
+            sa.select(SetupConversation).where(SetupConversation.job_id == job_id)
+        )
+        return result.scalar_one_or_none()
+
     async def get_or_create(self, *, job_id: str, company_id: str) -> SetupConversation:
         result = await self._session.execute(
             sa.select(SetupConversation).where(SetupConversation.job_id == job_id)
