@@ -47,7 +47,9 @@ async def _application_response(
     session: AsyncSession,
     application,
 ) -> ApplicationResponse:
-    response = ApplicationResponse(**application.__dict__)
+    response = ApplicationResponse(
+        **{key: value for key, value in application.__dict__.items() if not key.startswith("_")}
+    )
     evaluation = await EvaluationRepository(session).get_by_application_id(application.id)
     response.evaluation_id = evaluation.id if evaluation else None
     return response
@@ -130,7 +132,7 @@ async def submit_application(
             )
             application = await app_repo.create(
                 job_id=job_id,
-                candidate_id=candidate.id,
+                candidate_id=str(candidate.id),
                 company_id=company_id,
                 cv_blob_key=blob_key,
             )
@@ -143,12 +145,12 @@ async def submit_application(
                 company_id=company_id,
             )
 
-            response_data = ApplicationResponse(**application.__dict__)
+            response_data = await _application_response(session, application)
 
     # 6. Fire-and-forget screening (owns its own session)
     asyncio.create_task(
         run_screening_background(
-            application_id=application.id,
+            application_id=response_data.id,
             company_id=company_id,
             job_id=job_id,
             job_title=str(job_row["title"]),

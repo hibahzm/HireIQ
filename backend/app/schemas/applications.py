@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class ApplicationResponse(BaseModel):
@@ -26,3 +27,18 @@ class ApplicationResponse(BaseModel):
     status: str = "applied"
     created_at: datetime
     updated_at: datetime
+
+    @field_validator(
+        "id",
+        "job_id",
+        "candidate_id",
+        "company_id",
+        "interview_token",
+        "evaluation_id",
+        mode="before",
+    )
+    @classmethod
+    def _uuid_to_str(cls, value):
+        if isinstance(value, UUID):
+            return str(value)
+        return value
