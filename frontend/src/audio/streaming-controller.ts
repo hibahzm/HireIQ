@@ -12,7 +12,14 @@ import type { InterviewWebSocket } from "../services/interview-ws";
 
 const TARGET_RATE = 16000;
 const START_OF_SPEECH_MS = 300;
-const END_OF_SPEECH_SILENCE_MS = 1500;
+// Candidates pause to think mid-answer — ending the turn needs a generous
+// sustained silence, and even more so early in the answer (people often start
+// with a short phrase, then gather their thoughts).
+const END_OF_SPEECH_SILENCE_MS = 2200;
+const EARLY_UTTERANCE_MS = 6000; // "early" = first 6s of an answer
+const EARLY_END_SILENCE_MS = 3000; // require longer silence while early
+// Don't even consider ending before the candidate has spoken this long.
+const MIN_UTTERANCE_MS = 1200;
 // Hard cap per utterance: even if constant background noise keeps every frame
 // above the speech threshold, the turn still finalizes and the candidate gets
 // a response instead of the interviewer "listening" forever.
@@ -21,6 +28,9 @@ const POST_PLAYBACK_GRACE_MS = 700;
 const PRE_ROLL_MS = 700;
 const MIN_ENERGY_SPEECH_THRESHOLD = 0.012;
 const NOISE_MULTIPLIER = 3.5;
+// Hysteresis: once the candidate is speaking, quiet trailing words still count
+// as speech (threshold drops to this fraction), so soft speech isn't clipped.
+const ACTIVE_THRESHOLD_RATIO = 0.6;
 const PLAYBACK_COMPLETE_FALLBACK_MS = 30000;
 const CAPTURE_PROCESSOR_NAME = "capture-processor";
 const CAPTURE_WORKLET_SOURCE = `
@@ -69,6 +79,7 @@ export class StreamingController {
   private pending: ArrayBuffer[] = [];
   private playbackEnding = false;
   private playbackCompleteTimer: number | null = null;
+  private lastFallbackPosition = -1;
   private playbackEndedHandler: (() => void) | null = null;
 
   constructor(
@@ -165,7 +176,10 @@ export class StreamingController {
       } else {
         this.silenceMs += frameMs;
       }
-      if (this.silenceMs >= END_OF_SPEECH_SILENCE_MS || this.utteranceMs >= MAX_UTTERANCE_MS) {
+      const requiredSilence =
+        this.utteranceMs < EARLY_UTTERANCE_MS ? EARLY_END_SILENCE_MS : END_OF_SPEECH_SILENCE_MS;
+      const canEnd = this.utteranceMs >= MIN_UTTERANCE_MS && this.silenceMs >= requiredSilence;
+      if (canEnd || this.utteranceMs >= MAX_UTTERANCE_MS) {
         this.handleEndOfSpeech();
       }
       return;
@@ -194,7 +208,10 @@ export class StreamingController {
       sumSquares += samples[i] * samples[i];
     }
     const rms = Math.sqrt(sumSquares / Math.max(1, samples.length));
-    const threshold = Math.max(MIN_ENERGY_SPEECH_THRESHOLD, this.noiseFloor * NOISE_MULTIPLIER);
+    let threshold = Math.max(MIN_ENERGY_SPEECH_THRESHOLD, this.noiseFloor * NOISE_MULTIPLIER);
+    if (this.utteranceActive) {
+      threshold *= ACTIVE_THRESHOLD_RATIO; // hysteresis — keep soft trailing speech
+    }
     const speech = rms >= threshold;
 
     if (!speech) {
@@ -241,6 +258,7 @@ export class StreamingController {
     this.speaking = true;
     this.resetUtteranceState();
     this.clearPlaybackCompletionWait();
+    this.lastFallbackPosition = -1;
     this.pending = [];
     this.playbackEnding = false;
     this.sourceBuffer = null;
@@ -314,9 +332,26 @@ export class StreamingController {
   private startPlaybackFallback(): void {
     if (this.playbackCompleteTimer !== null) return;
     this.playbackCompleteTimer = window.setTimeout(
-      () => this.completePlayback(),
+      () => this.onPlaybackFallback(),
       PLAYBACK_COMPLETE_FALLBACK_MS,
     );
+  }
+
+  private onPlaybackFallback(): void {
+    this.playbackCompleteTimer = null;
+    // The fallback exists for *stuck* playback. If the AI is still genuinely
+    // speaking (long answer — currentTime advancing), completing now would
+    // reopen the mic and let it hear its own voice — re-arm instead and let
+    // the 'ended' event finish the turn.
+    const el = this.audioEl;
+    const progressing =
+      !el.paused && !el.ended && el.readyState > 0 && el.currentTime > this.lastFallbackPosition;
+    this.lastFallbackPosition = el.currentTime;
+    if (progressing) {
+      this.startPlaybackFallback();
+      return;
+    }
+    this.completePlayback();
   }
 
   private clearPlaybackCompletionWait(): void {

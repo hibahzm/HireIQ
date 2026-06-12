@@ -22,6 +22,8 @@ class InterviewTurnRequest(BaseModel):
     turn_count: int
     max_turns: int
     job_criteria: dict[str, Any]
+    company_overview: str | None = None
+    candidate_cv: str | None = None
 
 
 class InterviewTurnResponse(BaseModel):
@@ -47,6 +49,8 @@ async def interview_turn(body: InterviewTurnRequest) -> InterviewTurnResponse:
         "turn_count": body.turn_count,
         "max_turns": body.max_turns,
         "job_criteria": body.job_criteria,
+        "company_overview": body.company_overview,
+        "candidate_cv": body.candidate_cv,
         "ai_response": "",
         "session_complete": False,
         "guardrail_triggered": False,

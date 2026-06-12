@@ -27,6 +27,7 @@ export default function InterviewRoomPage({ token }: Props) {
   const [sessionId, setSessionId] = useState("");
   const [turnCount, setTurnCount] = useState(0);
   const [maxTurns, setMaxTurns] = useState(20);
+  const [showTranscript, setShowTranscript] = useState(false);
   const wsRef = useRef<InterviewWebSocket | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -174,7 +175,7 @@ export default function InterviewRoomPage({ token }: Props) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, showTranscript]);
 
   function addMessage(speaker: "candidate" | "ai" | "system", text: string) {
     setMessages((prev) => [...prev, { speaker, text }]);
@@ -394,6 +395,12 @@ export default function InterviewRoomPage({ token }: Props) {
 
   const progress = maxTurns > 0 ? Math.min((turnCount / maxTurns) * 100, 100) : 0;
 
+  // Voice-first view: surface only Sila's latest line as a subtitle, plus the
+  // most recent system notice (if it is the newest message).
+  const lastAiText = [...messages].reverse().find((m) => m.speaker === "ai")?.text ?? "";
+  const lastMessage = messages[messages.length - 1];
+  const lastSystemText = lastMessage?.speaker === "system" ? lastMessage.text : null;
+
   return (
     <div className="flex h-screen flex-col bg-gradient-to-b from-primary-600 via-primary-700 to-primary-800">
       {/* Header: brand + turn progress */}
@@ -420,117 +427,145 @@ export default function InterviewRoomPage({ token }: Props) {
         />
       </div>
 
-      {/* AI interviewer stage */}
-      <div className="flex flex-col items-center px-4 pb-4 pt-5">
-        <AiAvatar state={avatarState} size={110} />
-        <div className="mt-2 flex items-center gap-2 text-sm text-primary-100" aria-live="polite">
+      <audio ref={audioRef} className="hidden" />
+
+      {/* Voice-first stage: Sila is the focus; her words appear as subtitles. */}
+      <main className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-4">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/4 left-1/2 h-72 w-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-500/15 blur-3xl"
+        />
+        <div className="animate-scale-in">
+          <AiAvatar state={avatarState} size={160} />
+        </div>
+        <div className="mt-4 flex items-center gap-2 text-sm text-primary-100" aria-live="polite">
           <span className={`h-2 w-2 rounded-full ${streamingDotClass} animate-pulse`} />
           {status === "connecting" ? "Connecting to interview session…" : streamingStatusText}
         </div>
-      </div>
 
-      <audio ref={audioRef} className="hidden" />
-
-      {/* Conversation panel */}
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col overflow-hidden rounded-t-3xl bg-canvas shadow-2xl">
-        <div className="flex-1 space-y-3 overflow-y-auto p-4 sm:p-6">
-          {status === "connecting" && (
-            <div className="py-8 text-center text-sm text-primary-400 animate-pulse">
-              Connecting to interview session…
-            </div>
-          )}
-          {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={`flex animate-fade-in-up items-end gap-2 ${
-                msg.speaker === "candidate"
-                  ? "justify-end"
-                  : msg.speaker === "system"
-                    ? "justify-center"
-                    : "justify-start"
-              }`}
+        {/* Subtitles: the current question/remark, so candidates can re-read it */}
+        <div className="mt-6 min-h-[5rem] w-full max-w-xl text-center" aria-live="polite">
+          {lastAiText && (
+            <p
+              key={lastAiText}
+              className="animate-fade-in-up text-lg font-medium leading-relaxed text-white"
             >
-              {msg.speaker === "ai" && (
-                <span className="mb-0.5 shrink-0">
-                  <AiAvatar state="idle" size={30} />
-                </span>
-              )}
-              <div
-                className={`max-w-xs rounded-2xl px-4 py-2.5 text-sm lg:max-w-md ${
-                  msg.speaker === "candidate"
-                    ? "rounded-br-md bg-brand-600 text-white shadow-sm"
-                    : msg.speaker === "system"
-                      ? "bg-amber-50 text-xs italic text-amber-800 ring-1 ring-amber-200"
-                      : "rounded-bl-md bg-white text-primary-700 shadow-card ring-1 ring-primary-100"
-                }`}
-              >
-                {msg.text}
-              </div>
-            </div>
-          ))}
-          {processing && (
-            <div className="flex animate-fade-in items-end gap-2">
-              <span className="mb-0.5 shrink-0">
-                <AiAvatar state="thinking" size={30} />
-              </span>
-              <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-md bg-white px-4 py-3 shadow-card ring-1 ring-primary-100">
-                {[0, 150, 300].map((delay) => (
-                  <span
-                    key={delay}
-                    className="h-1.5 w-1.5 animate-dot-bounce rounded-full bg-primary-400"
-                    style={{ animationDelay: `${delay}ms` }}
-                  />
-                ))}
-              </div>
-            </div>
+              {lastAiText}
+            </p>
           )}
-          <div ref={bottomRef} />
+          {lastSystemText && (
+            <p className="mx-auto mt-3 max-w-md animate-fade-in rounded-full bg-amber-500/15 px-4 py-1.5 text-xs italic text-amber-200 ring-1 ring-amber-400/30">
+              {lastSystemText}
+            </p>
+          )}
         </div>
+      </main>
 
-        {status === "ready" && (
-          <div className="border-t border-primary-100 bg-surface p-4">
-            {audioBlocked && (
-              <div className="mb-2 flex justify-center">
-                <button
-                  onClick={handleEnableAudio}
-                  className="text-xs font-medium text-brand-600 hover:text-brand-700 cursor-pointer"
-                >
-                  Enable audio
-                </button>
-              </div>
-            )}
+      {/* Bottom controls */}
+      <div className="flex flex-col items-center gap-3 px-4 pb-5">
+        {audioBlocked && status === "ready" && (
+          <button
+            onClick={handleEnableAudio}
+            className="rounded-full bg-white/10 px-5 py-2 text-xs font-semibold text-white ring-1 ring-white/25 transition-colors duration-150 hover:bg-white/20 cursor-pointer"
+          >
+            Enable audio to hear Sila
+          </button>
+        )}
 
-            {streamingMode ? (
-              <div className="flex justify-center" aria-live="polite">
-                <div className="flex items-center gap-2 rounded-full bg-primary-50 px-6 py-3 text-sm text-primary-600 ring-1 ring-primary-100">
-                  <span className={`h-2.5 w-2.5 ${streamingDotClass} animate-pulse rounded-full`} />
-                  {streamingStatusText}
-                </div>
-              </div>
+        {status === "ready" && !streamingMode && (
+          <div className="flex justify-center">
+            {isRecording ? (
+              <button
+                onClick={handleStopRecording}
+                className="flex items-center gap-2 rounded-full bg-red-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-red-600/25 transition-all duration-150 hover:bg-red-700 active:scale-[0.97] cursor-pointer"
+              >
+                <span className="h-3 w-3 animate-pulse rounded-full bg-white" />
+                Stop recording
+              </button>
             ) : (
-              <div className="flex justify-center">
-                {isRecording ? (
-                  <button
-                    onClick={handleStopRecording}
-                    className="flex items-center gap-2 rounded-full bg-red-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-red-600/25 transition-all duration-150 hover:bg-red-700 active:scale-[0.97] cursor-pointer"
-                  >
-                    <span className="h-3 w-3 animate-pulse rounded-full bg-white" />
-                    Stop recording
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleStartRecording}
-                    disabled={processing}
-                    className="rounded-full bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-600/25 transition-all duration-150 hover:bg-brand-700 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 cursor-pointer"
-                  >
-                    Start recording
-                  </button>
-                )}
-              </div>
+              <button
+                onClick={handleStartRecording}
+                disabled={processing}
+                className="rounded-full bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-600/25 transition-all duration-150 hover:bg-brand-700 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 cursor-pointer"
+              >
+                Start recording
+              </button>
             )}
           </div>
         )}
+
+        <button
+          onClick={() => setShowTranscript((v) => !v)}
+          aria-expanded={showTranscript}
+          className="text-xs font-medium text-primary-200 underline-offset-4 transition-colors duration-150 hover:text-white hover:underline cursor-pointer"
+        >
+          {showTranscript ? "Hide transcript" : "Show transcript"}
+        </button>
       </div>
+
+      {/* Collapsible transcript (accessibility + re-reading past turns) */}
+      {showTranscript && (
+        <div className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-h-[55vh] w-full max-w-2xl animate-fade-in-up flex-col overflow-hidden rounded-t-3xl bg-canvas shadow-2xl">
+          <div className="flex items-center justify-between border-b border-primary-100 px-5 py-3">
+            <span className="text-sm font-semibold text-primary-800">Transcript</span>
+            <button
+              onClick={() => setShowTranscript(false)}
+              aria-label="Close transcript"
+              className="rounded-full px-2 py-1 text-sm text-primary-400 transition-colors duration-150 hover:bg-primary-50 hover:text-primary-700 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="flex-1 space-y-3 overflow-y-auto p-4 sm:p-6">
+            {messages.map((msg, i) => (
+              <div
+                key={i}
+                className={`flex animate-fade-in-up items-end gap-2 ${
+                  msg.speaker === "candidate"
+                    ? "justify-end"
+                    : msg.speaker === "system"
+                      ? "justify-center"
+                      : "justify-start"
+                }`}
+              >
+                {msg.speaker === "ai" && (
+                  <span className="mb-0.5 shrink-0">
+                    <AiAvatar state="idle" size={30} />
+                  </span>
+                )}
+                <div
+                  className={`max-w-xs rounded-2xl px-4 py-2.5 text-sm lg:max-w-md ${
+                    msg.speaker === "candidate"
+                      ? "rounded-br-md bg-brand-600 text-white shadow-sm"
+                      : msg.speaker === "system"
+                        ? "bg-amber-50 text-xs italic text-amber-800 ring-1 ring-amber-200"
+                        : "rounded-bl-md bg-white text-primary-700 shadow-card ring-1 ring-primary-100"
+                  }`}
+                >
+                  {msg.text}
+                </div>
+              </div>
+            ))}
+            {processing && (
+              <div className="flex animate-fade-in items-end gap-2">
+                <span className="mb-0.5 shrink-0">
+                  <AiAvatar state="thinking" size={30} />
+                </span>
+                <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-md bg-white px-4 py-3 shadow-card ring-1 ring-primary-100">
+                  {[0, 150, 300].map((delay) => (
+                    <span
+                      key={delay}
+                      className="h-1.5 w-1.5 animate-dot-bounce rounded-full bg-primary-400"
+                      style={{ animationDelay: `${delay}ms` }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            <div ref={bottomRef} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

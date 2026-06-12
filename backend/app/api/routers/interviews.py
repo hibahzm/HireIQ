@@ -70,6 +70,18 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                     "min_screening_score": criteria_model.min_screening_score,
                 }
 
+            # Sila answers candidate questions about the company from this blurb only.
+            company_overview = (
+                await session.execute(
+                    sa.text("SELECT overview FROM companies WHERE id = :cid"),
+                    {"cid": str(company_id)},
+                )
+            ).scalar_one_or_none()
+
+            # CV extracted during screening — lets Sila ground questions in the
+            # candidate's actual experience instead of asking generically.
+            candidate_cv = (application.cv_text or "")[:2500] or None
+
             if current_turn_count >= max_turns and interview_status != "completed":
                 await session_repo.update_status(session_id, "completed")
                 interview_status = "completed"
@@ -287,6 +299,8 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                                 candidate_text=candidate_text,
                                 candidate_pcm=captured_pcm,
                                 job_criteria=job_criteria,
+                                company_overview=company_overview,
+                                candidate_cv=candidate_cv,
                                 max_turns=max_turns,
                                 current_turn_count=current_turn_count,
                             )
@@ -344,6 +358,8 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                             audio_bytes=audio_bytes,
                             mode=mode,
                             job_criteria=job_criteria,
+                            company_overview=company_overview,
+                            candidate_cv=candidate_cv,
                             max_turns=max_turns,
                             current_turn_count=current_turn_count,
                         )

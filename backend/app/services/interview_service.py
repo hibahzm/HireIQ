@@ -217,6 +217,8 @@ class InterviewService:
         audio_bytes: bytes | None = None,
         mode: str = "text",
         job_criteria: dict,
+        company_overview: str | None = None,
+        candidate_cv: str | None = None,
         max_turns: int | None = None,
         current_turn_count: int | None = None,
     ) -> dict:
@@ -306,6 +308,8 @@ class InterviewService:
             "turn_count": state_turn_count,
             "max_turns": effective_max_turns,
             "job_criteria": job_criteria,
+            "company_overview": company_overview,
+            "candidate_cv": candidate_cv,
         })
 
         try:
@@ -418,6 +422,8 @@ class InterviewService:
         candidate_text: str,
         candidate_pcm: bytes | None,
         job_criteria: dict,
+        company_overview: str | None = None,
+        candidate_cv: str | None = None,
         max_turns: int | None = None,
         current_turn_count: int | None = None,
     ) -> dict:
@@ -437,18 +443,37 @@ class InterviewService:
         state_turn_count = self._effective_turn_count(state.get("turn_count"), current_turn_count)
 
         # Assemble + store the candidate's streamed audio so audio_blob_key has parity
-        # with the turn-based path (FR-006 / SC-003).
+        # with the turn-based path (FR-006 / SC-003). The upload runs concurrently
+        # with the agent call below — it's not on the critical path to the AI reply.
+        import asyncio
+
         audio_key = None
+        upload_task: asyncio.Task | None = None
         if candidate_pcm:
             audio_key = f"interviews/{session_id}/{str(uuid.uuid4())}.wav"
-            await self._storage.upload(audio_key, self._pcm_to_wav(candidate_pcm))
+            upload_task = asyncio.create_task(
+                self._storage.upload(audio_key, self._pcm_to_wav(candidate_pcm))
+            )
 
         history = await self._conversation_history(message_repo, session_id, state)
         history.append({"role": "user", "content": candidate_text})
 
         await session_repo.update_status(session_id, "in_progress")
 
+        async def _finish_upload() -> None:
+            nonlocal audio_key
+            if upload_task is None:
+                return
+            try:
+                await upload_task
+            except Exception as exc:
+                logger.warning(
+                    "interview.audio_upload_failed", session_id=session_id, error=str(exc)
+                )
+                audio_key = None
+
         if self._candidate_wants_to_stop(candidate_text):
+            await _finish_upload()
             return await self._complete_at_candidate_request(
                 session_id=session_id,
                 company_id=company_id,
@@ -474,6 +499,8 @@ class InterviewService:
             "turn_count": state_turn_count,
             "max_turns": effective_max_turns,
             "job_criteria": job_criteria,
+            "company_overview": company_overview,
+            "candidate_cv": candidate_cv,
         })
 
         try:
@@ -487,6 +514,7 @@ class InterviewService:
             agent_result = resp.json()
         except Exception as exc:
             logger.error("interview.agents_call_failed", session_id=session_id, error=str(exc))
+            await _finish_upload()
             await self.handle_system_interrupt(session_id)
             raise
         await record_usage_events(
@@ -495,6 +523,7 @@ class InterviewService:
             events=agent_result.get("usage_events"),
             metadata={"session_id": session_id, "mode": "streaming"},
         )
+        await _finish_upload()
 
         ai_text = agent_result["ai_response"]
         guardrail_triggered = agent_result.get("guardrail_triggered", False)
