@@ -64,6 +64,17 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
     setTimeout(() => setCopiedId((c) => (c === jobId ? null : c)), 1500);
   }
 
+  function jobActionError(err: unknown, fallback: string) {
+    if (!(err instanceof ApiError)) return fallback;
+    if (err.message === "criteria_not_set") {
+      return "Complete setup or save criteria before activating this job.";
+    }
+    if (err.message.startsWith("cannot_transition_from_")) {
+      return "This job cannot move to that status from its current state.";
+    }
+    return err.message;
+  }
+
   async function runJobAction(jobId: string, action: () => Promise<Job>, message: string) {
     setActingId(jobId);
     setError(null);
@@ -71,7 +82,7 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
       const updated = await action();
       setJobs((prev) => prev.map((job) => (job.id === jobId ? updated : job)));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : message);
+      setError(jobActionError(err, message));
     } finally {
       setActingId(null);
     }
@@ -250,6 +261,22 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
                           Setup
                         </Button>
                       )}
+                      {(job.status === "setup" || job.status === "setup_failed") && (
+                        <Button
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700"
+                          loading={actingId === job.id}
+                          onClick={() =>
+                            runJobAction(
+                              job.id,
+                              () => api.jobs.activate(token, job.id),
+                              "Failed to activate job",
+                            )
+                          }
+                        >
+                          Activate
+                        </Button>
+                      )}
                       {job.status === "active" && (
                         <Button
                           size="sm"
@@ -266,7 +293,7 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
                           Close
                         </Button>
                       )}
-                      {job.status === "closed" && (
+                      {(job.status === "closed" || job.status === "archived") && (
                         <Button
                           size="sm"
                           variant="secondary"
@@ -279,10 +306,10 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
                             )
                           }
                         >
-                          Reopen
+                          {job.status === "archived" ? "Restore" : "Reopen"}
                         </Button>
                       )}
-                      {["draft", "setup", "setup_failed", "closed"].includes(job.status) && (
+                      {job.status !== "archived" && (
                         <Button
                           size="sm"
                           variant="ghost"

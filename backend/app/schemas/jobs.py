@@ -32,6 +32,7 @@ class SetupTurnResponse(BaseModel):
     message: str
     status: str
     criteria_draft: dict[str, Any] | None = None
+    job_status: str | None = None
 
 
 class JobCriteriaRequest(BaseModel):

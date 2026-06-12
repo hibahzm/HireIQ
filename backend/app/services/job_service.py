@@ -130,13 +130,34 @@ class JobService:
             await conv_repo.append_message(conv.id, "user", effective_user_message)
         await conv_repo.append_message(conv.id, "assistant", agent_response["message"])
 
+        job_status = "setup"
         if agent_response["status"] == "completed":
-            await conv_repo.complete(conv.id)
             criteria = agent_response.get("criteria_draft")
             if criteria:
+                await conv_repo.complete(conv.id)
                 await self._upsert_criteria(job_id, company_id, criteria)
+                activated = await self.activate_job(
+                    job_id=job_id,
+                    company_id=company_id,
+                    actor_id=actor_id,
+                )
+                job_status = activated.status
+            else:
+                message = (
+                    "The setup assistant finished without producing criteria. "
+                    "Please retry setup or enter criteria manually."
+                )
+                await job_repo.update_status(job_id, "setup_failed")
+                await conv_repo.fail(conv.id, message)
+                return {
+                    **agent_response,
+                    "message": message,
+                    "status": "failed",
+                    "criteria_draft": None,
+                    "job_status": "setup_failed",
+                }
 
-        return agent_response
+        return {**agent_response, "job_status": job_status}
 
     async def _upsert_criteria(self, job_id: str, company_id: str, criteria: dict) -> None:
         """Persist the agent's extracted criteria into job_criteria so the job can activate."""
@@ -170,17 +191,13 @@ class JobService:
         job = await job_repo.get_by_id(job_id)
         if not job:
             raise JobServiceError("job_not_found")
-        if job.status not in ("setup", "setup_failed", "closed"):
+        if job.status not in ("setup", "setup_failed", "closed", "archived", "active"):
             raise JobServiceError("job_must_be_in_setup_status")
 
-        # Verify criteria exist
-        from app.models.job_criteria import JobCriteria
-        import sqlalchemy as sa
-        result = await self._session.execute(
-            sa.select(JobCriteria).where(JobCriteria.job_id == job_id)
-        )
-        if not result.scalar_one_or_none():
+        if not await self._criteria_exists(job_id):
             raise JobServiceError("criteria_not_set")
+        if job.status == "active":
+            return job
 
         job = await job_repo.update_status(job_id, "active")
 
@@ -233,15 +250,25 @@ class JobService:
         )
 
     async def reopen_job(self, *, job_id: str, company_id: str, actor_id: str) -> Job:
-        job = await self._transition_job(
-            job_id=job_id,
-            company_id=company_id,
-            actor_id=actor_id,
-            target_status="active",
+        job_repo = JobRepository(self._session)
+        job = await job_repo.get_by_id(job_id)
+        if not job:
+            raise JobServiceError("job_not_found")
+        if job.status not in ("closed", "archived"):
+            raise JobServiceError(f"cannot_transition_from_{job.status}")
+
+        target_status = "active" if await self._criteria_exists(job_id) else "setup"
+        updated = await job_repo.update_status(job_id, target_status)
+        await AuditLogRepository(self._session).log_event(
             event_type="job.reopened",
-            allowed_statuses=("closed",),
+            actor_type="user",
+            actor_id=actor_id,
+            entity_type="job",
+            entity_id=job_id,
+            company_id=company_id,
+            metadata={"target_status": target_status},
         )
-        return job
+        return updated
 
     async def archive_job(self, *, job_id: str, company_id: str, actor_id: str) -> Job:
         return await self._transition_job(
@@ -250,8 +277,17 @@ class JobService:
             actor_id=actor_id,
             target_status="archived",
             event_type="job.archived",
-            allowed_statuses=("draft", "setup", "setup_failed", "closed"),
+            allowed_statuses=("draft", "setup", "setup_failed", "active", "paused", "closed"),
         )
+
+    async def _criteria_exists(self, job_id: str) -> bool:
+        from app.models.job_criteria import JobCriteria
+        import sqlalchemy as sa
+
+        result = await self._session.execute(
+            sa.select(JobCriteria.id).where(JobCriteria.job_id == job_id).limit(1)
+        )
+        return result.scalar_one_or_none() is not None
 
     async def _transition_job(
         self,

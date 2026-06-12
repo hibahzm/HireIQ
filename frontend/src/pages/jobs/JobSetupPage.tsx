@@ -60,7 +60,7 @@ export default function JobSetupPage({ token, jobId, onActivated }: Props) {
     try {
       const res = await api.jobs.setupTurn(token, jobId, { user_message: userMessage });
       setMessages((prev) => [...prev, { role: "assistant", content: res.message }]);
-      setStatus(res.status);
+      setStatus(res.status === "completed" && res.job_status === "active" ? "activated" : res.status);
       if (res.criteria_draft) setCriteriaDraft(res.criteria_draft);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to get AI response");
@@ -82,7 +82,8 @@ export default function JobSetupPage({ token, jobId, onActivated }: Props) {
     setError(null);
     try {
       await api.jobs.activate(token, jobId);
-      onActivated();
+      setActivating(false);
+      setStatus("activated");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Activation failed");
       setActivating(false);
@@ -172,6 +173,20 @@ export default function JobSetupPage({ token, jobId, onActivated }: Props) {
               className="w-full bg-green-600 hover:bg-green-700"
             >
               Confirm &amp; activate job
+            </Button>
+          </div>
+        ) : status === "activated" ? (
+          <div className="border-t border-primary-100 bg-green-50/60 p-5">
+            <p className="mb-3 text-sm font-medium text-green-800">
+              Setup complete. This job is active and ready to receive applications.
+            </p>
+            {!!criteriaDraft && (
+              <pre className="mb-3 max-h-44 overflow-auto rounded-lg border border-green-200 bg-white p-3 text-xs text-primary-700">
+                {JSON.stringify(criteriaDraft, null, 2)}
+              </pre>
+            )}
+            <Button onClick={onActivated} className="w-full bg-green-600 hover:bg-green-700">
+              Continue to jobs
             </Button>
           </div>
         ) : status === "failed" ? (

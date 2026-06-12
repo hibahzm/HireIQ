@@ -65,7 +65,7 @@ export const api = {
       request<Job>("POST", "/jobs", data, token),
     get: (token: string, id: string) => request<Job>("GET", `/jobs/${id}`, undefined, token),
     setupTurn: (token: string, id: string, data: { user_message: string }) =>
-      request<{ message: string; status: string; criteria_draft?: unknown }>(
+      request<{ message: string; status: string; criteria_draft?: unknown; job_status?: string | null }>(
         "POST",
         `/jobs/${id}/setup/turn`,
         data,
