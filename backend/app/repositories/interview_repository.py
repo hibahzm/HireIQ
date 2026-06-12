@@ -26,25 +26,51 @@ class InterviewSessionRepository:
         data["streaming_mode"] = bool(data.get("streaming_mode") or job_streaming_interview)
         return InterviewSession(**data)
 
-    async def get_by_interview_token(self, token: str) -> InterviewSession | None:
-        """Bypasses RLS — token is the authenticator for candidate access."""
+    async def _resolve_token(self, token: str) -> dict | None:
+        """
+        Token → application/company via the SECURITY DEFINER resolver (migration
+        0015). The token is the authenticator here; a direct SELECT would come
+        back empty under the FORCE-RLS tenant policy because no company context
+        exists yet. Also sets the RLS context for the resolved company so the
+        caller can run normally-scoped queries.
+        """
+        try:
+            uuid.UUID(token)
+        except ValueError:
+            return None
         result = await self._session.execute(
-            sa.text(
-                """
-                SELECT s.*, COALESCE(j.streaming_interview, false) AS job_streaming_interview
-                FROM interview_sessions s
-                JOIN applications a ON a.id = s.application_id
-                JOIN jobs j ON j.id = a.job_id
-                WHERE a.interview_token = :token
-                  AND a.interview_token_expires_at > now()
-                LIMIT 1
-                """
-            ),
+            sa.text("SELECT * FROM resolve_interview_application(:token)"),
             {"token": token},
         )
         row = result.mappings().first()
         if not row:
             return None
+        resolved = dict(row)
+        await self._session.execute(
+            sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
+            {"cid": str(resolved["company_id"])},
+        )
+        return resolved
+
+    async def get_by_interview_token(self, token: str) -> InterviewSession | None:
+        resolved = await self._resolve_token(token)
+        if not resolved:
+            return None
+        result = await self._session.execute(
+            sa.text(
+                """
+                SELECT s.*
+                FROM interview_sessions s
+                WHERE s.application_id = :aid
+                LIMIT 1
+                """
+            ),
+            {"aid": str(resolved["application_id"])},
+        )
+        row = result.mappings().first()
+        if not row:
+            return None
+        row = {**row, "job_streaming_interview": bool(resolved["streaming_interview"])}
         session = self._from_row(row)
         needs_streaming_sync = session.streaming_mode and not row["streaming_mode"]
         needs_turn_cap = session.max_turns > DEFAULT_INTERVIEW_MAX_TURNS
@@ -75,21 +101,7 @@ class InterviewSessionRepository:
         if existing:
             return existing
         # Token is valid but session not created yet — create it
-        result = await self._session.execute(
-            sa.text(
-                """
-                SELECT a.id as application_id, a.company_id,
-                       COALESCE(j.streaming_interview, false) AS streaming_interview
-                FROM applications a
-                JOIN jobs j ON j.id = a.job_id
-                WHERE a.interview_token = :token
-                  AND a.interview_token_expires_at > now()
-                LIMIT 1
-                """
-            ),
-            {"token": token},
-        )
-        row = result.mappings().first()
+        row = await self._resolve_token(token)
         if not row:
             return None
 

@@ -83,40 +83,50 @@ class EvaluationRepository:
         )
         return [dict(r) for r in result.mappings().all()]
 
-    async def get_by_feedback_token(self, token: str) -> Evaluation | None:
-        """Bypasses RLS — token is the authenticator for public candidate access."""
+    async def _resolve_feedback_token(self, token: str) -> dict[str, Any] | None:
+        """
+        Token → evaluation row via the SECURITY DEFINER resolver (migration 0017):
+        the candidate has no auth/company context, so a direct SELECT is empty
+        under FORCE RLS. Also sets the RLS context for the resolved company so
+        follow-up queries (job title) are properly scoped. Returns the row
+        without the expiry filter — callers decide between 404 and 410.
+        """
+        import uuid as uuid_module
+
+        try:
+            uuid_module.UUID(token)
+        except ValueError:
+            return None
         result = await self._session.execute(
-            sa.text(
-                """
-                SELECT * FROM evaluations
-                WHERE feedback_token = :token
-                  AND feedback_token_expires_at > now()
-                LIMIT 1
-                """
-            ),
+            sa.text("SELECT * FROM resolve_feedback_token(:token)"),
             {"token": token},
         )
         row = result.mappings().first()
         if not row:
             return None
-        return Evaluation(**dict(row))
+        resolved = dict(row)
+        await self._session.execute(
+            sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
+            {"cid": str(resolved["company_id"])},
+        )
+        return resolved
+
+    async def get_by_feedback_token(self, token: str) -> Evaluation | None:
+        """Public candidate access — the token is the authenticator. Expired → None."""
+        from datetime import datetime, timezone
+
+        row = await self._resolve_feedback_token(token)
+        if not row:
+            return None
+        expires_at = row.get("feedback_token_expires_at")
+        if not expires_at or expires_at <= datetime.now(timezone.utc):
+            return None
+        return Evaluation(**row)
 
     async def get_feedback_token_row(self, token: str) -> dict[str, Any] | None:
         """Lookup by token *without* the expiry filter — used to distinguish an
-        unknown token (404) from an expired one (410). Bypasses RLS (public)."""
-        result = await self._session.execute(
-            sa.text(
-                """
-                SELECT feedback_token_expires_at, application_id
-                FROM evaluations
-                WHERE feedback_token = :token
-                LIMIT 1
-                """
-            ),
-            {"token": token},
-        )
-        row = result.mappings().first()
-        return dict(row) if row else None
+        unknown token (404) from an expired one (410)."""
+        return await self._resolve_feedback_token(token)
 
     async def get_job_title_by_application_id(self, application_id: str) -> str | None:
         """Resolve the job title for a feedback report. Bypasses RLS (public)."""

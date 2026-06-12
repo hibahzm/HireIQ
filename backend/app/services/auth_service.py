@@ -41,6 +41,9 @@ class AuthService:
             "role": role,
             "iat": now,
             "exp": now + timedelta(minutes=self._settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+            # Unique per token: two tokens minted in the same second must still
+            # differ (refresh rotation guarantees a new token).
+            "jti": str(uuid.uuid4()),
         }
         return jwt.encode(payload, self._settings.JWT_SECRET, algorithm=self._settings.JWT_ALGORITHM)
 
@@ -67,6 +70,15 @@ class AuthService:
 
         company_repo = CompanyRepository(self._session)
         company = await company_repo.create(company_name)
+
+        # The brand-new company is the RLS context for inserting its first user
+        # (FORCE RLS on `users` rejects inserts with no context set).
+        import sqlalchemy as sa
+
+        await self._session.execute(
+            sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
+            {"cid": str(company.id)},
+        )
 
         password_hash = self._hash_password(password)
         user = await user_repo.create(
@@ -106,7 +118,7 @@ class AuthService:
         await self._redis.delete(key)
 
         user_repo = UserRepository(self._session)
-        user = await user_repo.get_by_id(user_id)
+        user = await user_repo.get_by_id_global(user_id)
         if not user or not user.is_active:
             raise AuthError("user_not_found")
 
@@ -162,6 +174,17 @@ class AuthService:
         from datetime import datetime, timezone
         from app.models.user import User as UserModel
 
+        user_repo = UserRepository(self._session)
+        user = await user_repo.get_by_id_global(user_id)
+        if not user:
+            raise AuthError("user_not_found")
+
+        # Set the RLS context for the UPDATE (no auth context exists yet).
+        await self._session.execute(
+            sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
+            {"cid": str(user.company_id)},
+        )
+
         new_hash = self._hash_password(new_password)
         await self._session.execute(
             sa.update(UserModel)
@@ -169,7 +192,6 @@ class AuthService:
             .values(password_hash=new_hash, updated_at=datetime.now(timezone.utc))
         )
 
-        user_repo = UserRepository(self._session)
         user = await user_repo.get_by_id(user_id)
         if not user:
             raise AuthError("user_not_found")

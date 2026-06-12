@@ -17,12 +17,12 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import sqlalchemy as sa
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 
 @pytest.fixture
 async def client(app):
-    async with AsyncClient(app=app, base_url="http://test") as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
 
 
@@ -44,6 +44,7 @@ async def _seed_evaluation_with_token(
     from app.db import _get_session_factory
 
     company_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
     job_id = str(uuid.uuid4())
     candidate_id = str(uuid.uuid4())
     application_id = str(uuid.uuid4())
@@ -53,7 +54,7 @@ async def _seed_evaluation_with_token(
     async with _get_session_factory()() as session:
         async with session.begin():
             await session.execute(
-                sa.text("SET LOCAL app.current_company_id = :cid"),
+                sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                 {"cid": company_id},
             )
             await session.execute(
@@ -65,15 +66,22 @@ async def _seed_evaluation_with_token(
             )
             await session.execute(
                 sa.text(
-                    "INSERT INTO jobs (id, company_id, title, status, created_at, updated_at) "
-                    "VALUES (:id, :cid, :title, 'closed', :now, :now)"
+                    "INSERT INTO users (id, company_id, email, password_hash, role, is_active) "
+                    "VALUES (:id, :cid, :email, 'x', 'admin', true)"
                 ),
-                {"id": job_id, "cid": company_id, "title": "Backend Engineer", "now": now},
+                {"id": user_id, "cid": company_id, "email": f"admin-{user_id[:8]}@feedback.local"},
             )
             await session.execute(
                 sa.text(
-                    "INSERT INTO candidates (id, full_name, email, created_at, updated_at) "
-                    "VALUES (:id, :name, :email, :now, :now)"
+                    "INSERT INTO jobs (id, company_id, title, status, created_by, created_at, updated_at) "
+                    "VALUES (:id, :cid, :title, 'closed', :cb, :now, :now)"
+                ),
+                {"id": job_id, "cid": company_id, "title": "Backend Engineer", "cb": user_id, "now": now},
+            )
+            await session.execute(
+                sa.text(
+                    "INSERT INTO candidates (id, full_name, email, created_at) "
+                    "VALUES (:id, :name, :email, :now)"
                 ),
                 {
                     "id": candidate_id,
@@ -85,14 +93,15 @@ async def _seed_evaluation_with_token(
             await session.execute(
                 sa.text(
                     "INSERT INTO applications "
-                    "(id, job_id, candidate_id, company_id, screening_status, status, created_at, updated_at) "
-                    "VALUES (:id, :job, :cand, :cid, 'qualified', 'evaluated', :now, :now)"
+                    "(id, job_id, candidate_id, company_id, cv_blob_key, screening_status, status, created_at, updated_at) "
+                    "VALUES (:id, :job, :cand, :cid, :blob, 'qualified', 'evaluated', :now, :now)"
                 ),
                 {
                     "id": application_id,
                     "job": job_id,
                     "cand": candidate_id,
                     "cid": company_id,
+                    "blob": f"cvs/{job_id}/{application_id}.pdf",
                     "now": now,
                 },
             )

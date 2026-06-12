@@ -41,12 +41,35 @@ class UserRepository:
         )
         return result.scalar_one_or_none()
 
+    @staticmethod
+    def _user_from_row(row) -> User | None:
+        if not row:
+            return None
+        data = dict(row)
+        for key in ("id", "company_id"):
+            if data.get(key) is not None:
+                data[key] = str(data[key])
+        return User(**data)
+
     async def get_by_email_global(self, email: str) -> User | None:
-        """Global email lookup for login (no company context yet)."""
+        """
+        Global email lookup for login/registration (no company context yet).
+        Goes through the SECURITY DEFINER function from migration 0016 because
+        a direct SELECT is empty under the FORCE-RLS tenant policy.
+        """
         result = await self._session.execute(
-            sa.select(User).where(sa.func.lower(User.email) == email.lower())
+            sa.text("SELECT * FROM auth_find_user_by_email(:email)"),
+            {"email": email},
         )
-        return result.scalar_one_or_none()
+        return self._user_from_row(result.mappings().first())
+
+    async def get_by_id_global(self, user_id: str) -> User | None:
+        """Global id lookup for token refresh / invite flows (pre-RLS-context)."""
+        result = await self._session.execute(
+            sa.text("SELECT * FROM auth_find_user_by_id(:uid)"),
+            {"uid": str(user_id)},
+        )
+        return self._user_from_row(result.mappings().first())
 
     async def list_by_company(self, company_id: str) -> list[User]:
         result = await self._session.execute(
