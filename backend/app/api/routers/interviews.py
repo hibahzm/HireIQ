@@ -8,7 +8,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.db import _get_session_factory
 from app.redis_client import get_redis_client
-from app.repositories.interview_repository import InterviewSessionRepository
+from app.repositories.interview_repository import InterviewMessageRepository, InterviewSessionRepository
 
 logger = structlog.get_logger()
 
@@ -35,6 +35,8 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
             is_resuming = interview_session.turn_count > 0
             streaming_mode = interview_session.streaming_mode
             current_turn_count = interview_session.turn_count
+            max_turns = interview_session.max_turns
+            interview_status = interview_session.status
 
             # Load job criteria
             import sqlalchemy as sa
@@ -67,6 +69,28 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                     "min_screening_score": criteria_model.min_screening_score,
                 }
 
+            if current_turn_count >= max_turns and interview_status != "completed":
+                await session_repo.update_status(session_id, "completed")
+                interview_status = "completed"
+
+            history_rows = await InterviewMessageRepository(session).list_by_session(session_id)
+            history_payload = [
+                {
+                    "speaker": message.speaker,
+                    "text": message.content_text,
+                }
+                for message in history_rows
+                if message.content_text
+            ]
+            last_ai_text = next(
+                (
+                    message.content_text
+                    for message in reversed(history_rows)
+                    if message.speaker == "ai" and message.content_text
+                ),
+                None,
+            )
+
     async def _send_json(payload: dict) -> bool:
         try:
             await websocket.send_json(payload)
@@ -81,23 +105,44 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
         except RuntimeError:
             pass
 
+    if interview_status == "completed":
+        await _send_json({
+            "type": "interview_complete",
+            "message": "This interview is already complete.",
+        })
+        await _close_websocket(code=1000)
+        return
+
     # Send session_ready (streaming_mode tells the client whether to start continuous capture)
     if not await _send_json({
         "type": "session_ready",
         "session_id": session_id,
         "resuming": is_resuming,
-        "turn_count": interview_session.turn_count,
-        "max_turns": interview_session.max_turns,
+        "turn_count": current_turn_count,
+        "max_turns": max_turns,
         "streaming_mode": streaming_mode,
     }):
         return
 
-    async def _stream_ai_response(text: str, *, counts_as_turn: bool = True) -> bool:
+    if history_payload:
+        if not await _send_json({
+            "type": "conversation_history",
+            "messages": history_payload,
+        }):
+            return
+
+    async def _stream_ai_response(
+        text: str,
+        *,
+        counts_as_turn: bool = True,
+        append: bool = True,
+    ) -> bool:
         """Send the guardrail-approved AI text, then stream its TTS audio in chunks."""
         if not await _send_json({
             "type": "ai_turn_text",
             "text": text,
             "counts_as_turn": counts_as_turn,
+            "append": append,
         }):
             return False
         seq = 0
@@ -138,7 +183,14 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
         except Exception:
             pass
 
-    if streaming_mode and not is_resuming and interview_session.turn_count == 0:
+    if streaming_mode and is_resuming and last_ai_text:
+        if not await _stream_ai_response(
+            last_ai_text,
+            counts_as_turn=False,
+            append=False,
+        ):
+            return
+    elif streaming_mode and not is_resuming and current_turn_count == 0:
         if not await _stream_ai_response(
             (
                 "Hello, welcome to your AI interview. "
@@ -207,6 +259,8 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                     ):
                         return
                     continue
+                if not await _send_json({"type": "partial_transcript", "text": candidate_text}):
+                    return
                 async with _get_session_factory()() as session:
                     async with session.begin():
                         import sqlalchemy as sa
@@ -223,7 +277,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                                 candidate_text=candidate_text,
                                 candidate_pcm=captured_pcm,
                                 job_criteria=job_criteria,
-                                max_turns=interview_session.max_turns,
+                                max_turns=max_turns,
                                 current_turn_count=current_turn_count,
                             )
                         except Exception as exc:
@@ -280,7 +334,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                             audio_bytes=audio_bytes,
                             mode=mode,
                             job_criteria=job_criteria,
-                            max_turns=interview_session.max_turns,
+                            max_turns=max_turns,
                             current_turn_count=current_turn_count,
                         )
                     except Exception as exc:

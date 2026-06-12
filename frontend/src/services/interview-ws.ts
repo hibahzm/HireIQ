@@ -7,10 +7,11 @@ const WS_BASE =
 
 export type InboundMessage =
   | { type: "session_ready"; session_id: string; resuming: boolean; turn_count: number; max_turns: number; streaming_mode?: boolean }
+  | { type: "conversation_history"; messages: Array<{ speaker: "candidate" | "ai" | "system"; text: string }> }
   | { type: "turn_processing" }
   | { type: "ai_turn"; text: string; audio?: string }
   | { type: "partial_transcript"; text: string }
-  | { type: "ai_turn_text"; text: string; counts_as_turn?: boolean }
+  | { type: "ai_turn_text"; text: string; counts_as_turn?: boolean; append?: boolean }
   | { type: "ai_audio_chunk"; audio: string; seq: number }
   | { type: "ai_audio_end" }
   | { type: "turn_blocked"; message: string }
@@ -26,10 +27,11 @@ export type OutboundMessage =
 
 interface Callbacks {
   onReady?: (data: { session_id: string; resuming: boolean; turn_count: number; max_turns: number; streaming_mode: boolean }) => void;
+  onHistory?: (messages: Array<{ speaker: "candidate" | "ai" | "system"; text: string }>) => void;
   onProcessing?: () => void;
   onAiTurn?: (text: string, audio?: ArrayBuffer) => void;
   onPartial?: (text: string) => void;
-  onAiText?: (text: string, countsAsTurn: boolean) => void;
+  onAiText?: (text: string, countsAsTurn: boolean, append: boolean) => void;
   onAiAudioChunk?: (chunk: ArrayBuffer, seq: number) => void;
   onAiAudioEnd?: () => void;
   onBlocked?: (message: string) => void;
@@ -71,6 +73,9 @@ export class InterviewWebSocket {
             streaming_mode: msg.streaming_mode ?? false,
           });
           break;
+        case "conversation_history":
+          this.callbacks.onHistory?.(msg.messages);
+          break;
         case "turn_processing":
           this.callbacks.onProcessing?.();
           break;
@@ -83,7 +88,7 @@ export class InterviewWebSocket {
           this.callbacks.onPartial?.(msg.text);
           break;
         case "ai_turn_text":
-          this.callbacks.onAiText?.(msg.text, msg.counts_as_turn ?? true);
+          this.callbacks.onAiText?.(msg.text, msg.counts_as_turn ?? true, msg.append ?? true);
           break;
         case "ai_audio_chunk":
           this.callbacks.onAiAudioChunk?.(b64ToArrayBuffer(msg.audio), msg.seq);

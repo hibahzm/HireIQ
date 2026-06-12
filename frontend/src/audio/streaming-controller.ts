@@ -12,11 +12,12 @@ import type { InterviewWebSocket } from "../services/interview-ws";
 
 const TARGET_RATE = 16000;
 const START_OF_SPEECH_MS = 450;
-const END_OF_SPEECH_SILENCE_MS = 1800;
+const END_OF_SPEECH_SILENCE_MS = 2800;
 const POST_PLAYBACK_GRACE_MS = 700;
 const PRE_ROLL_MS = 700;
 const MIN_ENERGY_SPEECH_THRESHOLD = 0.025;
 const NOISE_MULTIPLIER = 4;
+const PLAYBACK_COMPLETE_FALLBACK_MS = 30000;
 const CAPTURE_PROCESSOR_NAME = "capture-processor";
 const CAPTURE_WORKLET_SOURCE = `
 class CaptureProcessor extends AudioWorkletProcessor {
@@ -34,6 +35,7 @@ registerProcessor("${CAPTURE_PROCESSOR_NAME}", CaptureProcessor);
 
 interface StreamingControllerOptions {
   onPlaybackBlocked?: () => void;
+  onPlaybackComplete?: () => void;
 }
 
 export class StreamingController {
@@ -56,6 +58,9 @@ export class StreamingController {
   private mediaSource: MediaSource | null = null;
   private sourceBuffer: SourceBuffer | null = null;
   private pending: ArrayBuffer[] = [];
+  private playbackEnding = false;
+  private playbackCompleteTimer: number | null = null;
+  private playbackEndedHandler: (() => void) | null = null;
 
   constructor(
     private readonly ws: InterviewWebSocket,
@@ -216,13 +221,21 @@ export class StreamingController {
   beginPlayback(): void {
     this.speaking = true;
     this.resetUtteranceState();
+    this.clearPlaybackCompletionWait();
     this.pending = [];
+    this.playbackEnding = false;
+    this.sourceBuffer = null;
     this.mediaSource = new MediaSource();
     this.audioEl.src = URL.createObjectURL(this.mediaSource);
     this.mediaSource.addEventListener("sourceopen", () => {
       if (!this.mediaSource) return;
-      this.sourceBuffer = this.mediaSource.addSourceBuffer("audio/mpeg");
-      this.sourceBuffer.addEventListener("updateend", () => this.flush());
+      try {
+        this.sourceBuffer = this.mediaSource.addSourceBuffer("audio/mpeg");
+        this.sourceBuffer.addEventListener("updateend", () => this.flush());
+      } catch {
+        this.completePlayback();
+        return;
+      }
       this.flush();
     });
     this.audioEl.play().catch(() => {
@@ -238,26 +251,80 @@ export class StreamingController {
   private flush(): void {
     if (!this.sourceBuffer || this.sourceBuffer.updating) return;
     const next = this.pending.shift();
-    if (next) this.sourceBuffer.appendBuffer(new Uint8Array(next));
+    if (next) {
+      this.sourceBuffer.appendBuffer(new Uint8Array(next));
+      return;
+    }
+    if (this.playbackEnding) {
+      this.finishMediaSource();
+    }
   }
 
   endPlayback(): void {
+    this.playbackEnding = true;
+    this.startPlaybackFallback();
+    if (!this.mediaSource) {
+      this.completePlayback();
+      return;
+    }
+    if (!this.sourceBuffer || this.sourceBuffer.updating) return;
+    this.finishMediaSource();
+  }
+
+  private finishMediaSource(): void {
     try {
       if (this.mediaSource && this.mediaSource.readyState === "open" && this.sourceBuffer && !this.sourceBuffer.updating) {
         this.mediaSource.endOfStream();
       }
     } catch {
-      /* ignore */
+      this.completePlayback();
+      return;
     }
-    // Resume capturing for the next candidate turn (half-duplex release).
+    this.waitForPlaybackEnded();
+  }
+
+  private waitForPlaybackEnded(): void {
+    if (this.playbackEndedHandler) return;
+    this.playbackEndedHandler = () => this.completePlayback();
+    this.audioEl.addEventListener("ended", this.playbackEndedHandler, { once: true });
+    if (this.audioEl.ended || this.audioEl.readyState === 0) {
+      window.setTimeout(() => this.completePlayback(), 0);
+    }
+  }
+
+  private startPlaybackFallback(): void {
+    if (this.playbackCompleteTimer !== null) return;
+    this.playbackCompleteTimer = window.setTimeout(
+      () => this.completePlayback(),
+      PLAYBACK_COMPLETE_FALLBACK_MS,
+    );
+  }
+
+  private clearPlaybackCompletionWait(): void {
+    if (this.playbackCompleteTimer !== null) {
+      window.clearTimeout(this.playbackCompleteTimer);
+      this.playbackCompleteTimer = null;
+    }
+    if (this.playbackEndedHandler) {
+      this.audioEl.removeEventListener("ended", this.playbackEndedHandler);
+      this.playbackEndedHandler = null;
+    }
+  }
+
+  private completePlayback(): void {
+    this.clearPlaybackCompletionWait();
+    this.playbackEnding = false;
     this.speaking = false;
     this.resetUtteranceState();
     this.acceptingSpeechAt = performance.now() + POST_PLAYBACK_GRACE_MS;
+    this.options.onPlaybackComplete?.();
   }
 
   stop(): void {
     this.capturing = false;
     this.speaking = false;
+    this.playbackEnding = false;
+    this.clearPlaybackCompletionWait();
     this.resetUtteranceState();
     this.audioEl.pause();
     this.audioEl.removeAttribute("src");

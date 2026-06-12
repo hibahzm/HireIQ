@@ -100,6 +100,94 @@ class InterviewService:
             fallback_turn_count = 0
         return max(state_turn_count, fallback_turn_count)
 
+    @staticmethod
+    def _candidate_wants_to_stop(text: str) -> bool:
+        normalized = " ".join(text.lower().replace("'", "").split())
+        stop_phrases = (
+            "i dont want to continue",
+            "i do not want to continue",
+            "i want to stop",
+            "i need to stop",
+            "stop the interview",
+            "end the interview",
+            "quit the interview",
+            "cancel the interview",
+            "i am done with this interview",
+            "im done with this interview",
+            "i dont want this interview",
+            "i do not want this interview",
+        )
+        return any(phrase in normalized for phrase in stop_phrases)
+
+    async def _complete_at_candidate_request(
+        self,
+        *,
+        session_id: str,
+        company_id: str,
+        candidate_text: str,
+        audio_key: str | None,
+        history: list[dict[str, str]],
+        state: dict,
+        state_turn_count: int,
+        effective_max_turns: int,
+    ) -> dict:
+        session_repo = InterviewSessionRepository(self._session)
+        message_repo = InterviewMessageRepository(self._session)
+        audit = AuditLogRepository(self._session)
+        ai_text = (
+            "Thank you for your time. I'll end the interview here, "
+            "and the team will review your responses."
+        )
+        turn_index = state_turn_count * 2
+
+        await message_repo.append_message(
+            session_id=session_id,
+            company_id=company_id,
+            turn_index=turn_index,
+            speaker="candidate",
+            content_text=candidate_text,
+            audio_blob_key=audio_key,
+        )
+        await message_repo.append_message(
+            session_id=session_id,
+            company_id=company_id,
+            turn_index=turn_index + 1,
+            speaker="ai",
+            content_text=ai_text,
+        )
+
+        new_turn_count = state_turn_count + 1
+        history.append({"role": "assistant", "content": ai_text})
+        await self._save_redis_state(
+            session_id,
+            {
+                **state,
+                "conversation_history": history,
+                "turn_count": new_turn_count,
+                "max_turns": effective_max_turns,
+            },
+        )
+        await session_repo.increment_turn(session_id)
+        await session_repo.update_status(session_id, "completed")
+        await audit.log_event(
+            event_type="interview.candidate_ended",
+            actor_type="candidate",
+            entity_type="interview_session",
+            entity_id=session_id,
+            company_id=company_id,
+        )
+
+        import asyncio
+
+        asyncio.create_task(self._trigger_evaluation(session_id, company_id))
+        return {
+            "ai_response": ai_text,
+            "session_complete": True,
+            "audio_bytes": None,
+            "guardrail_triggered": False,
+            "candidate_ended": True,
+        }
+
     async def _conversation_history(
         self,
         message_repo: InterviewMessageRepository,
@@ -184,6 +272,24 @@ class InterviewService:
 
         # Update session status to in_progress on first turn
         await session_repo.update_status(session_id, "in_progress")
+
+        if self._candidate_wants_to_stop(candidate_text):
+            result = await self._complete_at_candidate_request(
+                session_id=session_id,
+                company_id=company_id,
+                candidate_text=candidate_text,
+                audio_key=audio_key,
+                history=history,
+                state=state,
+                state_turn_count=state_turn_count,
+                effective_max_turns=effective_max_turns,
+            )
+            if mode == "voice":
+                try:
+                    result["audio_bytes"] = await self._tts.synthesize(result["ai_response"])
+                except Exception as exc:
+                    logger.warning("tts.failed", session_id=session_id, error=str(exc))
+            return result
 
         # Call agents interview/turn
         import httpx
@@ -341,6 +447,18 @@ class InterviewService:
         history.append({"role": "user", "content": candidate_text})
 
         await session_repo.update_status(session_id, "in_progress")
+
+        if self._candidate_wants_to_stop(candidate_text):
+            return await self._complete_at_candidate_request(
+                session_id=session_id,
+                company_id=company_id,
+                candidate_text=candidate_text,
+                audio_key=audio_key,
+                history=history,
+                state=state,
+                state_turn_count=state_turn_count,
+                effective_max_turns=effective_max_turns,
+            )
 
         import httpx
 

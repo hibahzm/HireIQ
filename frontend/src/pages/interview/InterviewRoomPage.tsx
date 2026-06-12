@@ -32,7 +32,9 @@ export default function InterviewRoomPage({ token }: Props) {
   const chunksRef = useRef<Blob[]>([]);
   const streamingRef = useRef<StreamingController | null>(null);
   const audioBlockShownRef = useRef(false);
-  const streamingModeRef = useRef(false);
+  const aiSpeakingRef = useRef(false);
+  const pendingCompleteRef = useRef(false);
+  const completionShownRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -52,16 +54,19 @@ export default function InterviewRoomPage({ token }: Props) {
           void startStreamingVoice(ws);
         }
       },
+      onHistory: (history) => {
+        setMessages(history);
+      },
       onProcessing: () => {
         setProcessing(true);
+        aiSpeakingRef.current = false;
         setAiSpeaking(false);
-        if (streamingModeRef.current) {
-          addMessage("candidate", "[Voice response]");
-        }
       },
+      onPartial: (text) => addMessage("candidate", text),
       // Turn-based (full-blob) AI turn
       onAiTurn: (text, audioBuffer) => {
         setProcessing(false);
+        aiSpeakingRef.current = false;
         setAiSpeaking(false);
         addMessage("ai", text);
         if (audioBuffer && audioRef.current) {
@@ -72,10 +77,13 @@ export default function InterviewRoomPage({ token }: Props) {
         setTurnCount((n) => n + 1);
       },
       // Streaming AI turn: text first, then audio chunks
-      onAiText: (text, countsAsTurn) => {
+      onAiText: (text, countsAsTurn, append) => {
         setProcessing(false);
+        aiSpeakingRef.current = true;
         setAiSpeaking(true);
-        addMessage("ai", text);
+        if (append) {
+          addMessage("ai", text);
+        }
         streamingRef.current?.beginPlayback();
         if (countsAsTurn) {
           setTurnCount((n) => n + 1);
@@ -83,27 +91,29 @@ export default function InterviewRoomPage({ token }: Props) {
       },
       onAiAudioChunk: (chunk) => streamingRef.current?.pushChunk(chunk),
       onAiAudioEnd: () => {
-        setAiSpeaking(false);
         streamingRef.current?.endPlayback();
       },
       onBlocked: (message) => {
         setProcessing(false);
+        aiSpeakingRef.current = false;
         setAiSpeaking(false);
         addMessage("system", message);
         streamingRef.current?.endPlayback(); // release half-duplex
       },
       onComplete: () => {
-        setStatus("complete");
-        setAiSpeaking(false);
-        streamingRef.current?.stop();
-        addMessage("system", "Interview complete. Thank you for your time!");
+        pendingCompleteRef.current = true;
+        if (!aiSpeakingRef.current) {
+          finishInterview();
+        }
       },
       onExpired: () => {
+        aiSpeakingRef.current = false;
         setAiSpeaking(false);
         setStatus("expired");
       },
       onError: (message) => {
         setProcessing(false);
+        aiSpeakingRef.current = false;
         setAiSpeaking(false);
         addMessage("system", `Error: ${message}`);
       },
@@ -119,8 +129,8 @@ export default function InterviewRoomPage({ token }: Props) {
   }, [token, started]);
 
   useEffect(() => {
-    streamingModeRef.current = streamingMode;
-  }, [streamingMode]);
+    aiSpeakingRef.current = aiSpeaking;
+  }, [aiSpeaking]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -128,6 +138,18 @@ export default function InterviewRoomPage({ token }: Props) {
 
   function addMessage(speaker: "candidate" | "ai" | "system", text: string) {
     setMessages((prev) => [...prev, { speaker, text }]);
+  }
+
+  function finishInterview() {
+    if (completionShownRef.current) return;
+    completionShownRef.current = true;
+    pendingCompleteRef.current = false;
+    aiSpeakingRef.current = false;
+    setProcessing(false);
+    setAiSpeaking(false);
+    setStatus("complete");
+    streamingRef.current?.stop();
+    addMessage("system", "Interview complete. Thank you for your time!");
   }
 
   function handleStartInterview() {
@@ -154,6 +176,13 @@ export default function InterviewRoomPage({ token }: Props) {
         if (!audioBlockShownRef.current) {
           audioBlockShownRef.current = true;
           addMessage("system", "Audio playback is blocked. Use Enable audio to hear the interviewer.");
+        }
+      },
+      onPlaybackComplete: () => {
+        aiSpeakingRef.current = false;
+        setAiSpeaking(false);
+        if (pendingCompleteRef.current) {
+          finishInterview();
         }
       },
     });
