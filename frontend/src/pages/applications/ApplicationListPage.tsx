@@ -152,7 +152,34 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
         </Button>
       </div>
 
-      {job && !isActive && (
+      {job && !isActive && (job.status === "closed" || job.status === "archived") && (
+        <div className="mb-6 flex flex-col gap-3 rounded-xl border border-primary-200 bg-primary-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2">
+            <Badge status={job.status} />
+            <p className="text-sm text-primary-700">
+              This job is <strong>{job.status}</strong>, so it's no longer accepting new
+              applications. Existing applications and evaluations stay available below.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={async () => {
+              try {
+                const updated = await api.jobs.reopen(token, jobId);
+                setJob(updated);
+              } catch (e) {
+                setError(e instanceof ApiError ? e.message : "Failed to reopen job");
+              }
+            }}
+            className="shrink-0"
+          >
+            {job.status === "archived" ? "Restore job" : "Reopen job"}
+          </Button>
+        </div>
+      )}
+
+      {job && !isActive && job.status !== "closed" && job.status !== "archived" && (
         <div className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2">
             <Badge status={job.status} />
