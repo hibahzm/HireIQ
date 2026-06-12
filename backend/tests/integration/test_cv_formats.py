@@ -9,18 +9,72 @@ the format-dispatch + router-validation behaviour, not external services.
 """
 from __future__ import annotations
 
+import asyncio
 import io
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+# embed_text returns (embedding, usage_event)
+EMBED_RESULT = (
+    [0.0] * 1536,
+    {
+        "agent_type": "embedding",
+        "model": "text-embedding-3-small",
+        "prompt_tokens": 10,
+        "completion_tokens": 0,
+        "estimated_cost_usd": 0.0,
+        "metadata": {"operation": "cv_chunk_embedding"},
+    },
+)
+
+
+def _agents_client(payload: dict):
+    """Replacement for the `httpx.AsyncClient` *name*: patching `.post` would also
+    hijack the ASGI test client (it is an httpx.AsyncClient too)."""
+
+    class _Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, *args, **kwargs):
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.raise_for_status = MagicMock()
+            resp.json = MagicMock(return_value=payload)
+            return resp
+
+    return _Client
+
+
+async def _wait_for_screening(client: AsyncClient, token: str, application_id: str) -> dict:
+    """Screening is a fire-and-forget task — poll until it leaves 'pending'."""
+    data: dict = {}
+    for _ in range(50):
+        await asyncio.sleep(0.1)
+        resp = await client.get(
+            f"/applications/{application_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        if data["screening_status"] != "pending":
+            break
+    return data
 
 
 @pytest.fixture
 async def client(app):
-    async with AsyncClient(app=app, base_url="http://test") as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
 
 
@@ -56,22 +110,29 @@ async def test_docx_cv_extracts_and_screens(client: AsyncClient, active_job_toke
         paragraphs=[
             "Jane Roe — Senior Python Engineer",
             "8 years building async FastAPI services and data pipelines.",
+            # Keep the text above the 50-word extraction-quality threshold so the
+            # native docx path is used (no Document Intelligence fallback).
+            "Designed and operated event-driven microservices on Azure Container Apps "
+            "with PostgreSQL, Redis, and pgvector, owning reliability and observability "
+            "end to end across multiple production tenants.",
+            "Led a team of four engineers, introduced contract testing and trunk-based "
+            "development, and reduced deployment lead time from days to under an hour "
+            "while keeping change failure rate low.",
         ],
         table_rows=[["Skill", "Years"], ["Python", "8"], ["PostgreSQL", "6"]],
     )
 
+    agents_payload = {
+        "score": 88,
+        "rationale": "Strong async Python and PostgreSQL match.",
+        "status": "qualified",
+        "guardrail_triggered": False,
+    }
     with (
         patch("app.services.embedding_service.EmbeddingService.embed_text", new_callable=AsyncMock) as mock_embed,
-        patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_agents,
+        patch("httpx.AsyncClient", _agents_client(agents_payload)),
     ):
-        mock_embed.return_value = [0.0] * 1536
-        mock_agents.return_value.status_code = 200
-        mock_agents.return_value.json.return_value = {
-            "score": 88,
-            "rationale": "Strong async Python and PostgreSQL match.",
-            "status": "qualified",
-            "guardrail_triggered": False,
-        }
+        mock_embed.return_value = EMBED_RESULT
 
         resp = await client.post(
             f"/jobs/{job_id}/applications",
@@ -81,12 +142,7 @@ async def test_docx_cv_extracts_and_screens(client: AsyncClient, active_job_toke
         assert resp.status_code == 201
         application_id = resp.json()["id"]
 
-    app_resp = await client.get(
-        f"/applications/{application_id}",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert app_resp.status_code == 200
-    data = app_resp.json()
+        data = await _wait_for_screening(client, token, application_id)
     assert data["screening_score"] is not None
     assert data["screening_rationale"] is not None
     assert data["cv_extraction_method"] == "docx"
@@ -101,26 +157,25 @@ async def test_sparse_docx_falls_back_to_document_intelligence(client: AsyncClie
     token, job_id = active_job_token
     sparse_docx = _make_docx_bytes(paragraphs=["Photo CV"])  # < 50 words → sparse
 
+    agents_payload = {
+        "score": 60,
+        "rationale": "Adequate match.",
+        "status": "qualified",
+        "guardrail_triggered": False,
+    }
     with (
         patch(
             "app.services.ocr_service.OcrService._azure_doc_intelligence",
             new_callable=AsyncMock,
         ) as mock_di,
         patch("app.services.embedding_service.EmbeddingService.embed_text", new_callable=AsyncMock) as mock_embed,
-        patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_agents,
+        patch("httpx.AsyncClient", _agents_client(agents_payload)),
     ):
         mock_di.return_value = (
             "Recovered CV text from Document Intelligence with plenty of words " * 10,
             "document_intelligence",
         )
-        mock_embed.return_value = [0.0] * 1536
-        mock_agents.return_value.status_code = 200
-        mock_agents.return_value.json.return_value = {
-            "score": 60,
-            "rationale": "Adequate match.",
-            "status": "qualified",
-            "guardrail_triggered": False,
-        }
+        mock_embed.return_value = EMBED_RESULT
 
         resp = await client.post(
             f"/jobs/{job_id}/applications",
@@ -131,11 +186,7 @@ async def test_sparse_docx_falls_back_to_document_intelligence(client: AsyncClie
         application_id = resp.json()["id"]
         mock_di.assert_awaited()  # DI fallback was used
 
-    app_resp = await client.get(
-        f"/applications/{application_id}",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    data = app_resp.json()
+        data = await _wait_for_screening(client, token, application_id)
     assert data["cv_extraction_method"] == "document_intelligence"
 
 
@@ -149,26 +200,25 @@ async def test_image_cv_routes_to_document_intelligence(client: AsyncClient, act
     token, job_id = active_job_token
     png_bytes = b"\x89PNG\r\n\x1a\n" + b"0" * 256  # PNG magic + filler
 
+    agents_payload = {
+        "score": 75,
+        "rationale": "Relevant experience.",
+        "status": "qualified",
+        "guardrail_triggered": False,
+    }
     with (
         patch(
             "app.services.ocr_service.OcrService._azure_doc_intelligence",
             new_callable=AsyncMock,
         ) as mock_di,
         patch("app.services.embedding_service.EmbeddingService.embed_text", new_callable=AsyncMock) as mock_embed,
-        patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_agents,
+        patch("httpx.AsyncClient", _agents_client(agents_payload)),
     ):
         mock_di.return_value = (
             "OCR-extracted CV content with many relevant skills and experience " * 10,
             "document_intelligence",
         )
-        mock_embed.return_value = [0.0] * 1536
-        mock_agents.return_value.status_code = 200
-        mock_agents.return_value.json.return_value = {
-            "score": 75,
-            "rationale": "Relevant experience.",
-            "status": "qualified",
-            "guardrail_triggered": False,
-        }
+        mock_embed.return_value = EMBED_RESULT
 
         resp = await client.post(
             f"/jobs/{job_id}/applications",
@@ -179,11 +229,7 @@ async def test_image_cv_routes_to_document_intelligence(client: AsyncClient, act
         application_id = resp.json()["id"]
         mock_di.assert_awaited()
 
-    app_resp = await client.get(
-        f"/applications/{application_id}",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    data = app_resp.json()
+        data = await _wait_for_screening(client, token, application_id)
     assert data["cv_extraction_method"] == "document_intelligence"
 
 

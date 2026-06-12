@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import uuid
+from datetime import datetime, timedelta, timezone
+
 import structlog
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -142,9 +145,13 @@ class ScreeningService:
             return
         cv_bytes = await self._storage.download(application.cv_blob_key)
 
-        # 2. OCR
+        # 2. OCR — pass the blob key as the filename so the extractor dispatches
+        # on the real format; the default ("cv.pdf") made every DOCX/image CV
+        # re-extract as a PDF here and fail screening with "corrupted_pdf".
         try:
-            cv_text, extraction_method = await self._ocr.extract(cv_bytes)
+            cv_text, extraction_method = await self._ocr.extract(
+                cv_bytes, filename=application.cv_blob_key
+            )
         except OcrValidationError as exc:
             reason = f"CV extraction failed: {exc}"
             logger.error("cv.ocr.failed", application_id=application_id, error=str(exc))
@@ -207,15 +214,30 @@ class ScreeningService:
             metadata={"application_id": application_id, "job_id": job_id},
         )
 
-        # 6. Persist results
-        final_status = "qualified" if agent_result["status"] == "qualified" else "rejected"
+        # 6. Persist results. Anything other than a clear qualified/rejected verdict
+        # (e.g. an unparseable LLM response) is a re-runnable failure, not a rejection.
+        agent_status = agent_result["status"]
+        if agent_status not in ("qualified", "rejected"):
+            reason = agent_result.get("rationale") or "Screening did not produce a verdict."
+            await app_repo.update_screening_failure(application_id, reason)
+            await audit.log_event(
+                event_type="cv.screening.failed",
+                actor_type="system",
+                entity_type="application",
+                entity_id=application_id,
+                company_id=company_id,
+                metadata={"reason": "no_verdict", "agent_status": agent_status},
+            )
+            return
+
+        final_status = "qualified" if agent_status == "qualified" else "rejected"
         await app_repo.update_screening_result(
             application_id,
             cv_text=cv_text,
             cv_extraction_method=extraction_method,
             screening_score=agent_result["score"],
             screening_rationale=agent_result["rationale"],
-            screening_status=agent_result["status"],
+            screening_status=agent_status,
             status=final_status,
         )
 
@@ -225,11 +247,46 @@ class ScreeningService:
             entity_type="application",
             entity_id=application_id,
             company_id=company_id,
-            metadata={"score": agent_result["score"], "status": agent_result["status"]},
+            metadata={"score": agent_result["score"], "status": agent_status},
         )
 
-        # 7. Send confirmation email
-        await self._notification.send_confirmation_email(
+        # 7. Qualified candidates are invited to interview immediately — no manual
+        # recruiter click. The invitation email carries the interview link (console
+        # backend in dev, real email via Resend in prod). Others get a confirmation.
+        if final_status == "qualified":
+            await self._auto_invite(
+                application_id=application_id,
+                company_id=company_id,
+                candidate_email=candidate_email,
+            )
+        else:
+            await self._notification.send_confirmation_email(
+                candidate_email=candidate_email,
+                job_title=job_title,
+            )
+
+    async def _auto_invite(
+        self,
+        *,
+        application_id: str,
+        company_id: str,
+        candidate_email: str,
+    ) -> None:
+        app_repo = ApplicationRepository(self._session)
+        token = str(uuid.uuid4())
+        expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+        await app_repo.set_interview_token(application_id, token, expires_at)
+
+        await AuditLogRepository(self._session).log_event(
+            event_type="application.interview_invited",
+            actor_type="system",
+            entity_type="application",
+            entity_id=application_id,
+            company_id=company_id,
+            metadata={"trigger": "auto_on_qualified"},
+        )
+
+        await self._notification.send_invitation_email(
             candidate_email=candidate_email,
-            job_title=job_title,
+            interview_link=f"{self._settings.FRONTEND_ORIGIN}/interview/{token}",
         )

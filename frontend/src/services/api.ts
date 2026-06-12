@@ -64,6 +64,8 @@ export const api = {
     create: (token: string, data: { title: string; description?: string; streaming_interview?: boolean }) =>
       request<Job>("POST", "/jobs", data, token),
     get: (token: string, id: string) => request<Job>("GET", `/jobs/${id}`, undefined, token),
+    setupConversation: (token: string, id: string) =>
+      request<SetupConversation>("GET", `/jobs/${id}/setup/conversation`, undefined, token),
     setupTurn: (token: string, id: string, data: { user_message: string }) =>
       request<{ message: string; status: string; criteria_draft?: unknown; job_status?: string | null }>(
         "POST",
@@ -152,6 +154,8 @@ export interface Application {
   id: string;
   job_id: string;
   candidate_id: string;
+  candidate_name?: string | null;
+  candidate_email?: string | null;
   screening_score: number | null;
   screening_rationale?: string | null;
   screening_status: string;
@@ -160,6 +164,13 @@ export interface Application {
   interview_token_expires_at?: string | null;
   evaluation_id?: string | null;
   created_at: string;
+}
+
+export interface SetupConversation {
+  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  status: string; // conversation: in_progress | completed | failed
+  job_status: string;
+  criteria: Record<string, unknown> | null;
 }
 
 export interface JobCriteriaInput {

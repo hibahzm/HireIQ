@@ -52,6 +52,15 @@ async def _application_response(
     )
     evaluation = await EvaluationRepository(session).get_by_application_id(application.id)
     response.evaluation_id = evaluation.id if evaluation else None
+    candidate_row = (
+        await session.execute(
+            sa.text("SELECT full_name, email FROM candidates WHERE id = :cid"),
+            {"cid": str(application.candidate_id)},
+        )
+    ).mappings().first()
+    if candidate_row:
+        response.candidate_name = candidate_row["full_name"]
+        response.candidate_email = candidate_row["email"]
     return response
 
 
@@ -88,7 +97,7 @@ async def submit_application(
         _, _ = await OcrService().extract(
             cv_bytes, filename=cv_file.filename or "cv", content_type=cv_file.content_type
         )
-    except OcrValidationError as exc:
+    except ValueError as exc:  # OcrValidationError subclasses ValueError
         raise HTTPException(status_code=422, detail=f"Invalid CV: {exc}")
 
     async with _get_session_factory()() as session:
@@ -169,6 +178,13 @@ async def list_applications(
     current_user: User = Depends(require_recruiter_or_admin),
     session: AsyncSession = Depends(get_authed_session),
 ):
+    # RLS hides other tenants' jobs — an unknown/foreign job is a 404, not an
+    # empty 200 (SC-005: don't reveal that the job id exists).
+    from app.repositories.job_repository import JobRepository
+
+    if not await JobRepository(session).get_by_id(job_id):
+        raise HTTPException(status_code=404, detail="Job not found")
+
     apps = await ApplicationRepository(session).list_by_job(
         job_id, status_filter=status, page=page
     )

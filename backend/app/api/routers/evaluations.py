@@ -84,6 +84,12 @@ async def list_evaluations(
     current_user: User = Depends(require_recruiter_or_admin),
     session: AsyncSession = Depends(get_authed_session),
 ) -> list[ShortlistItem]:
+    # RLS hides other tenants' jobs — unknown/foreign job ids 404 (SC-005).
+    from app.repositories.job_repository import JobRepository
+
+    if not await JobRepository(session).get_by_id(job_id):
+        raise HTTPException(status_code=404, detail="Job not found")
+
     rows = await EvaluationRepository(session).list_by_job_ranked(job_id)
     return [
         ShortlistItem(

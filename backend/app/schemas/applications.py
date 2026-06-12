@@ -25,6 +25,8 @@ class ApplicationResponse(BaseModel):
     interview_token_expires_at: datetime | None = None
     evaluation_id: str | None = None
     status: str = "applied"
+    candidate_name: str | None = None
+    candidate_email: str | None = None
     created_at: datetime
     updated_at: datetime
 

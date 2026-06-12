@@ -12,13 +12,38 @@ import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 
 @pytest.fixture
 async def client(app):
-    async with AsyncClient(app=app, base_url="http://test") as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
+
+
+def _agents_client(payload: dict):
+    """Replacement for the `httpx.AsyncClient` *name*: patching `.post` would also
+    hijack the ASGI test client (it is an httpx.AsyncClient too)."""
+    from unittest.mock import MagicMock
+
+    class _Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, *args, **kwargs):
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.raise_for_status = MagicMock()
+            resp.json = MagicMock(return_value=payload)
+            return resp
+
+    return _Client
 
 
 def _screening_mocks():
@@ -26,7 +51,13 @@ def _screening_mocks():
     return (
         patch("app.services.ocr_service.OcrService.extract", new_callable=AsyncMock),
         patch("app.services.embedding_service.EmbeddingService.embed_text", new_callable=AsyncMock),
-        patch("httpx.AsyncClient.post", new_callable=AsyncMock),
+        patch(
+            "httpx.AsyncClient",
+            _agents_client({
+                "score": 80, "rationale": "Good match.", "status": "qualified",
+                "guardrail_triggered": False,
+            }),
+        ),
     )
 
 
@@ -63,14 +94,20 @@ async def test_job_analytics_funnel_accuracy(client: AsyncClient, active_job_tok
     token, job_id = active_job_token
     ocr_cm, embed_cm, agents_cm = _screening_mocks()
 
-    with ocr_cm as mock_ocr, embed_cm as mock_embed, agents_cm as mock_agents:
+    with ocr_cm as mock_ocr, embed_cm as mock_embed, agents_cm:
         mock_ocr.return_value = ("Python engineer, 5 years experience.", "pymupdf")
-        mock_embed.return_value = [0.0] * 1536
-        mock_agents.return_value.status_code = 200
-        mock_agents.return_value.json.return_value = {
-            "score": 80, "rationale": "Good match.", "status": "qualified",
-            "guardrail_triggered": False,
-        }
+        # embed_text returns (embedding, usage_event)
+        mock_embed.return_value = (
+            [0.0] * 1536,
+            {
+                "agent_type": "embedding",
+                "model": "text-embedding-3-small",
+                "prompt_tokens": 10,
+                "completion_tokens": 0,
+                "estimated_cost_usd": 0.0,
+                "metadata": {"operation": "cv_chunk_embedding"},
+            },
+        )
         for i in range(3):
             r = await client.post(
                 f"/jobs/{job_id}/applications",
@@ -79,10 +116,19 @@ async def test_job_analytics_funnel_accuracy(client: AsyncClient, active_job_tok
             )
             assert r.status_code == 201
 
-    resp = await client.get(
-        f"/jobs/{job_id}/analytics", headers={"Authorization": f"Bearer {token}"}
-    )
-    assert resp.status_code == 200
+        # Screening runs as fire-and-forget tasks — wait (inside the patch
+        # context) until all three reach 'qualified'.
+        import asyncio
+
+        for _ in range(50):
+            await asyncio.sleep(0.1)
+            resp = await client.get(
+                f"/jobs/{job_id}/analytics", headers={"Authorization": f"Bearer {token}"}
+            )
+            assert resp.status_code == 200
+            if resp.json()["funnel"]["qualified"] == 3:
+                break
+
     funnel = resp.json()["funnel"]
     assert funnel["received"] == 3
     # All three screened as qualified → qualification_rate == 1.0

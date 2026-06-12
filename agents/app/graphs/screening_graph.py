@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any, TypedDict
 
 import structlog
@@ -8,6 +7,7 @@ from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 
+from app.graphs.json_utils import parse_json_object
 from app.guardrails import PIIRedactor, registry
 from app.prompts import SCREENING_SYSTEM
 from app.usage import append_usage_event
@@ -31,7 +31,12 @@ class ScreeningState(TypedDict):
 def _build_llm() -> ChatOpenAI:
     from app.config import get_settings
     settings = get_settings()
-    return ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY, temperature=0.1)
+    return ChatOpenAI(
+        model="gpt-4o-mini",
+        api_key=settings.OPENAI_API_KEY,
+        temperature=0.1,
+        model_kwargs={"response_format": {"type": "json_object"}},
+    )
 
 
 async def score_cv(state: ScreeningState) -> ScreeningState:
@@ -73,16 +78,21 @@ async def score_cv(state: ScreeningState) -> ScreeningState:
             "usage_events": usage_events,
         }
 
+    data = parse_json_object(raw)
     try:
-        data = json.loads(raw)
+        if data is None:
+            raise ValueError("unparseable screening response")
         score = int(data["score"])
         rationale = PIIRedactor.redact(str(data["rationale"]))
         threshold = state["job_criteria"].get("min_screening_score", 70)
         status = "qualified" if score >= threshold else "rejected"
-    except (json.JSONDecodeError, KeyError, ValueError):
+    except (KeyError, TypeError, ValueError):
+        # Surface as an error so the backend marks screening "failed" (re-runnable)
+        # instead of silently rejecting the candidate on a malformed LLM response.
+        logger.warning("screening.unparseable_response", application_id=state["application_id"])
         score = 0
-        rationale = "Unable to parse evaluation result."
-        status = "rejected"
+        rationale = "The screening model returned an unparseable response. Re-run screening."
+        status = "error"
 
     return {
         **state,

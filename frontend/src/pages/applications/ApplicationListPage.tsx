@@ -15,6 +15,28 @@ interface Props {
   onBack: () => void;
 }
 
+type FilterTab = "qualified" | "in_review" | "rejected" | "all";
+
+const TAB_LABELS: Record<FilterTab, string> = {
+  qualified: "Qualified",
+  in_review: "In review",
+  rejected: "Not qualified",
+  all: "All",
+};
+
+const TAB_EMPTY_HINTS: Record<FilterTab, string> = {
+  qualified: "No qualified candidates yet. Candidates appear here once AI screening passes them.",
+  in_review: "No applications are waiting on screening.",
+  rejected: "No candidates were screened out.",
+  all: "No applications yet.",
+};
+
+function tabOf(app: Application): FilterTab {
+  if (app.screening_status === "qualified") return "qualified";
+  if (app.screening_status === "rejected") return "rejected";
+  return "in_review"; // pending / failed — screening not finished
+}
+
 export default function ApplicationListPage({ token, jobId, onSelectApplication }: Props) {
   const navigate = useNavigate();
   const [applications, setApplications] = useState<Application[]>([]);
@@ -24,9 +46,21 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
   const [copied, setCopied] = useState(false);
   const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
   const [rescreening, setRescreening] = useState<string | null>(null);
+  // Companies care about who qualified — that's the default view. Rejected
+  // candidates stay out of the way behind their own tab.
+  const [tab, setTab] = useState<FilterTab>("qualified");
 
   const applyLink = `${window.location.origin}/apply/${jobId}`;
   const isActive = job?.status === "active";
+  const counts = applications.reduce(
+    (acc, app) => {
+      acc[tabOf(app)] += 1;
+      acc.all += 1;
+      return acc;
+    },
+    { qualified: 0, in_review: 0, rejected: 0, all: 0 } as Record<FilterTab, number>
+  );
+  const visible = tab === "all" ? applications : applications.filter((a) => tabOf(a) === tab);
 
   useEffect(() => {
     Promise.all([
@@ -104,10 +138,19 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
 
   return (
     <div>
-      <PageHeader
-        title="Applications"
-        description="Candidates who applied via the public link. Qualified candidates can be invited to interview."
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <PageHeader
+          title="Applications"
+          description="Candidates who applied via the public link. Qualified candidates automatically receive an interview invitation with their link."
+        />
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => navigate(`/jobs/${jobId}/evaluations`)}
+        >
+          View ranked shortlist
+        </Button>
+      </div>
 
       {job && !isActive && (
         <div className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -159,14 +202,42 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
         </p>
       )}
 
-      {applications.length === 0 ? (
-        <p className="text-sm text-primary-500">No applications yet.</p>
+      {/* Screening filter tabs — qualified first, rejected tucked away */}
+      <div className="mb-4 flex flex-wrap gap-1 rounded-xl bg-primary-50 p-1 ring-1 ring-primary-100" role="tablist" aria-label="Filter applications by screening result">
+        {(Object.keys(TAB_LABELS) as FilterTab[]).map((t) => (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+            className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 ${
+              tab === t
+                ? "bg-white text-brand-700 shadow-sm ring-1 ring-primary-100"
+                : "text-primary-500 hover:text-primary-700"
+            }`}
+          >
+            {TAB_LABELS[t]}
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
+                tab === t ? "bg-brand-50 text-brand-700" : "bg-primary-100 text-primary-500"
+              }`}
+            >
+              {counts[t]}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {visible.length === 0 ? (
+        <Card className="p-8 text-center">
+          <p className="text-sm text-primary-500">{TAB_EMPTY_HINTS[tab]}</p>
+        </Card>
       ) : (
         <Card className="overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-primary-100 bg-primary-50/50 text-left text-xs uppercase tracking-wide text-primary-400">
-                <th className="px-5 py-3 font-semibold">Application</th>
+                <th className="px-5 py-3 font-semibold">Candidate</th>
                 <th className="px-5 py-3 font-semibold">Score</th>
                 <th className="px-5 py-3 font-semibold">Screening</th>
                 <th className="px-5 py-3 font-semibold">Status</th>
@@ -175,14 +246,19 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
               </tr>
             </thead>
             <tbody className="divide-y divide-primary-100">
-              {applications.map((app) => (
+              {visible.map((app) => (
                 <tr key={app.id} className="transition-colors hover:bg-primary-50/60">
                   <td className="px-5 py-3">
                     <button
                       onClick={() => onSelectApplication(app.id)}
-                      className="font-mono text-xs font-semibold text-brand-700 hover:underline cursor-pointer"
+                      className="text-left cursor-pointer"
                     >
-                      {app.id.slice(0, 8)}…
+                      <span className="block text-sm font-semibold text-brand-700 hover:underline">
+                        {app.candidate_name || `${app.id.slice(0, 8)}…`}
+                      </span>
+                      {app.candidate_email && (
+                        <span className="block text-xs text-primary-400">{app.candidate_email}</span>
+                      )}
                     </button>
                   </td>
                   <td className="px-5 py-3">
