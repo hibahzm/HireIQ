@@ -9,9 +9,19 @@ and PII-redacted.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+
+def _agents_response(payload: dict) -> MagicMock:
+    """httpx-like response: sync .json()/.raise_for_status() (AsyncMock would
+    make .json() a coroutine and break `resp.json().get(...)`)."""
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.raise_for_status = MagicMock()
+    resp.json = MagicMock(return_value=payload)
+    return resp
 
 
 @pytest.mark.asyncio
@@ -32,8 +42,7 @@ async def test_evaluation_pipeline_persists_full_payload(app, completed_intervie
     with patch(
         "httpx.AsyncClient.post", new_callable=AsyncMock
     ) as mock_agents:
-        mock_agents.return_value.status_code = 200
-        mock_agents.return_value.json.return_value = {
+        mock_agents.return_value = _agents_response({
             "overall_score": 74,
             "recommendation": "hire",
             "dimension_scores": [
@@ -51,7 +60,7 @@ async def test_evaluation_pipeline_persists_full_payload(app, completed_intervie
             },
             "confidence_flag": False,
             "confidence_reason": None,
-        }
+        })
 
         from app.db import _get_session_factory
         import sqlalchemy as sa
@@ -59,7 +68,7 @@ async def test_evaluation_pipeline_persists_full_payload(app, completed_intervie
         async with _get_session_factory()() as session:
             async with session.begin():
                 await session.execute(
-                    sa.text("SET LOCAL app.current_company_id = :cid"),
+                    sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                     {"cid": company_id},
                 )
                 from app.services.evaluation_service import EvaluationService
@@ -74,7 +83,7 @@ async def test_evaluation_pipeline_persists_full_payload(app, completed_intervie
         async with _get_session_factory()() as session:
             async with session.begin():
                 await session.execute(
-                    sa.text("SET LOCAL app.current_company_id = :cid"),
+                    sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                     {"cid": company_id},
                 )
                 result = await session.execute(
@@ -108,7 +117,7 @@ async def test_evaluation_pipeline_persists_full_payload(app, completed_intervie
     async with _get_session_factory()() as session:
         async with session.begin():
             await session.execute(
-                sa.text("SET LOCAL app.current_company_id = :cid"),
+                sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                 {"cid": company_id},
             )
             app_row = await session.execute(
@@ -131,8 +140,7 @@ async def test_evaluation_confidence_flag_set_for_shallow_responses(
     session_id, company_id, application_id = completed_interview_session
 
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_agents:
-        mock_agents.return_value.status_code = 200
-        mock_agents.return_value.json.return_value = {
+        mock_agents.return_value = _agents_response({
             "overall_score": 30,
             "recommendation": "no_hire",
             "dimension_scores": [
@@ -146,7 +154,7 @@ async def test_evaluation_confidence_flag_set_for_shallow_responses(
             },
             "confidence_flag": True,
             "confidence_reason": "Insufficient evidence — candidate gave one-word answers.",
-        }
+        })
 
         from app.db import _get_session_factory
         import sqlalchemy as sa
@@ -154,7 +162,7 @@ async def test_evaluation_confidence_flag_set_for_shallow_responses(
         async with _get_session_factory()() as session:
             async with session.begin():
                 await session.execute(
-                    sa.text("SET LOCAL app.current_company_id = :cid"),
+                    sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                     {"cid": company_id},
                 )
                 from app.services.evaluation_service import EvaluationService
@@ -168,7 +176,7 @@ async def test_evaluation_confidence_flag_set_for_shallow_responses(
         async with _get_session_factory()() as session:
             async with session.begin():
                 await session.execute(
-                    sa.text("SET LOCAL app.current_company_id = :cid"),
+                    sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                     {"cid": company_id},
                 )
                 result = await session.execute(
