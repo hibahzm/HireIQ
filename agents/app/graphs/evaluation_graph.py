@@ -8,6 +8,7 @@ from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 
+from app.graphs.json_utils import parse_json_object
 from app.guardrails import PIIRedactor, registry
 from app.prompts.evaluation import (
     EVALUATION_SCORE_DIMENSIONS,
@@ -40,10 +41,15 @@ class EvaluationState(TypedDict):
     usage_events: list[dict[str, Any]]
 
 
-def _llm() -> ChatOpenAI:
+def _llm(json_mode: bool = False) -> ChatOpenAI:
     from app.config import get_settings
     settings = get_settings()
-    return ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY, temperature=0.1)
+    kwargs: dict[str, Any] = {}
+    if json_mode:
+        # Forces syntactically valid JSON output — parse failures here previously
+        # produced empty dimension_scores and spurious low-confidence flags.
+        kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
+    return ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY, temperature=0.1, **kwargs)
 
 
 def _transcript_text(transcript: list[dict[str, Any]]) -> str:
@@ -67,7 +73,7 @@ async def score_dimensions(state: EvaluationState) -> EvaluationState:
         transcript=transcript_str[:6000],
         cv_text=state["cv_text"][:3000],
     )
-    response = await _llm().ainvoke([SystemMessage(content=prompt)])
+    response = await _llm(json_mode=True).ainvoke([SystemMessage(content=prompt)])
     usage_events = append_usage_event(
         state,
         response,
@@ -80,18 +86,19 @@ async def score_dimensions(state: EvaluationState) -> EvaluationState:
         logger.warning("evaluation.guardrail_triggered.output", application_id=state["application_id"])
         return {**state, "guardrail_triggered": True, "usage_events": usage_events}
 
-    try:
-        data = json.loads(raw)
-        scores = data.get("dimension_scores", [])
-        redacted = []
-        for dim in scores:
+    data = parse_json_object(raw) or {}
+    redacted = []
+    for dim in data.get("dimension_scores", []):
+        try:
             redacted.append({
-                "dimension": dim.get("dimension", ""),
+                "dimension": str(dim.get("dimension", "")),
                 "score": int(dim.get("score", 0)),
-                "evidence_quotes": [PIIRedactor.redact(q) for q in dim.get("evidence_quotes", [])],
+                "evidence_quotes": [PIIRedactor.redact(str(q)) for q in dim.get("evidence_quotes", [])],
             })
-    except (json.JSONDecodeError, KeyError, ValueError):
-        redacted = []
+        except (TypeError, ValueError):
+            continue
+    if not redacted:
+        logger.warning("evaluation.score_dimensions_unparseable", application_id=state["application_id"])
 
     return {**state, "dimension_scores": redacted, "usage_events": usage_events}
 
@@ -105,7 +112,7 @@ async def flag_consistency(state: EvaluationState) -> EvaluationState:
         cv_text=state["cv_text"][:3000],
         transcript=transcript_str[:6000],
     )
-    response = await _llm().ainvoke([SystemMessage(content=prompt)])
+    response = await _llm(json_mode=True).ainvoke([SystemMessage(content=prompt)])
     usage_events = append_usage_event(
         state,
         response,
@@ -117,20 +124,17 @@ async def flag_consistency(state: EvaluationState) -> EvaluationState:
     if not registry.check_output(raw).passed:
         return {**state, "consistency_flags": [], "usage_events": usage_events}
 
-    try:
-        data = json.loads(raw)
-        flags = data.get("consistency_flags", [])
-        redacted = [
-            {
-                "claim": PIIRedactor.redact(f.get("claim", "")),
-                "cv_statement": PIIRedactor.redact(f.get("cv_statement", "")),
-                "interview_statement": PIIRedactor.redact(f.get("interview_statement", "")),
-                "flag_type": f.get("flag_type", "unverified"),
-            }
-            for f in flags
-        ]
-    except (json.JSONDecodeError, KeyError):
-        redacted = []
+    data = parse_json_object(raw) or {}
+    redacted = [
+        {
+            "claim": PIIRedactor.redact(str(f.get("claim", ""))),
+            "cv_statement": PIIRedactor.redact(str(f.get("cv_statement", ""))),
+            "interview_statement": PIIRedactor.redact(str(f.get("interview_statement", ""))),
+            "flag_type": f.get("flag_type", "unverified"),
+        }
+        for f in data.get("consistency_flags", [])
+        if isinstance(f, dict)
+    ]
 
     return {**state, "consistency_flags": redacted, "usage_events": usage_events}
 
@@ -141,7 +145,7 @@ async def score_communication(state: EvaluationState) -> EvaluationState:
 
     transcript_str = _transcript_text(state["transcript"])
     prompt = EVALUATION_SCORE_COMMUNICATION.format(transcript=transcript_str[:6000])
-    response = await _llm().ainvoke([SystemMessage(content=prompt)])
+    response = await _llm(json_mode=True).ainvoke([SystemMessage(content=prompt)])
     usage_events = append_usage_event(
         state,
         response,
@@ -154,15 +158,15 @@ async def score_communication(state: EvaluationState) -> EvaluationState:
         default = {"response_depth": 0.5, "filler_word_frequency": 0.0, "deflection_frequency": 0.0}
         return {**state, "communication_quality": default, "usage_events": usage_events}
 
+    data = parse_json_object(raw) or {}
     try:
-        data = json.loads(raw)
-        quality = data.get("communication_quality", {})
+        parsed_quality = data.get("communication_quality", {})
         quality = {
-            "response_depth": float(quality.get("response_depth", 0.5)),
-            "filler_word_frequency": float(quality.get("filler_word_frequency", 0.0)),
-            "deflection_frequency": float(quality.get("deflection_frequency", 0.0)),
+            "response_depth": float(parsed_quality.get("response_depth", 0.5)),
+            "filler_word_frequency": float(parsed_quality.get("filler_word_frequency", 0.0)),
+            "deflection_frequency": float(parsed_quality.get("deflection_frequency", 0.0)),
         }
-    except (json.JSONDecodeError, KeyError, ValueError):
+    except (AttributeError, TypeError, ValueError):
         quality = {"response_depth": 0.5, "filler_word_frequency": 0.0, "deflection_frequency": 0.0}
 
     return {**state, "communication_quality": quality, "usage_events": usage_events}
@@ -185,7 +189,7 @@ async def assess_confidence(state: EvaluationState) -> EvaluationState:
         dimension_scores=json.dumps(state["dimension_scores"]),
         communication_quality=json.dumps(state["communication_quality"]),
     )
-    response = await _llm().ainvoke([SystemMessage(content=prompt)])
+    response = await _llm(json_mode=True).ainvoke([SystemMessage(content=prompt)])
     usage_events = append_usage_event(
         state,
         response,
@@ -194,13 +198,13 @@ async def assess_confidence(state: EvaluationState) -> EvaluationState:
     )
     raw = response.content
 
-    try:
-        data = json.loads(raw)
+    data = parse_json_object(raw)
+    if data is not None:
         flag = bool(data.get("confidence_flag", False))
         reason = data.get("confidence_reason") or None
         if reason:
-            reason = PIIRedactor.redact(reason)
-    except (json.JSONDecodeError, KeyError):
+            reason = PIIRedactor.redact(str(reason))
+    else:
         flag = avg_evidence < 1 or turn_depth < 0.3
         reason = "Insufficient evidence to assess candidate confidently." if flag else None
 

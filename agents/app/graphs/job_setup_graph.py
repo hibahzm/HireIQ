@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any, TypedDict
 
 import structlog
@@ -8,6 +7,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 
+from app.graphs.json_utils import parse_json_object
 from app.guardrails import PIIRedactor, registry
 from app.prompts import JOB_SETUP_CRITERIA_EXTRACTION, JOB_SETUP_SYSTEM
 from app.usage import append_usage_event
@@ -25,10 +25,13 @@ class JobSetupState(TypedDict):
     usage_events: list[dict[str, Any]]
 
 
-def _build_llm() -> ChatOpenAI:
+def _build_llm(json_mode: bool = False) -> ChatOpenAI:
     from app.config import get_settings
     settings = get_settings()
-    return ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY, temperature=0.3)
+    kwargs: dict[str, Any] = {}
+    if json_mode:
+        kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
+    return ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY, temperature=0.3, **kwargs)
 
 
 def _completion_signal(text: str) -> bool:
@@ -54,27 +57,6 @@ def _completion_signal(text: str) -> bool:
             "structured summary",
         )
     )
-
-
-def _parse_json_object(content: str) -> dict[str, Any] | None:
-    text = content.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines and lines[0].strip().startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
-
-    for candidate in (text, text[text.find("{") : text.rfind("}") + 1]):
-        if not candidate:
-            continue
-        try:
-            parsed = json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
-        return parsed if isinstance(parsed, dict) else None
-    return None
 
 
 def _normalise_criteria(criteria: dict[str, Any]) -> dict[str, Any]:
@@ -137,7 +119,7 @@ async def confirm_criteria(state: JobSetupState) -> JobSetupState:
         for msg in history
     )
 
-    response = await _build_llm().ainvoke(
+    response = await _build_llm(json_mode=True).ainvoke(
         [
             SystemMessage(content=JOB_SETUP_CRITERIA_EXTRACTION),
             HumanMessage(content=conversation_text),
@@ -150,7 +132,7 @@ async def confirm_criteria(state: JobSetupState) -> JobSetupState:
         metadata={"job_id": state["job_id"], "operation": "confirm_criteria"},
     )
 
-    criteria = _parse_json_object(str(response.content))
+    criteria = parse_json_object(response.content)
     if criteria is None:
         return {
             **state,
