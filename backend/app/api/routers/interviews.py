@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 
@@ -149,7 +150,14 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
         try:
             from app.services.streaming_tts_service import StreamingTtsService
 
-            async for chunk in StreamingTtsService().stream(text):
+            stream = StreamingTtsService().stream(text)
+            while True:
+                # Per-chunk timeout: a stalled speech service (bad credentials,
+                # network hang) must degrade to text-only, not freeze the turn.
+                try:
+                    chunk = await asyncio.wait_for(stream.__anext__(), timeout=15.0)
+                except StopAsyncIteration:
+                    break
                 if not await _send_json({
                     "type": "ai_audio_chunk",
                     "audio": base64.b64encode(chunk).decode(),
@@ -157,6 +165,8 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                 }):
                     return False
                 seq += 1
+        except asyncio.TimeoutError:
+            logger.warning("interview.tts_stream_timeout", session_id=session_id)
         except Exception as exc:
             logger.warning("interview.tts_stream_failed", session_id=session_id, error=str(exc))
         return await _send_json({"type": "ai_audio_end"})
@@ -193,9 +203,9 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
     elif streaming_mode and not is_resuming and current_turn_count == 0:
         if not await _stream_ai_response(
             (
-                "Hello, welcome to your AI interview. "
-                "Please start by telling me about your background and the experience "
-                "most relevant to this role."
+                "Hello, I'm Sila, your AI interviewer for this role. "
+                "Welcome — please start by telling me about your background and the "
+                "experience most relevant to this position."
             ),
             counts_as_turn=False,
         ):

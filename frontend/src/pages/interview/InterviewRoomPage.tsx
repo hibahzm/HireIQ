@@ -19,6 +19,7 @@ export default function InterviewRoomPage({ token }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [processing, setProcessing] = useState(false);
   const [aiSpeaking, setAiSpeaking] = useState(false);
+  const [candidateSpeaking, setCandidateSpeaking] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [voiceUnavailable, setVoiceUnavailable] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -33,6 +34,9 @@ export default function InterviewRoomPage({ token }: Props) {
   const streamingRef = useRef<StreamingController | null>(null);
   const audioBlockShownRef = useRef(false);
   const aiSpeakingRef = useRef(false);
+  // True from "AI turn text received" until its streamed audio fully played out;
+  // gates interview completion so the closing line isn't cut off.
+  const playbackPendingRef = useRef(false);
   const pendingCompleteRef = useRef(false);
   const completionShownRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -59,28 +63,32 @@ export default function InterviewRoomPage({ token }: Props) {
       },
       onProcessing: () => {
         setProcessing(true);
+        setCandidateSpeaking(false);
         aiSpeakingRef.current = false;
         setAiSpeaking(false);
       },
-      onPartial: (text) => addMessage("candidate", text),
-      // Turn-based (full-blob) AI turn
+      onPartial: (text) => {
+        setCandidateSpeaking(false);
+        addMessage("candidate", text);
+      },
+      // Turn-based (full-blob) AI turn. The avatar's "speaking" state is driven by
+      // the <audio> element's playing/ended events so the mouth moves with the sound.
       onAiTurn: (text, audioBuffer) => {
         setProcessing(false);
-        aiSpeakingRef.current = false;
-        setAiSpeaking(false);
         addMessage("ai", text);
         if (audioBuffer && audioRef.current) {
           const blob = new Blob([audioBuffer], { type: "audio/mp3" });
           audioRef.current.src = URL.createObjectURL(blob);
-          audioRef.current.play().catch(() => {});
+          audioRef.current.play().catch(() => {
+            setAudioBlocked(true);
+          });
         }
         setTurnCount((n) => n + 1);
       },
       // Streaming AI turn: text first, then audio chunks
       onAiText: (text, countsAsTurn, append) => {
         setProcessing(false);
-        aiSpeakingRef.current = true;
-        setAiSpeaking(true);
+        playbackPendingRef.current = true;
         if (append) {
           addMessage("ai", text);
         }
@@ -95,6 +103,7 @@ export default function InterviewRoomPage({ token }: Props) {
       },
       onBlocked: (message) => {
         setProcessing(false);
+        setCandidateSpeaking(false);
         aiSpeakingRef.current = false;
         setAiSpeaking(false);
         addMessage("system", message);
@@ -102,7 +111,10 @@ export default function InterviewRoomPage({ token }: Props) {
       },
       onComplete: () => {
         pendingCompleteRef.current = true;
-        if (!aiSpeakingRef.current) {
+        const el = audioRef.current;
+        const audioActive =
+          playbackPendingRef.current || (el ? !el.paused && !el.ended : false);
+        if (!audioActive) {
           finishInterview();
         }
       },
@@ -132,6 +144,34 @@ export default function InterviewRoomPage({ token }: Props) {
     aiSpeakingRef.current = aiSpeaking;
   }, [aiSpeaking]);
 
+  // Drive the avatar's mouth from the audio element itself: it animates exactly
+  // while sound is coming out, not from when the text message arrived.
+  useEffect(() => {
+    if (!started) return;
+    const el = audioRef.current;
+    if (!el) return;
+    const onPlaying = () => {
+      aiSpeakingRef.current = true;
+      setAiSpeaking(true);
+    };
+    const onStopped = () => {
+      aiSpeakingRef.current = false;
+      setAiSpeaking(false);
+      if (pendingCompleteRef.current && !playbackPendingRef.current) {
+        finishInterview();
+      }
+    };
+    el.addEventListener("playing", onPlaying);
+    el.addEventListener("pause", onStopped);
+    el.addEventListener("ended", onStopped);
+    return () => {
+      el.removeEventListener("playing", onPlaying);
+      el.removeEventListener("pause", onStopped);
+      el.removeEventListener("ended", onStopped);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [started]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -144,9 +184,11 @@ export default function InterviewRoomPage({ token }: Props) {
     if (completionShownRef.current) return;
     completionShownRef.current = true;
     pendingCompleteRef.current = false;
+    playbackPendingRef.current = false;
     aiSpeakingRef.current = false;
     setProcessing(false);
     setAiSpeaking(false);
+    setCandidateSpeaking(false);
     setStatus("complete");
     streamingRef.current?.stop();
     addMessage("system", "Interview complete. Thank you for your time!");
@@ -175,16 +217,19 @@ export default function InterviewRoomPage({ token }: Props) {
         setAudioBlocked(true);
         if (!audioBlockShownRef.current) {
           audioBlockShownRef.current = true;
-          addMessage("system", "Audio playback is blocked. Use Enable audio to hear the interviewer.");
+          addMessage("system", "Audio playback is blocked. Use Enable audio to hear Sila.");
         }
       },
       onPlaybackComplete: () => {
+        playbackPendingRef.current = false;
         aiSpeakingRef.current = false;
         setAiSpeaking(false);
         if (pendingCompleteRef.current) {
           finishInterview();
         }
       },
+      onSpeechStart: () => setCandidateSpeaking(true),
+      onSpeechEnd: () => setCandidateSpeaking(false),
     });
     streamingRef.current = controller;
 
@@ -230,19 +275,23 @@ export default function InterviewRoomPage({ token }: Props) {
   }
 
   const streamingStatusText = aiSpeaking
-    ? "AI is speaking…"
+    ? "Sila is speaking…"
     : processing
-      ? "Thinking…"
+      ? "Sila is thinking…"
       : voiceUnavailable
         ? "Microphone unavailable"
-      : "Listening — just speak naturally";
+        : candidateSpeaking
+          ? "Recording your answer — pause when you're done"
+          : "Listening — just speak naturally";
   const streamingDotClass = voiceUnavailable
     ? "bg-red-500"
     : aiSpeaking
       ? "bg-brand-400"
       : processing
         ? "bg-amber-400"
-        : "bg-emerald-400";
+        : candidateSpeaking
+          ? "bg-red-400"
+          : "bg-emerald-400";
 
   const avatarState: AvatarState = aiSpeaking
     ? "speaking"
@@ -291,11 +340,11 @@ export default function InterviewRoomPage({ token }: Props) {
           <AiAvatar state="idle" size={150} />
         </div>
         <h1 className="mt-6 animate-fade-in-up text-2xl font-bold text-white" style={{ animationDelay: "100ms" }}>
-          Your AI Interview
+          Meet Sila, your AI interviewer
         </h1>
         <p className="mt-3 animate-fade-in-up text-sm leading-relaxed text-primary-100" style={{ animationDelay: "200ms" }}>
-          You'll have a natural voice conversation with our AI interviewer. Find a quiet spot
-          and make sure your microphone is ready.
+          You'll have a natural voice conversation with Sila. Find a quiet spot and make sure
+          your microphone is ready.
         </p>
         <button
           onClick={handleStartInterview}
@@ -349,7 +398,12 @@ export default function InterviewRoomPage({ token }: Props) {
     <div className="flex h-screen flex-col bg-gradient-to-b from-primary-600 via-primary-700 to-primary-800">
       {/* Header: brand + turn progress */}
       <header className="flex items-center justify-between px-4 py-3 sm:px-6">
-        <Logo size={28} onDark />
+        <div className="flex items-center gap-3">
+          <Logo size={28} onDark />
+          <span className="hidden text-xs font-medium text-primary-200 sm:inline">
+            Interview with Sila
+          </span>
+        </div>
         <div className="text-right">
           {sessionId && (
             <div className="font-mono text-[10px] text-primary-300">Session {sessionId.slice(0, 8)}</div>

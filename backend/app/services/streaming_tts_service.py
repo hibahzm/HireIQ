@@ -38,6 +38,8 @@ class StreamingTtsService:
         speech_config.set_speech_synthesis_output_format(
             speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3
         )
+        # Sila's voice — keep in sync with TtsService._azure_tts.
+        speech_config.speech_synthesis_voice_name = "en-US-JennyNeural"
         # audio_config=None → we receive audio via the synthesizing callback, not a speaker.
         synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
 

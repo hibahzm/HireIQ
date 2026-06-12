@@ -5,12 +5,12 @@ Constitution Principle VIII — T054: write FIRST, confirm FAILING before T063.
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 
 @pytest.fixture
 async def client(app):
-    async with AsyncClient(app=app, base_url="http://test") as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
 
 
@@ -67,6 +67,9 @@ async def test_websocket_interview_turn_sequence(app, interview_token):
                 ws.send_json({"type": "text_input", "text": "That's all from my side."})
                 ws.receive_json()  # turn_processing
 
+                final_turn = ws.receive_json()  # the closing AI line
+                assert final_turn["type"] == "ai_turn"
+
                 complete_msg = ws.receive_json()
                 assert complete_msg["type"] == "interview_complete"
 
@@ -80,6 +83,11 @@ async def test_session_resume_within_24h(app, interview_token):
     """Reconnect within 24h → resuming: true, turn_count preserved."""
     from starlette.testclient import TestClient
     from unittest.mock import AsyncMock, patch
+
+    import sqlalchemy as sa
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from tests.integration.conftest import ADMIN_URL
 
     token = interview_token
 
@@ -98,19 +106,43 @@ async def test_session_resume_within_24h(app, interview_token):
             with client.websocket_connect(f"/interviews/{token}/connect") as ws:
                 msg = ws.receive_json()
                 assert msg["type"] == "session_ready"
-                # Send some turns
+                # Send some turns (turn accounting lives in the mocked service, so
+                # persist the count the way the real handle_turn would).
                 for _ in range(3):
                     ws.send_json({"type": "text_input", "text": "Test response"})
                     ws.receive_json()  # turn_processing
                     ws.receive_json()  # ai_turn
             # Disconnect
 
-            # Second connection (within 24h — no time manipulation needed in fast test)
-            with client.websocket_connect(f"/interviews/{token}/connect") as ws2:
-                resume_msg = ws2.receive_json()
-                assert resume_msg["type"] == "session_ready"
-                assert resume_msg.get("resuming") is True
-                assert resume_msg.get("turn_count", 0) >= 3
+    engine = create_async_engine(ADMIN_URL, isolation_level="AUTOCOMMIT")
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(
+                sa.text(
+                    "UPDATE interview_sessions SET turn_count = 3, status = 'in_progress' "
+                    "WHERE application_id = (SELECT id FROM applications WHERE interview_token = :tok)"
+                ),
+                {"tok": token},
+            )
+    finally:
+        await engine.dispose()
+
+    # The app's DB/Redis singletons are bound to the first TestClient's loop —
+    # reset them so the second TestClient builds fresh ones on its own loop.
+    import app.db as db
+    from app import redis_client
+
+    db._engine = None
+    db._session_factory = None
+    redis_client._redis = None
+
+    with TestClient(app) as client:
+        # Second connection (within 24h — no time manipulation needed in fast test)
+        with client.websocket_connect(f"/interviews/{token}/connect") as ws2:
+            resume_msg = ws2.receive_json()
+            assert resume_msg["type"] == "session_ready"
+            assert resume_msg.get("resuming") is True
+            assert resume_msg.get("turn_count", 0) >= 3
 
 
 @pytest.mark.asyncio

@@ -20,7 +20,7 @@ class TtsService:
 
         response = await client.audio.speech.create(
             model="tts-1",
-            voice="onyx",
+            voice="nova",  # Sila's voice on the OpenAI path
             input=text,
             response_format="mp3",
         )
@@ -41,6 +41,8 @@ class TtsService:
         speech_config.set_speech_synthesis_output_format(
             speechsdk.SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3
         )
+        # Sila's voice — keep in sync with StreamingTtsService.
+        speech_config.speech_synthesis_voice_name = "en-US-JennyNeural"
         synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=None)
         result = synthesizer.speak_text_async(text).get()
         if result.reason != speechsdk.ResultReason.SynthesizingAudioCompleted:

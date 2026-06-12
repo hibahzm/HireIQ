@@ -89,7 +89,7 @@ function Eyes({ cx }: { cx: number }) {
 /** Compact head-only version for tiny placements (chat message chips). */
 function CompactRobot({ state, size }: { state: AvatarState; size: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 120 120" fill="none" role="img" aria-label={`AI interviewer (${state})`}>
+    <svg width={size} height={size} viewBox="0 0 120 120" fill="none" role="img" aria-label={`Sila, the AI interviewer (${state})`}>
       <defs>
         <linearGradient id="ai-head-sm" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#1e293b" />
@@ -123,7 +123,7 @@ function RecruiterRobot({ state, size }: { state: AvatarState; size: number }) {
       viewBox="0 0 140 150"
       fill="none"
       role="img"
-      aria-label={`AI recruiter (${state})`}
+      aria-label={`Sila, the AI recruiter (${state})`}
       className={state === "idle" ? "animate-float" : ""}
     >
       <defs>

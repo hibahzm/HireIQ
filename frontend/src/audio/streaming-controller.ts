@@ -11,12 +11,16 @@
 import type { InterviewWebSocket } from "../services/interview-ws";
 
 const TARGET_RATE = 16000;
-const START_OF_SPEECH_MS = 450;
-const END_OF_SPEECH_SILENCE_MS = 2800;
+const START_OF_SPEECH_MS = 300;
+const END_OF_SPEECH_SILENCE_MS = 1500;
+// Hard cap per utterance: even if constant background noise keeps every frame
+// above the speech threshold, the turn still finalizes and the candidate gets
+// a response instead of the interviewer "listening" forever.
+const MAX_UTTERANCE_MS = 90000;
 const POST_PLAYBACK_GRACE_MS = 700;
 const PRE_ROLL_MS = 700;
-const MIN_ENERGY_SPEECH_THRESHOLD = 0.025;
-const NOISE_MULTIPLIER = 4;
+const MIN_ENERGY_SPEECH_THRESHOLD = 0.012;
+const NOISE_MULTIPLIER = 3.5;
 const PLAYBACK_COMPLETE_FALLBACK_MS = 30000;
 const CAPTURE_PROCESSOR_NAME = "capture-processor";
 const CAPTURE_WORKLET_SOURCE = `
@@ -36,6 +40,10 @@ registerProcessor("${CAPTURE_PROCESSOR_NAME}", CaptureProcessor);
 interface StreamingControllerOptions {
   onPlaybackBlocked?: () => void;
   onPlaybackComplete?: () => void;
+  /** Candidate speech detected — an utterance is now being recorded. */
+  onSpeechStart?: () => void;
+  /** End-of-speech sent — the utterance is being transcribed. */
+  onSpeechEnd?: () => void;
 }
 
 export class StreamingController {
@@ -44,6 +52,7 @@ export class StreamingController {
   private noiseFloor = 0.004;
   private speechMs = 0;
   private silenceMs = 0;
+  private utteranceMs = 0;
   private preRollMs = 0;
   private acceptingSpeechAt = 0;
   private utteranceActive = false;
@@ -150,13 +159,14 @@ export class StreamingController {
     const frame = int16ToArrayBuffer(pcm16);
     if (this.utteranceActive) {
       this.ws.sendAudioFrame(frame);
+      this.utteranceMs += frameMs;
       if (isSpeech) {
         this.silenceMs = 0;
       } else {
         this.silenceMs += frameMs;
-        if (this.silenceMs >= END_OF_SPEECH_SILENCE_MS) {
-          this.handleEndOfSpeech();
-        }
+      }
+      if (this.silenceMs >= END_OF_SPEECH_SILENCE_MS || this.utteranceMs >= MAX_UTTERANCE_MS) {
+        this.handleEndOfSpeech();
       }
       return;
     }
@@ -167,9 +177,11 @@ export class StreamingController {
       if (this.speechMs >= START_OF_SPEECH_MS) {
         this.utteranceActive = true;
         this.silenceMs = 0;
+        this.utteranceMs = 0;
         for (const item of this.preRoll) {
           this.ws.sendAudioFrame(item.pcm);
         }
+        this.options.onSpeechStart?.();
       }
     } else {
       this.speechMs = 0;
@@ -187,6 +199,11 @@ export class StreamingController {
 
     if (!speech) {
       this.noiseFloor = this.noiseFloor * 0.995 + rms * 0.005;
+    } else {
+      // Very slow upward drift (~1 min time constant): steady background noise
+      // recalibrates the floor instead of reading as speech forever, while real
+      // speech (interleaved with brief silences) barely moves it.
+      this.noiseFloor = Math.min(this.noiseFloor * 0.99995 + rms * 0.00005, 0.05);
     }
 
     return speech;
@@ -204,6 +221,7 @@ export class StreamingController {
   private resetUtteranceState(): void {
     this.speechMs = 0;
     this.silenceMs = 0;
+    this.utteranceMs = 0;
     this.preRollMs = 0;
     this.utteranceActive = false;
     this.preRoll.length = 0;
@@ -215,6 +233,7 @@ export class StreamingController {
     // Enter half-duplex until the AI finishes speaking.
     this.speaking = true;
     this.resetUtteranceState();
+    this.options.onSpeechEnd?.();
   }
 
   // ── AI audio playback (MediaSource chunked) ──────────────────────────────

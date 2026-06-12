@@ -53,15 +53,24 @@ async def _fake_tts_stream(self, text: str):
         yield chunk
 
 
+def _drain_greeting(ws):
+    """Consume the turn-0 welcome message (ai_turn_text + audio chunks + ai_audio_end)."""
+    while True:
+        msg = ws.receive_json()
+        if msg["type"] == "ai_audio_end":
+            return
+
+
 @pytest.mark.asyncio
 async def test_streaming_session_ready_advertises_mode(app, interview_token, monkeypatch):
     """session_ready carries streaming_mode=true for a streaming-enabled session (FR-005)."""
     _force_streaming(monkeypatch)
     with TestClient(app) as client:
-        with client.websocket_connect(f"/interviews/{interview_token}/connect") as ws:
-            msg = ws.receive_json()
-            assert msg["type"] == "session_ready"
-            assert msg["streaming_mode"] is True
+        with patch("app.services.streaming_tts_service.StreamingTtsService.stream", _fake_tts_stream):
+            with client.websocket_connect(f"/interviews/{interview_token}/connect") as ws:
+                msg = ws.receive_json()
+                assert msg["type"] == "session_ready"
+                assert msg["streaming_mode"] is True
 
 
 @pytest.mark.asyncio
@@ -86,6 +95,7 @@ async def test_streaming_turn_emits_text_then_ordered_audio(app, interview_token
             }
             with client.websocket_connect(f"/interviews/{interview_token}/connect") as ws:
                 assert ws.receive_json()["type"] == "session_ready"
+                _drain_greeting(ws)
 
                 frame = base64.b64encode(b"\x10\x00" * 160).decode()  # 20ms PCM16 @16k
                 ws.send_json({"type": "audio_frame", "audio": frame})
@@ -93,6 +103,8 @@ async def test_streaming_turn_emits_text_then_ordered_audio(app, interview_token
                 ws.send_json({"type": "end_of_speech"})
 
                 assert ws.receive_json()["type"] == "turn_processing"
+                transcript_msg = ws.receive_json()  # candidate transcript echoed to the chat
+                assert transcript_msg["type"] == "partial_transcript" and transcript_msg["text"]
                 text_msg = ws.receive_json()
                 assert text_msg["type"] == "ai_turn_text" and text_msg["text"]
 
@@ -128,11 +140,13 @@ async def test_streaming_guardrail_blocks_before_audio(app, interview_token, mon
             }
             with client.websocket_connect(f"/interviews/{interview_token}/connect") as ws:
                 assert ws.receive_json()["type"] == "session_ready"
+                _drain_greeting(ws)
                 frame = base64.b64encode(b"\x10\x00" * 160).decode()
                 ws.send_json({"type": "audio_frame", "audio": frame})
                 ws.send_json({"type": "end_of_speech"})
 
                 assert ws.receive_json()["type"] == "turn_processing"
+                assert ws.receive_json()["type"] == "partial_transcript"
                 blocked = ws.receive_json()
                 assert blocked["type"] == "turn_blocked"
                 # No audio chunk should follow a block.
@@ -149,9 +163,13 @@ async def test_streaming_init_failure_falls_back(app, interview_token, monkeypat
             raise RuntimeError("azure speech unavailable")
 
     with TestClient(app) as client:
-        with patch("app.services.streaming_stt_service.StreamingSttService", _BoomStt):
+        with (
+            patch("app.services.streaming_stt_service.StreamingSttService", _BoomStt),
+            patch("app.services.streaming_tts_service.StreamingTtsService.stream", _fake_tts_stream),
+        ):
             with client.websocket_connect(f"/interviews/{interview_token}/connect") as ws:
                 assert ws.receive_json()["type"] == "session_ready"
+                _drain_greeting(ws)
                 frame = base64.b64encode(b"\x10\x00" * 160).decode()
                 ws.send_json({"type": "audio_frame", "audio": frame})
                 err = ws.receive_json()

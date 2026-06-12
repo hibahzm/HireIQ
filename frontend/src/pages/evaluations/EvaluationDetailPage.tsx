@@ -187,11 +187,12 @@ function TranscriptPanel({
               className={`flex gap-3 ${isAI ? "flex-row" : "flex-row-reverse"}`}
             >
               <div
+                title={isAI ? "Sila (AI interviewer)" : "Candidate"}
                 className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-semibold ${
                   isAI ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700"
                 }`}
               >
-                {isAI ? "AI" : "C"}
+                {isAI ? "S" : "C"}
               </div>
               <div
                 className={`flex-1 max-w-xl rounded-lg px-4 py-2 ${
