@@ -31,6 +31,66 @@ def _build_llm() -> ChatOpenAI:
     return ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY, temperature=0.3)
 
 
+def _completion_signal(text: str) -> bool:
+    normalized = (
+        text.lower()
+        .replace("\u2019", "'")
+        .replace("\u2018", "'")
+        .replace("\u201c", '"')
+        .replace("\u201d", '"')
+    )
+    if "status" in normalized and "completed" in normalized:
+        return True
+    return any(
+        phrase in normalized
+        for phrase in (
+            "criteria confirmed",
+            "confirm to activate",
+            "ready to activate",
+            "setup complete",
+            "setup is complete",
+            "here's the summary",
+            "here is the summary",
+            "structured summary",
+        )
+    )
+
+
+def _parse_json_object(content: str) -> dict[str, Any] | None:
+    text = content.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].strip().startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    for candidate in (text, text[text.find("{") : text.rfind("}") + 1]):
+        if not candidate:
+            continue
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
+def _normalise_criteria(criteria: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "required_skills": criteria.get("required_skills") or [],
+        "optional_skills": criteria.get("optional_skills") or [],
+        "experience_level": criteria.get("experience_level") or "mid",
+        "min_years_experience": criteria.get("min_years_experience"),
+        "evaluation_dimensions": criteria.get("evaluation_dimensions") or [
+            {"name": "Role fit", "weight": 1.0, "description": "Overall match for the role"}
+        ],
+        "dealbreakers": criteria.get("dealbreakers") or [],
+        "min_screening_score": criteria.get("min_screening_score") or 60,
+    }
+
+
 async def elicit_criteria(state: JobSetupState) -> JobSetupState:
     user_message = state["conversation_history"][-1]["content"] if state["conversation_history"] else ""
 
@@ -62,17 +122,19 @@ async def elicit_criteria(state: JobSetupState) -> JobSetupState:
 
     ai_text = PIIRedactor.redact(ai_text)
 
-    status = "in_progress"
-    if any(phrase in ai_text.lower() for phrase in ["to summarize", "here's a summary", "criteria confirmed"]):
-        status = "confirming"
+    status = "confirming" if _completion_signal(ai_text) else "in_progress"
 
     return {**state, "ai_message": ai_text, "status": status, "usage_events": usage_events}
 
 
 async def confirm_criteria(state: JobSetupState) -> JobSetupState:
+    history = list(state["conversation_history"])
+    if state.get("ai_message"):
+        history.append({"role": "assistant", "content": state["ai_message"]})
+
     conversation_text = "\n".join(
         f"{msg['role'].upper()}: {msg['content']}"
-        for msg in state["conversation_history"]
+        for msg in history
     )
 
     response = await _build_llm().ainvoke(
@@ -88,15 +150,16 @@ async def confirm_criteria(state: JobSetupState) -> JobSetupState:
         metadata={"job_id": state["job_id"], "operation": "confirm_criteria"},
     )
 
-    try:
-        criteria = json.loads(response.content)
-    except json.JSONDecodeError:
+    criteria = _parse_json_object(str(response.content))
+    if criteria is None:
         return {
             **state,
             "ai_message": "Let me clarify a few more details. What are the required skills?",
             "status": "in_progress",
             "usage_events": usage_events,
         }
+
+    criteria = _normalise_criteria(criteria)
 
     return {
         **state,
