@@ -29,3 +29,11 @@ class CompanyRepository:
             sa.select(Company).where(Company.id == company_id)
         )
         return result.scalar_one_or_none()
+
+    async def update_overview(self, company_id: str, overview: str | None) -> Company | None:
+        await self._session.execute(
+            sa.update(Company)
+            .where(Company.id == company_id)
+            .values(overview=overview, updated_at=datetime.now(timezone.utc))
+        )
+        return await self.get_by_id(company_id)

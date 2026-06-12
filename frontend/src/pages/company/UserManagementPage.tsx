@@ -15,6 +15,10 @@ export default function UserManagementPage({ token }: Props) {
   const [inviting, setInviting] = useState(false);
   const [lastInviteLink, setLastInviteLink] = useState<string | null>(null);
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [overview, setOverview] = useState("");
+  const [savingOverview, setSavingOverview] = useState(false);
+  const [overviewSaved, setOverviewSaved] = useState(false);
   const activeAdminCount = users.filter((u) => u.role === "admin" && u.is_active).length;
 
   useEffect(() => {
@@ -23,7 +27,30 @@ export default function UserManagementPage({ token }: Props) {
       .then(setUsers)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+    api.company
+      .get(token)
+      .then((c) => {
+        setCompanyName(c.name);
+        setOverview(c.overview ?? "");
+      })
+      .catch(() => {});
   }, [token]);
+
+  async function handleSaveOverview(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingOverview(true);
+    setError(null);
+    try {
+      const updated = await api.company.updateOverview(token, overview);
+      setOverview(updated.overview ?? "");
+      setOverviewSaved(true);
+      setTimeout(() => setOverviewSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save company overview");
+    } finally {
+      setSavingOverview(false);
+    }
+  }
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -83,8 +110,45 @@ export default function UserManagementPage({ token }: Props) {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="mb-6 text-2xl font-bold tracking-tight text-primary-800">Team</h1>
+      <h1 className="mb-6 text-2xl font-bold tracking-tight text-primary-800">
+        {companyName ? `${companyName} — Team & profile` : "Team"}
+      </h1>
 
+      {/* Company profile — Sila answers candidate questions from this text only */}
+      <form
+        onSubmit={handleSaveOverview}
+        className="mb-8 rounded-xl border border-primary-200 bg-white p-4 shadow-sm"
+      >
+        <label htmlFor="company-overview" className="block text-sm font-semibold text-primary-800">
+          Company overview
+        </label>
+        <p className="mb-2 mt-1 text-xs text-primary-500">
+          During interviews, Sila answers candidate questions about your company using only
+          this text. Questions it doesn't cover get a polite "I'll pass that to the hiring
+          team" — so include what candidates usually ask: what you do, team, culture, benefits.
+        </p>
+        <textarea
+          id="company-overview"
+          value={overview}
+          onChange={(e) => setOverview(e.target.value)}
+          rows={5}
+          maxLength={4000}
+          placeholder="e.g. We're a 40-person fintech building payment infrastructure for…"
+          className="block w-full rounded-lg border border-primary-200 px-3 py-2.5 text-sm leading-relaxed focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+        />
+        <div className="mt-2 flex items-center justify-end gap-3">
+          {overviewSaved && <span className="text-xs font-medium text-green-600">Saved</span>}
+          <button
+            type="submit"
+            disabled={savingOverview}
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60 cursor-pointer"
+          >
+            {savingOverview ? "Saving…" : "Save overview"}
+          </button>
+        </div>
+      </form>
+
+      <h2 className="mb-3 text-lg font-semibold text-primary-800">Team</h2>
       <form onSubmit={handleInvite} className="flex gap-2 mb-6">
         <input
           type="email"

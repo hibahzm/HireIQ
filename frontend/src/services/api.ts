@@ -99,6 +99,12 @@ export const api = {
         token
       ),
   },
+  company: {
+    get: (token: string) =>
+      request<CompanyProfile>("GET", "/company", undefined, token),
+    updateOverview: (token: string, overview: string) =>
+      request<CompanyProfile>("PUT", "/company/overview", { overview }, token),
+  },
   users: {
     list: (token: string) =>
       request<UserProfile[]>("GET", "/users", undefined, token),
@@ -181,6 +187,12 @@ export interface JobCriteriaInput {
   evaluation_dimensions: Array<Record<string, unknown>>;
   dealbreakers?: Array<Record<string, unknown>>;
   min_screening_score?: number;
+}
+
+export interface CompanyProfile {
+  id: string;
+  name: string;
+  overview: string | null;
 }
 
 export interface UserProfile {
