@@ -19,14 +19,13 @@ class NotificationService:
         self._settings = get_settings()
 
     async def send_user_invite_email(self, to_email: str, invite_link: str) -> None:
+        """Admin invited a team member → branded set-password email (24h link)."""
         if not await self._should_send("user_invite", to_email):
             return
-        subject = "You've been invited to HireIQ"
-        body = (
-            f"You've been added as a team member on HireIQ. "
-            f"Set your password here (link valid 24 hours): {invite_link}"
+        subject, html = email_templates.team_invite_email(
+            invite_link=invite_link, expiry_hours=24
         )
-        await self._send(to_email, subject, body)
+        await self._send_html(to_email, subject, html)
         await self._mark_sent("user_invite", to_email)
 
     async def send_invitation_email(
@@ -71,12 +70,6 @@ class NotificationService:
         )
         await self._send_html(candidate_email, subject, html)
         await self._mark_sent("feedback", candidate_email)
-
-    async def _send(self, to: str, subject: str, body: str) -> None:
-        if self._settings.EMAIL_BACKEND == "resend":
-            await self._send_resend(to, subject, text=body)
-        else:
-            logger.info("email.console", to=to, subject=subject, body=body)
 
     async def _send_html(self, to: str, subject: str, html: str) -> None:
         if self._settings.EMAIL_BACKEND == "resend":

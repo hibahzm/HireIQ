@@ -61,6 +61,23 @@ def _layout(
 </html>"""
 
 
+def team_invite_email(*, invite_link: str, expiry_hours: int) -> tuple[str, str]:
+    """Sent when an admin adds a team member (recruiter/admin) — set-password link."""
+    subject = "You've been invited to HireIQ"
+    html = _layout(
+        heading="You've been invited to HireIQ",
+        paragraphs=[
+            "An administrator has added you as a team member on HireIQ.",
+            "To get started, set your password using the secure link below. "
+            f"<strong>This link is valid for {expiry_hours} hours.</strong>",
+        ],
+        cta_label="Set my password →",
+        cta_url=invite_link,
+        footnote="If you weren't expecting this invitation, you can safely ignore this email.",
+    )
+    return subject, html
+
+
 def invitation_email(*, interview_link: str, expiry_hours: int) -> tuple[str, str]:
     """Sent when a candidate's CV is qualified — carries the interview link."""
     subject = "You're invited to your HireIQ interview"
