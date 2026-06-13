@@ -10,6 +10,7 @@ import {
   DashboardIcon,
   LogOutIcon,
   MenuIcon,
+  RefreshIcon,
   UsersIcon,
 } from "./ui/icons";
 import { LogoMark } from "./ui/Logo";
@@ -32,9 +33,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Bumping this remounts <main>, which re-runs every page's data-fetch effects —
+  // a universal "refresh this page" without each page needing its own reload logic.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   const crumbs = crumbsFor(location.pathname);
   const canGoBack = crumbs.length > 1;
+
+  function handleRefresh() {
+    setRefreshing(true);
+    setRefreshKey((k) => k + 1);
+    // Brief spin for feedback; the remount itself is synchronous.
+    window.setTimeout(() => setRefreshing(false), 600);
+  }
   const navItems =
     user?.role === "manager"
       ? MANAGER_NAV
@@ -150,6 +162,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
+            <button
+              onClick={handleRefresh}
+              className="rounded-lg p-2 text-primary-500 transition-colors hover:bg-primary-100 hover:text-primary-800 cursor-pointer"
+              aria-label="Refresh this page"
+              title="Refresh"
+            >
+              <RefreshIcon className={refreshing ? "animate-spin" : undefined} />
+            </button>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium leading-tight text-primary-800">
                 {user?.email ?? "—"}
@@ -175,8 +195,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         )}
 
-        {/* Keyed by pathname so content re-animates on every navigation */}
-        <main key={location.pathname} className="mx-auto max-w-7xl animate-fade-in-up px-4 py-6 sm:px-6 lg:px-8">
+        {/* Keyed by pathname (+ refresh nonce) so content re-animates on every
+            navigation and remounts — re-fetching data — when Refresh is clicked. */}
+        <main
+          key={`${location.pathname}#${refreshKey}`}
+          className="mx-auto max-w-7xl animate-fade-in-up px-4 py-6 sm:px-6 lg:px-8"
+        >
           {children}
         </main>
       </div>

@@ -27,7 +27,6 @@ export default function InterviewRoomPage({ token }: Props) {
   const [sessionId, setSessionId] = useState("");
   const [turnCount, setTurnCount] = useState(0);
   const [maxTurns, setMaxTurns] = useState(20);
-  const [showTranscript, setShowTranscript] = useState(false);
   const wsRef = useRef<InterviewWebSocket | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -40,7 +39,6 @@ export default function InterviewRoomPage({ token }: Props) {
   const playbackPendingRef = useRef(false);
   const pendingCompleteRef = useRef(false);
   const completionShownRef = useRef(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!started) return;
@@ -172,10 +170,6 @@ export default function InterviewRoomPage({ token }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [started]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, showTranscript]);
 
   function addMessage(speaker: "candidate" | "ai" | "system", text: string) {
     setMessages((prev) => [...prev, { speaker, text }]);
@@ -395,9 +389,9 @@ export default function InterviewRoomPage({ token }: Props) {
 
   const progress = maxTurns > 0 ? Math.min((turnCount / maxTurns) * 100, 100) : 0;
 
-  // Voice-first view: surface only Sila's latest line as a subtitle, plus the
-  // most recent system notice (if it is the newest message).
-  const lastAiText = [...messages].reverse().find((m) => m.speaker === "ai")?.text ?? "";
+  // Pure voice view: no question text or transcript on screen — only Sila's
+  // voice. The single exception is an operational alert (mic/audio failure):
+  // the candidate must see those to recover, and they aren't interview content.
   const lastMessage = messages[messages.length - 1];
   const lastSystemText = lastMessage?.speaker === "system" ? lastMessage.text : null;
 
@@ -429,40 +423,34 @@ export default function InterviewRoomPage({ token }: Props) {
 
       <audio ref={audioRef} className="hidden" />
 
-      {/* Voice-first stage: Sila is the focus; her words appear as subtitles. */}
+      {/* Voice-only stage: Sila is the whole screen. No question text, no
+          transcript — the candidate listens and speaks, like a real call. */}
       <main className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-4">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute top-1/4 left-1/2 h-72 w-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-500/15 blur-3xl"
+          className="pointer-events-none absolute top-1/2 left-1/2 h-80 w-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-500/15 blur-3xl"
         />
         <div className="animate-scale-in">
-          <AiAvatar state={avatarState} size={160} />
+          <AiAvatar state={avatarState} size={180} />
         </div>
-        <div className="mt-4 flex items-center gap-2 text-sm text-primary-100" aria-live="polite">
-          <span className={`h-2 w-2 rounded-full ${streamingDotClass} animate-pulse`} />
+        <div className="mt-6 flex items-center gap-2 text-base text-primary-100" aria-live="polite">
+          <span className={`h-2.5 w-2.5 rounded-full ${streamingDotClass} animate-pulse`} />
           {status === "connecting" ? "Connecting to interview session…" : streamingStatusText}
         </div>
 
-        {/* Subtitles: the current question/remark, so candidates can re-read it */}
-        <div className="mt-6 min-h-[5rem] w-full max-w-xl text-center" aria-live="polite">
-          {lastAiText && (
-            <p
-              key={lastAiText}
-              className="animate-fade-in-up text-lg font-medium leading-relaxed text-white"
-            >
-              {lastAiText}
-            </p>
-          )}
-          {lastSystemText && (
-            <p className="mx-auto mt-3 max-w-md animate-fade-in rounded-full bg-amber-500/15 px-4 py-1.5 text-xs italic text-amber-200 ring-1 ring-amber-400/30">
-              {lastSystemText}
-            </p>
-          )}
-        </div>
+        {/* Operational alerts only (mic/audio failures) — not interview content */}
+        {lastSystemText && (
+          <p
+            role="alert"
+            className="mx-auto mt-5 max-w-md animate-fade-in rounded-xl bg-amber-500/15 px-4 py-2 text-center text-sm text-amber-100 ring-1 ring-amber-400/30"
+          >
+            {lastSystemText}
+          </p>
+        )}
       </main>
 
       {/* Bottom controls */}
-      <div className="flex flex-col items-center gap-3 px-4 pb-5">
+      <div className="flex flex-col items-center gap-3 px-4 pb-8">
         {audioBlocked && status === "ready" && (
           <button
             onClick={handleEnableAudio}
@@ -493,79 +481,7 @@ export default function InterviewRoomPage({ token }: Props) {
             )}
           </div>
         )}
-
-        <button
-          onClick={() => setShowTranscript((v) => !v)}
-          aria-expanded={showTranscript}
-          className="text-xs font-medium text-primary-200 underline-offset-4 transition-colors duration-150 hover:text-white hover:underline cursor-pointer"
-        >
-          {showTranscript ? "Hide transcript" : "Show transcript"}
-        </button>
       </div>
-
-      {/* Collapsible transcript (accessibility + re-reading past turns) */}
-      {showTranscript && (
-        <div className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-h-[55vh] w-full max-w-2xl animate-fade-in-up flex-col overflow-hidden rounded-t-3xl bg-canvas shadow-2xl">
-          <div className="flex items-center justify-between border-b border-primary-100 px-5 py-3">
-            <span className="text-sm font-semibold text-primary-800">Transcript</span>
-            <button
-              onClick={() => setShowTranscript(false)}
-              aria-label="Close transcript"
-              className="rounded-full px-2 py-1 text-sm text-primary-400 transition-colors duration-150 hover:bg-primary-50 hover:text-primary-700 cursor-pointer"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="flex-1 space-y-3 overflow-y-auto p-4 sm:p-6">
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                className={`flex animate-fade-in-up items-end gap-2 ${
-                  msg.speaker === "candidate"
-                    ? "justify-end"
-                    : msg.speaker === "system"
-                      ? "justify-center"
-                      : "justify-start"
-                }`}
-              >
-                {msg.speaker === "ai" && (
-                  <span className="mb-0.5 shrink-0">
-                    <AiAvatar state="idle" size={30} />
-                  </span>
-                )}
-                <div
-                  className={`max-w-xs rounded-2xl px-4 py-2.5 text-sm lg:max-w-md ${
-                    msg.speaker === "candidate"
-                      ? "rounded-br-md bg-brand-600 text-white shadow-sm"
-                      : msg.speaker === "system"
-                        ? "bg-amber-50 text-xs italic text-amber-800 ring-1 ring-amber-200"
-                        : "rounded-bl-md bg-white text-primary-700 shadow-card ring-1 ring-primary-100"
-                  }`}
-                >
-                  {msg.text}
-                </div>
-              </div>
-            ))}
-            {processing && (
-              <div className="flex animate-fade-in items-end gap-2">
-                <span className="mb-0.5 shrink-0">
-                  <AiAvatar state="thinking" size={30} />
-                </span>
-                <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-md bg-white px-4 py-3 shadow-card ring-1 ring-primary-100">
-                  {[0, 150, 300].map((delay) => (
-                    <span
-                      key={delay}
-                      className="h-1.5 w-1.5 animate-dot-bounce rounded-full bg-primary-400"
-                      style={{ animationDelay: `${delay}ms` }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-            <div ref={bottomRef} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

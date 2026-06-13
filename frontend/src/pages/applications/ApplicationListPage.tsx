@@ -63,12 +63,41 @@ export default function ApplicationListPage({ token, jobId, onSelectApplication 
   const visible = tab === "all" ? applications : applications.filter((a) => tabOf(a) === tab);
 
   useEffect(() => {
-    Promise.all([
-      api.applications.listByJob(token, jobId).then(setApplications),
-      api.jobs.get(token, jobId).then(setJob).catch(() => {}),
-    ])
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load applications"))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    let timer: number | undefined;
+
+    // Screening runs asynchronously after a candidate applies, so a freshly
+    // submitted application is "pending" for a few seconds before it flips to
+    // qualified/rejected. Poll while any application is mid-screening so the
+    // recruiter sees the label update live, without navigating away and back.
+    async function load(initial: boolean) {
+      try {
+        const [apps] = await Promise.all([
+          api.applications.listByJob(token, jobId),
+          initial ? api.jobs.get(token, jobId).then(setJob).catch(() => {}) : Promise.resolve(),
+        ]);
+        if (cancelled) return;
+        setApplications(apps);
+        const stillScreening = apps.some(
+          (a) => a.screening_status === "pending" || a.screening_status === "screening"
+        );
+        if (stillScreening) {
+          timer = window.setTimeout(() => load(false), 4000);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof ApiError ? e.message : "Failed to load applications");
+        }
+      } finally {
+        if (!cancelled && initial) setLoading(false);
+      }
+    }
+
+    load(true);
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
   }, [jobId, token]);
 
   async function handleInvite(applicationId: string) {

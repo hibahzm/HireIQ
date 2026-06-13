@@ -24,10 +24,15 @@ const MIN_UTTERANCE_MS = 1200;
 // above the speech threshold, the turn still finalizes and the candidate gets
 // a response instead of the interviewer "listening" forever.
 const MAX_UTTERANCE_MS = 90000;
-const POST_PLAYBACK_GRACE_MS = 700;
+// Grace after Sila stops speaking before the mic is "armed" again, so the tail
+// of her audio / room echo doesn't get captured as the candidate starting to talk.
+const POST_PLAYBACK_GRACE_MS = 900;
 const PRE_ROLL_MS = 700;
-const MIN_ENERGY_SPEECH_THRESHOLD = 0.012;
-const NOISE_MULTIPLIER = 3.5;
+// With browser noiseSuppression on, real speech clears this comfortably while
+// suppressed background noise stays well under it (was 0.012 — too low, caught
+// stray room sound). Speech must also clearly exceed the rolling noise floor.
+const MIN_ENERGY_SPEECH_THRESHOLD = 0.02;
+const NOISE_MULTIPLIER = 4.5;
 // Hysteresis: once the candidate is speaking, quiet trailing words still count
 // as speech (threshold drops to this fraction), so soft speech isn't clipped.
 const ACTIVE_THRESHOLD_RATIO = 0.6;
@@ -94,7 +99,17 @@ export class StreamingController {
       throw new Error("This browser cannot access a microphone on the current page.");
     }
 
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Let the browser's DSP do the heavy lifting: echoCancellation stops the mic
+    // from re-capturing Sila's own voice from the speakers, and noiseSuppression
+    // strips background hum/voices so the energy VAD sees clean silence when the
+    // candidate stops talking (the "still hearing voices" problem).
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
     this.ctx = new AudioContext();
     if (this.ctx.state === "suspended") {
       await this.ctx.resume().catch(() => {});
