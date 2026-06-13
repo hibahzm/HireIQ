@@ -176,7 +176,9 @@ class EvaluationService:
         # 8. Generate feedback token (T077)
         feedback_token = await self.generate_feedback_token(evaluation.id)
 
-        # 9. Send feedback email if candidate email is available
+        # 9. Notify the candidate — outcome-dependent. A "hire" recommendation gets a
+        # positive "the team will be in touch" email; anything else gets the feedback
+        # report with growth tips. Best-effort: email failure never fails evaluation.
         if candidate and candidate.email:
             from app.models.job import Job
             result = await self._session.execute(
@@ -187,13 +189,20 @@ class EvaluationService:
             feedback_url = f"{self._settings.FRONTEND_ORIGIN}/feedback/{feedback_token}"
             try:
                 from app.services.notification_service import NotificationService
-                await NotificationService(self._redis).send_feedback_email(
-                    candidate_email=candidate.email,
-                    job_title=job_title,
-                    feedback_url=feedback_url,
-                )
+                notifier = NotificationService(self._redis)
+                if evaluation.recommendation == "hire":
+                    await notifier.send_interview_advance_email(
+                        candidate_email=candidate.email,
+                        job_title=job_title,
+                    )
+                else:
+                    await notifier.send_feedback_email(
+                        candidate_email=candidate.email,
+                        job_title=job_title,
+                        feedback_url=feedback_url,
+                    )
             except Exception as exc:
-                log.warning("evaluation.feedback_email_failed", error=str(exc))
+                log.warning("evaluation.candidate_email_failed", error=str(exc))
 
         # 10. Audit log
         await audit.log_event(

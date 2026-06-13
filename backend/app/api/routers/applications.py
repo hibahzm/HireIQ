@@ -219,8 +219,12 @@ async def invite_to_interview(
     if app.screening_status != "qualified":
         raise HTTPException(status_code=422, detail="Can only invite qualified candidates")
 
+    from app.config import get_settings
+
     token = str(uuid.uuid4())
-    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        hours=get_settings().INTERVIEW_LINK_EXPIRY_HOURS
+    )
     await repo.set_interview_token(application_id, token, expires_at)
 
     await AuditLogRepository(session).log_event(
@@ -242,8 +246,6 @@ async def invite_to_interview(
         {"app_id": application_id},
     )
     candidate_email = result.scalar_one_or_none() or ""
-
-    from app.config import get_settings
 
     await NotificationService(redis_client).send_invitation_email(
         candidate_email=candidate_email,

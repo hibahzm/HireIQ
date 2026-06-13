@@ -2,7 +2,7 @@
 // proxy (nginx in the container, the Vite dev-server proxy locally) rather than a
 // hardcoded localhost:8000. Override with VITE_WS_URL for a different origin.
 const WS_BASE =
-  import.meta.env.VITE_WS_URL ??
+  import.meta.env.VITE_WS_URL ||
   `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
 
 export type InboundMessage =

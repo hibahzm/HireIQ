@@ -260,7 +260,7 @@ class ScreeningService:
                 candidate_email=candidate_email,
             )
         else:
-            await self._notification.send_confirmation_email(
+            await self._notification.send_rejection_email(
                 candidate_email=candidate_email,
                 job_title=job_title,
             )
@@ -274,7 +274,9 @@ class ScreeningService:
     ) -> None:
         app_repo = ApplicationRepository(self._session)
         token = str(uuid.uuid4())
-        expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            hours=self._settings.INTERVIEW_LINK_EXPIRY_HOURS
+        )
         await app_repo.set_interview_token(application_id, token, expires_at)
 
         await AuditLogRepository(self._session).log_event(

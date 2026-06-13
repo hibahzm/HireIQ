@@ -138,7 +138,7 @@ function CommunicationPanel({
   );
 }
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
+const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
 // The transcript audio endpoint requires Bearer auth, which a plain <audio src>
 // can't send. Fetch the clip with the token, then play it from an object URL.

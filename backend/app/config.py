@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     EMAIL_API_KEY: str = ""
     EMAIL_FROM: str = "noreply@hireiq.io"
 
+    # Interview invitation link lifetime (hours)
+    INTERVIEW_LINK_EXPIRY_HOURS: int = 48
+
     # HashiCorp Vault (dev)
     VAULT_ADDR: str = "http://localhost:8200"
     VAULT_TOKEN: str = "dev-root-token"

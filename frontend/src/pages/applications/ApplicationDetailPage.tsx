@@ -4,7 +4,7 @@ import { api, ApiError } from "../../services/api";
 import Button from "../../components/ui/Button";
 import { CopyIcon, ExternalLinkIcon } from "../../components/ui/icons";
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
+const BASE_URL = import.meta.env.VITE_API_URL || "/api";
 
 interface ApplicationDetail {
   id: string;

@@ -2,7 +2,7 @@
 // (nginx in the container, the Vite dev-server proxy locally) instead of being
 // hardcoded to localhost:8000 — which only works on a dev laptop, never in prod.
 // Override with VITE_API_URL when calling the API on a different origin.
-const BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
+const BASE_URL = import.meta.env.VITE_API_URL || "/api";
 
 export class ApiError extends Error {
   constructor(
