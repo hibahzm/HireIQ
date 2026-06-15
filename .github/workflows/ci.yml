@@ -16,7 +16,9 @@ jobs:
         env:
           POSTGRES_USER: hireiq
           POSTGRES_PASSWORD: hireiq_dev
-          POSTGRES_DB: hireiq_test
+          # conftest connects to this maintenance DB (admin-user name by default),
+          # then creates `hireiq_test` on top of it.
+          POSTGRES_DB: hireiq
         ports:
           - 5432:5432
         options: >-
@@ -131,7 +133,9 @@ jobs:
         env:
           POSTGRES_USER: hireiq
           POSTGRES_PASSWORD: hireiq_dev
-          POSTGRES_DB: hireiq_test
+          # conftest connects to this maintenance DB (admin-user name by default),
+          # then creates `hireiq_test` on top of it.
+          POSTGRES_DB: hireiq
         ports: ["5432:5432"]
         options: >-
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
