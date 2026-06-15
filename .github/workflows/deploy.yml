@@ -9,6 +9,8 @@ name: Deploy
 #   AZURE_CREDENTIALS         (service principal JSON for azure/login)
 #   AZURE_RESOURCE_GROUP
 #   ACA_API_APP, ACA_AGENTS_APP, ACA_FRONTEND_APP   (Container App names)
+#   FRONTEND_VITE_API_URL     (public API URL baked into the frontend, e.g. https://<api-fqdn>)
+#   FRONTEND_VITE_WS_URL      (public WS URL, e.g. wss://<api-fqdn>)
 
 on:
   push:
@@ -49,6 +51,11 @@ jobs:
           context: ./${{ matrix.context }}
           file: ./${{ matrix.context }}/Dockerfile
           push: true
+          # The frontend bakes the API/WS URL at build time (Vite). These args are
+          # ignored by the api/agents Dockerfiles, which don't declare them.
+          build-args: |
+            VITE_API_URL=${{ secrets.FRONTEND_VITE_API_URL }}
+            VITE_WS_URL=${{ secrets.FRONTEND_VITE_WS_URL }}
           tags: |
             ${{ secrets.DOCKERHUB_NAMESPACE }}/hireiq-${{ matrix.service }}:${{ env.IMAGE_TAG }}
             ${{ secrets.DOCKERHUB_NAMESPACE }}/hireiq-${{ matrix.service }}:latest
