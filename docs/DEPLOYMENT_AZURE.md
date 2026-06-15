@@ -211,7 +211,18 @@ kv azure-speech-key                   "${AZURE_SPEECH_KEY:-}"
 kv azure-speech-region                "${AZURE_SPEECH_REGION:-$LOCATION}"
 kv azure-form-recognizer-endpoint     "${AZURE_FORM_RECOGNIZER_ENDPOINT:-}"
 kv azure-form-recognizer-key          "${AZURE_FORM_RECOGNIZER_KEY:-}"
+
+# Optional — LLM tracing (Langfuse). Omit entirely to leave tracing disabled;
+# the agents service treats these as optional and starts fine without them.
+kv langfuse-public-key                "${LANGFUSE_PUBLIC_KEY:-}"
+kv langfuse-secret-key                "${LANGFUSE_SECRET_KEY:-}"
+kv langfuse-host                      "${LANGFUSE_HOST:-https://cloud.langfuse.com}"
 ```
+
+> **Langfuse tracing (optional).** Create a project at https://cloud.langfuse.com (or
+> self-host), copy its public/secret keys into the three secrets above, and the agents
+> service will trace every screening/interview/evaluation LLM call automatically. If the
+> secrets are absent, tracing is silently disabled — no startup failure, no behaviour change.
 
 > **Why this works:** with `ENV=production`, `config.py` ignores env/`.env` for secrets
 > and pulls each of the names above from Key Vault using `DefaultAzureCredential`, which
@@ -417,6 +428,7 @@ To run locally exactly as before: `cd infra && cp .env.example .env && docker co
 | `azure-storage-connection-string` | `AZURE_STORAGE_CONNECTION_STRING` | §6 |
 | `azure-speech-key` / `azure-speech-region` | `AZURE_SPEECH_*` | §7 (optional) |
 | `azure-form-recognizer-endpoint` / `-key` | `AZURE_FORM_RECOGNIZER_*` | §7 (optional) |
+| `langfuse-public-key` / `-secret-key` / `-host` | `LANGFUSE_*` | Langfuse project settings (optional — enables LLM tracing) |
 
 **Set directly on the container app** (non-secret config):
 
