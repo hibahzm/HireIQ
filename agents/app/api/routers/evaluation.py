@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.graphs.evaluation_graph import EvaluationState, evaluation_graph
+from app.observability import get_langfuse_callbacks
 
 logger = structlog.get_logger()
 
@@ -104,7 +105,9 @@ async def evaluate(body: EvaluateRequest) -> EvaluateResponse:
         "usage_events": [],
     }
 
-    result = await evaluation_graph.ainvoke(initial_state)
+    result = await evaluation_graph.ainvoke(
+        initial_state, config={"callbacks": get_langfuse_callbacks()}
+    )
 
     comm = result.get("communication_quality") or {}
     return EvaluateResponse(

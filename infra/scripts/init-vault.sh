@@ -30,6 +30,9 @@ vault kv put secret/hireiq/dev \
   azure_speech_key="${AZURE_SPEECH_KEY:-}" \
   azure_speech_region="${AZURE_SPEECH_REGION:-}" \
   azure_form_recognizer_endpoint="${AZURE_FORM_RECOGNIZER_ENDPOINT:-}" \
-  azure_form_recognizer_key="${AZURE_FORM_RECOGNIZER_KEY:-}"
+  azure_form_recognizer_key="${AZURE_FORM_RECOGNIZER_KEY:-}" \
+  langfuse_public_key="${LANGFUSE_PUBLIC_KEY:-}" \
+  langfuse_secret_key="${LANGFUSE_SECRET_KEY:-}" \
+  langfuse_host="${LANGFUSE_HOST:-https://cloud.langfuse.com}"
 
 echo "init-vault: done."

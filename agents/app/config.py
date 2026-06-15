@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     AZURE_SPEECH_KEY: str = ""
     AZURE_SPEECH_REGION: str = "eastus"
 
+    # Langfuse LLM tracing (optional — tracing is disabled when keys are blank)
+    LANGFUSE_PUBLIC_KEY: str = ""
+    LANGFUSE_SECRET_KEY: str = ""
+    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
+
     # HashiCorp Vault (dev)
     VAULT_ADDR: str = "http://localhost:8200"
     VAULT_TOKEN: str = "dev-root-token"
@@ -72,6 +77,23 @@ class Settings(BaseSettings):
                 object.__setattr__(self, attr, value)
         except Exception:
             pass
+        self._load_optional_vault()
+
+    def _load_optional_vault(self) -> None:
+        """Best-effort: load optional secrets without aborting if any are absent."""
+        optional = {
+            "LANGFUSE_PUBLIC_KEY": "langfuse_public_key",
+            "LANGFUSE_SECRET_KEY": "langfuse_secret_key",
+            "LANGFUSE_HOST": "langfuse_host",
+        }
+        for attr, key in optional.items():
+            try:
+                value = _read_vault_secret(
+                    self.VAULT_ADDR, self.VAULT_TOKEN, self.VAULT_SECRETS_PATH, key
+                )
+                object.__setattr__(self, attr, value)
+            except Exception:
+                pass  # optional — leave default/blank
 
     def _load_from_azure_keyvault(self) -> None:
         try:
@@ -86,6 +108,16 @@ class Settings(BaseSettings):
                 object.__setattr__(self, attr, value)
         except Exception as exc:
             raise RuntimeError(f"Failed to load secrets from Azure Key Vault: {exc}") from exc
+        # Optional secrets — never fail startup if they're not present.
+        for attr, secret_name in {
+            "LANGFUSE_PUBLIC_KEY": "langfuse-public-key",
+            "LANGFUSE_SECRET_KEY": "langfuse-secret-key",
+            "LANGFUSE_HOST": "langfuse-host",
+        }.items():
+            try:
+                object.__setattr__(self, attr, _read_azure_secret(secret_name))
+            except Exception:
+                pass  # optional — leave default/blank
 
 
 @lru_cache

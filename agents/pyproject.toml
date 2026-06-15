@@ -18,6 +18,12 @@ dependencies = [
     "hvac==2.3.0",
     "azure-identity==1.19.0",
     "httpx==0.28.0",
+    # 2.x exposes langfuse.callback.CallbackHandler used by app/observability.py;
+    # 3.x changed that API. Keep on the 2.x line to match langchain 0.3 / langgraph 0.2.
+    "langfuse>=2.39,<3.0",
+    # langfuse 2.x's langchain CallbackHandler imports from the `langchain` umbrella
+    # package (not just langchain-core), so it must be installed for tracing to work.
+    "langchain>=0.3,<0.4",
 ]
 
 [project.optional-dependencies]

@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.graphs.interview_graph import InterviewState, interview_graph
+from app.observability import get_langfuse_callbacks
 
 logger = structlog.get_logger()
 
@@ -58,7 +59,9 @@ async def interview_turn(body: InterviewTurnRequest) -> InterviewTurnResponse:
         "usage_events": [],
     }
 
-    result = await interview_graph.ainvoke(initial_state)
+    result = await interview_graph.ainvoke(
+        initial_state, config={"callbacks": get_langfuse_callbacks()}
+    )
 
     return InterviewTurnResponse(
         ai_response=result["ai_response"],

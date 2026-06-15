@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.graphs.job_setup_graph import JobSetupState, job_setup_graph
+from app.observability import get_langfuse_callbacks
 
 logger = structlog.get_logger()
 
@@ -46,7 +47,9 @@ async def job_setup_turn(body: JobSetupTurnRequest) -> JobSetupTurnResponse:
         "usage_events": [],
     }
 
-    result = await job_setup_graph.ainvoke(initial_state)
+    result = await job_setup_graph.ainvoke(
+        initial_state, config={"callbacks": get_langfuse_callbacks()}
+    )
 
     return JobSetupTurnResponse(
         message=result["ai_message"],
