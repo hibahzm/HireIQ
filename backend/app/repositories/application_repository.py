@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,8 +29,8 @@ class ApplicationRepository:
             cv_blob_key=cv_blob_key,
             screening_status="pending",
             status="applied",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         self._session.add(app)
         await self._session.flush()
@@ -74,7 +74,11 @@ class ApplicationRepository:
         q = sa.select(Application).where(Application.job_id == job_id)
         if status_filter:
             q = q.where(Application.screening_status == status_filter)
-        q = q.order_by(Application.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        q = (
+            q.order_by(Application.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
         result = await self._session.execute(q)
         return list(result.scalars().all())
 
@@ -99,7 +103,7 @@ class ApplicationRepository:
                 screening_rationale=screening_rationale,
                 screening_status=screening_status,
                 status=status,
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(UTC),
             )
         )
 
@@ -107,14 +111,14 @@ class ApplicationRepository:
         await self._session.execute(
             sa.update(Application)
             .where(Application.id == application_id)
-            .values(status=status, updated_at=datetime.now(timezone.utc))
+            .values(status=status, updated_at=datetime.now(UTC))
         )
 
     async def update_screening_status(self, application_id: str, screening_status: str) -> None:
         await self._session.execute(
             sa.update(Application)
             .where(Application.id == application_id)
-            .values(screening_status=screening_status, updated_at=datetime.now(timezone.utc))
+            .values(screening_status=screening_status, updated_at=datetime.now(UTC))
         )
 
     async def update_screening_failure(self, application_id: str, reason: str) -> None:
@@ -124,7 +128,7 @@ class ApplicationRepository:
             .values(
                 screening_status="failed",
                 screening_rationale=reason,
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(UTC),
             )
         )
 
@@ -141,6 +145,6 @@ class ApplicationRepository:
                 interview_token=token,
                 interview_token_expires_at=expires_at,
                 status="invited",
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(UTC),
             )
         )

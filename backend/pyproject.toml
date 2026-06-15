@@ -49,7 +49,24 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
-ignore = ["E501"]
+# E501 line length is enforced by the formatter; B904/SIM117 and the SIM10x
+# simplify-style rules are pervasive pre-existing choices deferred to a cleanup.
+ignore = ["E501", "B904", "SIM117", "SIM105", "SIM102", "SIM103"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's Depends()/File()/Form()/... in argument defaults are the framework
+# idiom, not the B008 mutable-default anti-pattern.
+extend-immutable-calls = [
+    "fastapi.Depends", "fastapi.File", "fastapi.Form", "fastapi.Query",
+    "fastapi.Header", "fastapi.Path", "fastapi.Cookie", "fastapi.Body", "fastapi.Security",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# SQLAlchemy relationships use string forward-refs (Mapped["Model"]) to avoid
+# circular imports — ruff can't resolve them (false-positive F821).
+"app/models/*" = ["F821"]
+# Alembic env imports all models via star for autogenerate.
+"alembic/*" = ["F403", "F405", "E402"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

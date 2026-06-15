@@ -21,13 +21,14 @@ Requirements (cannot be validated in an env without pgvector — see KNOWN_GAPS 
     TEST_DATABASE_URL      admin/superuser URL (default: dev-compose creds, DB ``hireiq_test``)
     TEST_APP_DATABASE_URL  non-superuser app URL (default: role ``hireiq_test_app``)
 """
+
 from __future__ import annotations
 
 import asyncio
 import os
 import subprocess
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
@@ -162,8 +163,8 @@ def _database():
     asyncio.run(_provision_app_role())
 
     # Rebuild the app engine/settings so they pick up the test (app-role) URL.
-    from app.config import get_settings
     import app.db as db
+    from app.config import get_settings
 
     get_settings.cache_clear()
     db._engine = None
@@ -235,7 +236,7 @@ def _mint_token(user_id: str, company_id: str, role: str = "admin") -> str:
         "sub": user_id,
         "company_id": company_id,
         "role": role,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=1),
+        "exp": datetime.now(UTC) + timedelta(hours=1),
     }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
@@ -283,7 +284,12 @@ async def _seed_active_job(company_id: str, created_by: str) -> str:
                     "INSERT INTO jobs (id, company_id, title, status, created_by, streaming_interview) "
                     "VALUES (:id, :cid, :title, 'active', :cb, false)"
                 ),
-                {"id": job_id, "cid": company_id, "title": "Senior Backend Engineer", "cb": created_by},
+                {
+                    "id": job_id,
+                    "cid": company_id,
+                    "title": "Senior Backend Engineer",
+                    "cb": created_by,
+                },
             )
             await conn.execute(
                 sa.text(
@@ -311,14 +317,20 @@ async def _seed_application(
     candidate_id = str(uuid.uuid4())
     application_id = str(uuid.uuid4())
     token = str(uuid.uuid4()) if with_interview_token else None
-    expires = datetime.now(timezone.utc) + timedelta(days=7) if with_interview_token else None
+    expires = datetime.now(UTC) + timedelta(days=7) if with_interview_token else None
 
     engine = create_async_engine(ADMIN_URL, isolation_level="AUTOCOMMIT")
     try:
         async with engine.connect() as conn:
             await conn.execute(
-                sa.text("INSERT INTO candidates (id, email, full_name) VALUES (:id, :email, :name)"),
-                {"id": candidate_id, "email": f"cand-{candidate_id[:8]}@test.local", "name": "Jane Doe"},
+                sa.text(
+                    "INSERT INTO candidates (id, email, full_name) VALUES (:id, :email, :name)"
+                ),
+                {
+                    "id": candidate_id,
+                    "email": f"cand-{candidate_id[:8]}@test.local",
+                    "name": "Jane Doe",
+                },
             )
             await conn.execute(
                 sa.text(

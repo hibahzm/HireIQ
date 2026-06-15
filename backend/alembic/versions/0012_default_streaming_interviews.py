@@ -5,9 +5,11 @@ Revises: 0011
 Create Date: 2026-06-11
 
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0012"

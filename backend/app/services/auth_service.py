@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 from jose import JWTError, jwt
@@ -34,7 +34,7 @@ class AuthService:
         return bcrypt.checkpw(password.encode(), hashed.encode())
 
     def _create_access_token(self, user_id: str, company_id: str, role: str) -> str:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         payload = {
             "sub": user_id,
             "company_id": company_id,
@@ -45,7 +45,9 @@ class AuthService:
             # differ (refresh rotation guarantees a new token).
             "jti": str(uuid.uuid4()),
         }
-        return jwt.encode(payload, self._settings.JWT_SECRET, algorithm=self._settings.JWT_ALGORITHM)
+        return jwt.encode(
+            payload, self._settings.JWT_SECRET, algorithm=self._settings.JWT_ALGORITHM
+        )
 
     def _create_refresh_token(self) -> str:
         return str(uuid.uuid4())
@@ -170,8 +172,10 @@ class AuthService:
 
         await self._redis.delete(self._invite_token_key(token))
 
+        from datetime import datetime
+
         import sqlalchemy as sa
-        from datetime import datetime, timezone
+
         from app.models.user import User as UserModel
 
         user_repo = UserRepository(self._session)
@@ -189,7 +193,7 @@ class AuthService:
         await self._session.execute(
             sa.update(UserModel)
             .where(UserModel.id == user_id)
-            .values(password_hash=new_hash, updated_at=datetime.now(timezone.utc))
+            .values(password_hash=new_hash, updated_at=datetime.now(UTC))
         )
 
         user = await user_repo.get_by_id(user_id)

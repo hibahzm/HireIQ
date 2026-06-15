@@ -16,15 +16,14 @@ class NotificationService:
     def __init__(self, redis=None) -> None:
         self._redis = redis
         from app.config import get_settings
+
         self._settings = get_settings()
 
     async def send_user_invite_email(self, to_email: str, invite_link: str) -> None:
         """Admin invited a team member → branded set-password email (24h link)."""
         if not await self._should_send("user_invite", to_email):
             return
-        subject, html = email_templates.team_invite_email(
-            invite_link=invite_link, expiry_hours=24
-        )
+        subject, html = email_templates.team_invite_email(invite_link=invite_link, expiry_hours=24)
         await self._send_html(to_email, subject, html)
         await self._mark_sent("user_invite", to_email)
 
@@ -49,9 +48,7 @@ class NotificationService:
         await self._send_html(candidate_email, subject, html)
         await self._mark_sent("rejection", candidate_email)
 
-    async def send_interview_advance_email(
-        self, candidate_email: str, job_title: str
-    ) -> None:
+    async def send_interview_advance_email(self, candidate_email: str, job_title: str) -> None:
         """Interview succeeded → tell the candidate the team will follow up."""
         if not await self._should_send("advance", candidate_email):
             return
@@ -77,10 +74,9 @@ class NotificationService:
         else:
             logger.info("email.console", to=to, subject=subject, body="[HTML email]")
 
-    async def _send_resend(
-        self, to: str, subject: str, text: str = "", html: str = ""
-    ) -> None:
+    async def _send_resend(self, to: str, subject: str, text: str = "", html: str = "") -> None:
         import resend
+
         resend.api_key = self._settings.EMAIL_API_KEY
         payload: dict = {
             "from": self._settings.EMAIL_FROM,

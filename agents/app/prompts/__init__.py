@@ -1,13 +1,13 @@
-from app.prompts.job_setup import JOB_SETUP_SYSTEM, JOB_SETUP_CRITERIA_EXTRACTION
-from app.prompts.screening import SCREENING_SYSTEM
-from app.prompts.interview import INTERVIEW_SYSTEM
 from app.prompts.evaluation import (
-    EVALUATION_SCORE_DIMENSIONS,
-    EVALUATION_FLAG_CONSISTENCY,
-    EVALUATION_SCORE_COMMUNICATION,
     EVALUATION_ASSESS_CONFIDENCE,
+    EVALUATION_FLAG_CONSISTENCY,
     EVALUATION_GENERATE_SUMMARY,
+    EVALUATION_SCORE_COMMUNICATION,
+    EVALUATION_SCORE_DIMENSIONS,
 )
+from app.prompts.interview import INTERVIEW_SYSTEM
+from app.prompts.job_setup import JOB_SETUP_CRITERIA_EXTRACTION, JOB_SETUP_SYSTEM
+from app.prompts.screening import SCREENING_SYSTEM
 
 __all__ = [
     "JOB_SETUP_SYSTEM",

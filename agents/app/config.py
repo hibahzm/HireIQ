@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import os
 from functools import lru_cache
 from typing import Literal
@@ -114,10 +115,8 @@ class Settings(BaseSettings):
             "LANGFUSE_SECRET_KEY": "langfuse-secret-key",
             "LANGFUSE_HOST": "langfuse-host",
         }.items():
-            try:
+            with contextlib.suppress(Exception):  # optional — leave default/blank
                 object.__setattr__(self, attr, _read_azure_secret(secret_name))
-            except Exception:
-                pass  # optional — leave default/blank
 
 
 @lru_cache

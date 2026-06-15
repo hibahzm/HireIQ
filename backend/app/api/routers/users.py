@@ -42,6 +42,7 @@ async def create_user(
         raise HTTPException(status_code=409, detail="Email already registered")
 
     import bcrypt
+
     placeholder_hash = bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt()).decode()
 
     user = await repo.create(

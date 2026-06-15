@@ -8,7 +8,13 @@ from app.config import get_settings
 from app.db import _get_session_factory
 from app.redis_client import get_redis
 from app.repositories.audit_log_repository import AuditLogRepository
-from app.schemas.auth import LoginRequest, RegisterRequest, SetPasswordRequest, TokenResponse, UserResponse
+from app.schemas.auth import (
+    LoginRequest,
+    RegisterRequest,
+    SetPasswordRequest,
+    TokenResponse,
+    UserResponse,
+)
 from app.services.auth_service import AuthError, AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])

@@ -10,6 +10,7 @@ token to its application/company so the app can then set the RLS context and
 proceed with normally-scoped queries. It exposes nothing beyond what the token
 itself authorizes.
 """
+
 from __future__ import annotations
 
 from alembic import op

@@ -2,6 +2,7 @@
 Integration tests for voice interview WebSocket.
 Constitution Principle VIII — T054: write FIRST, confirm FAILING before T063.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -18,6 +19,7 @@ async def client(app):
 # T054 — WebSocket turn sequence
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_websocket_interview_turn_sequence(app, interview_token):
     """
@@ -25,13 +27,17 @@ async def test_websocket_interview_turn_sequence(app, interview_token):
     All messages stored. Final session status = 'completed'.
     """
     from unittest.mock import AsyncMock, patch
+
     from starlette.testclient import TestClient
 
     token = interview_token
 
     with TestClient(app) as client:
         with (
-            patch("app.services.interview_service.InterviewService.handle_turn", new_callable=AsyncMock) as mock_turn,
+            patch(
+                "app.services.interview_service.InterviewService.handle_turn",
+                new_callable=AsyncMock,
+            ) as mock_turn,
         ):
             mock_turn.return_value = {
                 "ai_response": "Tell me about your experience.",
@@ -78,14 +84,15 @@ async def test_websocket_interview_turn_sequence(app, interview_token):
 # T055 — Session resume after disconnect + 24h expiry
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_session_resume_within_24h(app, interview_token):
     """Reconnect within 24h → resuming: true, turn_count preserved."""
-    from starlette.testclient import TestClient
     from unittest.mock import AsyncMock, patch
 
     import sqlalchemy as sa
     from sqlalchemy.ext.asyncio import create_async_engine
+    from starlette.testclient import TestClient
 
     from tests.integration.conftest import ADMIN_URL
 

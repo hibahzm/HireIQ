@@ -1,6 +1,7 @@
 """
 Additional application endpoint integration tests (part of T039 set).
 """
+
 from __future__ import annotations
 
 import pytest

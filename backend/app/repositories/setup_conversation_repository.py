@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,8 +33,8 @@ class SetupConversationRepository:
             company_id=company_id,
             messages=[],
             status="in_progress",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         self._session.add(conv)
         await self._session.flush()
@@ -50,7 +50,7 @@ class SetupConversationRepository:
         messages = list(conv.messages)
         messages.append({"role": role, "content": content})
         conv.messages = messages
-        conv.updated_at = datetime.now(timezone.utc)
+        conv.updated_at = datetime.now(UTC)
         await self._session.flush()
         return conv
 
@@ -60,13 +60,13 @@ class SetupConversationRepository:
         )
         conv = result.scalar_one()
         conv.status = "completed"
-        conv.updated_at = datetime.now(timezone.utc)
+        conv.updated_at = datetime.now(UTC)
         await self._session.flush()
         return conv
 
     async def fail(self, conversation_id: str, message: str) -> SetupConversation:
         conv = await self.append_message(conversation_id, "assistant", message)
         conv.status = "failed"
-        conv.updated_at = datetime.now(timezone.utc)
+        conv.updated_at = datetime.now(UTC)
         await self._session.flush()
         return conv

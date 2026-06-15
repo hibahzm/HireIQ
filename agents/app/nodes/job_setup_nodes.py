@@ -32,20 +32,19 @@ class JobSetupState(TypedDict):
 
 def _build_llm(json_mode: bool = False) -> ChatOpenAI:
     from app.config import get_settings
+
     settings = get_settings()
     kwargs: dict[str, Any] = {}
     if json_mode:
         kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
-    return ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY, temperature=0.3, **kwargs)
+    return ChatOpenAI(
+        model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY, temperature=0.3, **kwargs
+    )
 
 
 def _completion_signal(text: str) -> bool:
     normalized = (
-        text.lower()
-        .replace("’", "'")
-        .replace("‘", "'")
-        .replace("“", '"')
-        .replace("”", '"')
+        text.lower().replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
     )
     if "status" in normalized and "completed" in normalized:
         return True
@@ -70,16 +69,17 @@ def _normalise_criteria(criteria: dict[str, Any]) -> dict[str, Any]:
         "optional_skills": criteria.get("optional_skills") or [],
         "experience_level": criteria.get("experience_level") or "mid",
         "min_years_experience": criteria.get("min_years_experience"),
-        "evaluation_dimensions": criteria.get("evaluation_dimensions") or [
-            {"name": "Role fit", "weight": 1.0, "description": "Overall match for the role"}
-        ],
+        "evaluation_dimensions": criteria.get("evaluation_dimensions")
+        or [{"name": "Role fit", "weight": 1.0, "description": "Overall match for the role"}],
         "dealbreakers": criteria.get("dealbreakers") or [],
         "min_screening_score": criteria.get("min_screening_score") or 60,
     }
 
 
 async def elicit_criteria(state: JobSetupState) -> JobSetupState:
-    user_message = state["conversation_history"][-1]["content"] if state["conversation_history"] else ""
+    user_message = (
+        state["conversation_history"][-1]["content"] if state["conversation_history"] else ""
+    )
 
     if not registry.check_input(user_message).passed:
         return {
@@ -119,10 +119,7 @@ async def confirm_criteria(state: JobSetupState) -> JobSetupState:
     if state.get("ai_message"):
         history.append({"role": "assistant", "content": state["ai_message"]})
 
-    conversation_text = "\n".join(
-        f"{msg['role'].upper()}: {msg['content']}"
-        for msg in history
-    )
+    conversation_text = "\n".join(f"{msg['role'].upper()}: {msg['content']}" for msg in history)
 
     response = await _build_llm(json_mode=True).ainvoke(
         [

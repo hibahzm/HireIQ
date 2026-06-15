@@ -13,6 +13,7 @@ class TtsService:
 
     async def _openai_tts(self, text: str) -> bytes:
         from openai import AsyncOpenAI
+
         from app.config import get_settings
 
         settings = get_settings()
@@ -30,8 +31,9 @@ class TtsService:
         return buf.getvalue()
 
     async def _azure_tts(self, text: str) -> bytes:
-        from app.config import get_settings
         import azure.cognitiveservices.speech as speechsdk
+
+        from app.config import get_settings
 
         settings = get_settings()
         speech_config = speechsdk.SpeechConfig(

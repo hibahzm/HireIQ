@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 from fastapi import APIRouter, HTTPException
@@ -15,6 +15,7 @@ router = APIRouter(tags=["feedback"])
 
 
 # ── Response schemas ─────────────────────────────────────────────────────────
+
 
 class DimensionScorePublic(BaseModel):
     dimension: str
@@ -35,6 +36,7 @@ class FeedbackReportResponse(BaseModel):
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+
 def _parse_summary(raw: str | None) -> FeedbackSummary | None:
     if not raw:
         return None
@@ -42,15 +44,16 @@ def _parse_summary(raw: str | None) -> FeedbackSummary | None:
     areas = ""
     for line in raw.splitlines():
         if line.lower().startswith("strengths:"):
-            strengths = line[len("strengths:"):].strip()
+            strengths = line[len("strengths:") :].strip()
         elif line.lower().startswith("areas for improvement:"):
-            areas = line[len("areas for improvement:"):].strip()
+            areas = line[len("areas for improvement:") :].strip()
     if not strengths and not areas:
         return FeedbackSummary(strengths=raw, areas_for_improvement="")
     return FeedbackSummary(strengths=strengths, areas_for_improvement=areas)
 
 
 # ── Route ─────────────────────────────────────────────────────────────────────
+
 
 @router.get("/feedback/{token}", response_model=FeedbackReportResponse)
 async def get_feedback_report(token: str) -> FeedbackReportResponse:
@@ -72,7 +75,7 @@ async def get_feedback_report(token: str) -> FeedbackReportResponse:
                 if row is None:
                     raise HTTPException(status_code=404, detail="Feedback link not found")
                 expires_at = row["feedback_token_expires_at"]
-                if expires_at and expires_at < datetime.now(timezone.utc):
+                if expires_at and expires_at < datetime.now(UTC):
                     raise HTTPException(status_code=410, detail="Feedback link has expired")
                 raise HTTPException(status_code=404, detail="Feedback link not found")
 

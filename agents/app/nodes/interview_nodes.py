@@ -45,6 +45,7 @@ class InterviewState(TypedDict):
 
 def _build_llm() -> ChatOpenAI:
     from app.config import get_settings
+
     settings = get_settings()
     # max_tokens caps the reply at the prompt's "1-2 sentences" — anything longer
     # is wasted latency between the candidate finishing and Sila speaking.

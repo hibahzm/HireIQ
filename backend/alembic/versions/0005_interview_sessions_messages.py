@@ -5,10 +5,12 @@ Revises: 0004
 Create Date: 2026-06-04
 
 """
+
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0005"
 down_revision = "0004"
@@ -30,8 +32,18 @@ def upgrade() -> None:
         sa.Column("last_active_at", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.Column("started_at", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.Column("completed_at", sa.TIMESTAMP(timezone=True), nullable=True),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint("mode IN ('voice','text')", name="ck_interview_sessions_mode"),
         sa.CheckConstraint(
             "status IN ('pending','in_progress','completed','expired','system_interrupted','abandoned')",
@@ -63,7 +75,12 @@ def upgrade() -> None:
         sa.Column("content_text", sa.Text(), nullable=False),
         sa.Column("audio_blob_key", sa.Text(), nullable=True),
         sa.Column("is_blocked", sa.Boolean(), server_default="false", nullable=False),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint("speaker IN ('candidate','ai')", name="ck_interview_messages_speaker"),
         sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["session_id"], ["interview_sessions.id"], ondelete="CASCADE"),

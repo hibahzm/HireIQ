@@ -5,11 +5,13 @@ Revises: 0003
 Create Date: 2026-06-04
 
 """
+
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0004"
 down_revision = "0003"
@@ -24,7 +26,12 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("email", sa.Text(), nullable=False),
         sa.Column("full_name", sa.Text(), nullable=False),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("email", name="uq_candidates_email"),
     )
@@ -45,8 +52,18 @@ def upgrade() -> None:
         sa.Column("interview_token", sa.UUID(), nullable=True),
         sa.Column("interview_token_expires_at", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.Column("status", sa.Text(), server_default="applied", nullable=False),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint(
             "screening_status IN ('pending','qualified','rejected')",
             name="ck_applications_screening_status",
@@ -66,8 +83,12 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("job_id", "candidate_id", name="uq_applications_job_candidate"),
     )
-    op.create_index("ix_applications_job_screening_status", "applications", ["job_id", "screening_status"])
-    op.create_index("ix_applications_interview_token", "applications", ["interview_token"], unique=True)
+    op.create_index(
+        "ix_applications_job_screening_status", "applications", ["job_id", "screening_status"]
+    )
+    op.create_index(
+        "ix_applications_interview_token", "applications", ["interview_token"], unique=True
+    )
 
     op.execute("ALTER TABLE applications ENABLE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE applications FORCE ROW LEVEL SECURITY")
@@ -88,17 +109,22 @@ def upgrade() -> None:
         sa.Column("chunk_text", sa.Text(), nullable=False),
         sa.Column("embedding", sa.Text(), nullable=False),  # stored as text, cast via pgvector
         sa.Column("tsv", postgresql.TSVECTOR(), nullable=False),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["application_id"], ["applications.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     # Use raw SQL for vector column type and generated tsvector column
-    op.execute("ALTER TABLE cv_chunks ALTER COLUMN embedding TYPE vector(1536) USING embedding::vector")
-    op.execute("ALTER TABLE cv_chunks ALTER COLUMN tsv DROP NOT NULL")
     op.execute(
-        "ALTER TABLE cv_chunks ALTER COLUMN tsv SET DEFAULT to_tsvector('english', '')"
+        "ALTER TABLE cv_chunks ALTER COLUMN embedding TYPE vector(1536) USING embedding::vector"
     )
+    op.execute("ALTER TABLE cv_chunks ALTER COLUMN tsv DROP NOT NULL")
+    op.execute("ALTER TABLE cv_chunks ALTER COLUMN tsv SET DEFAULT to_tsvector('english', '')")
     op.execute(
         "CREATE INDEX ix_cv_chunks_embedding ON cv_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists=100)"
     )
@@ -122,12 +148,19 @@ def upgrade() -> None:
         sa.Column("chunk_index", sa.SmallInteger(), nullable=False),
         sa.Column("chunk_text", sa.Text(), nullable=False),
         sa.Column("embedding", sa.Text(), nullable=False),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["job_id"], ["jobs.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.execute("ALTER TABLE job_chunks ALTER COLUMN embedding TYPE vector(1536) USING embedding::vector")
+    op.execute(
+        "ALTER TABLE job_chunks ALTER COLUMN embedding TYPE vector(1536) USING embedding::vector"
+    )
     op.execute(
         "CREATE INDEX ix_job_chunks_embedding ON job_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists=50)"
     )

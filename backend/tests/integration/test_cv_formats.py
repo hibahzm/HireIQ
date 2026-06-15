@@ -7,6 +7,7 @@ Mirrors the mocking strategy in test_screening.py: the OCR/extraction boundary,
 the embedding service, and the agents HTTP call are mocked so these tests exercise
 the format-dispatch + router-validation behaviour, not external services.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -99,6 +100,7 @@ def _make_docx_bytes(paragraphs: list[str], table_rows: list[list[str]] | None =
 # T002 — DOCX upload → extraction (paragraphs + table) + screening
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_docx_cv_extracts_and_screens(client: AsyncClient, active_job_token):
     """
@@ -129,7 +131,9 @@ async def test_docx_cv_extracts_and_screens(client: AsyncClient, active_job_toke
         "guardrail_triggered": False,
     }
     with (
-        patch("app.services.embedding_service.EmbeddingService.embed_text", new_callable=AsyncMock) as mock_embed,
+        patch(
+            "app.services.embedding_service.EmbeddingService.embed_text", new_callable=AsyncMock
+        ) as mock_embed,
         patch("httpx.AsyncClient", _agents_client(agents_payload)),
     ):
         mock_embed.return_value = EMBED_RESULT
@@ -149,7 +153,9 @@ async def test_docx_cv_extracts_and_screens(client: AsyncClient, active_job_toke
 
 
 @pytest.mark.asyncio
-async def test_sparse_docx_falls_back_to_document_intelligence(client: AsyncClient, active_job_token):
+async def test_sparse_docx_falls_back_to_document_intelligence(
+    client: AsyncClient, active_job_token
+):
     """
     A text-light .docx (below the quality threshold) falls back to the Document
     Intelligence path, recording cv_extraction_method == 'document_intelligence'.
@@ -168,7 +174,9 @@ async def test_sparse_docx_falls_back_to_document_intelligence(client: AsyncClie
             "app.services.ocr_service.OcrService._azure_doc_intelligence",
             new_callable=AsyncMock,
         ) as mock_di,
-        patch("app.services.embedding_service.EmbeddingService.embed_text", new_callable=AsyncMock) as mock_embed,
+        patch(
+            "app.services.embedding_service.EmbeddingService.embed_text", new_callable=AsyncMock
+        ) as mock_embed,
         patch("httpx.AsyncClient", _agents_client(agents_payload)),
     ):
         mock_di.return_value = (
@@ -194,6 +202,7 @@ async def test_sparse_docx_falls_back_to_document_intelligence(client: AsyncClie
 # T003 — Image routing, unsupported types, blank image, corrupt/renamed files
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_image_cv_routes_to_document_intelligence(client: AsyncClient, active_job_token):
     """A .png/.jpg CV routes straight to Document Intelligence and produces a result."""
@@ -211,7 +220,9 @@ async def test_image_cv_routes_to_document_intelligence(client: AsyncClient, act
             "app.services.ocr_service.OcrService._azure_doc_intelligence",
             new_callable=AsyncMock,
         ) as mock_di,
-        patch("app.services.embedding_service.EmbeddingService.embed_text", new_callable=AsyncMock) as mock_embed,
+        patch(
+            "app.services.embedding_service.EmbeddingService.embed_text", new_callable=AsyncMock
+        ) as mock_embed,
         patch("httpx.AsyncClient", _agents_client(agents_payload)),
     ):
         mock_di.return_value = (

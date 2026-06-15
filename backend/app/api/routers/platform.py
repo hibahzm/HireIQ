@@ -66,9 +66,10 @@ async def get_platform_overview(
     async with _get_session_factory()() as session:
         async with session.begin():
             companies = (
-                await session.execute(
-                    sa.text(
-                        """
+                (
+                    await session.execute(
+                        sa.text(
+                            """
                         WITH company_activity AS (
                             SELECT
                                 company_id,
@@ -105,15 +106,19 @@ async def get_platform_overview(
                         ORDER BY c.created_at DESC
                         LIMIT 100
                         """
-                    ),
-                    {"platform_company_id": PLATFORM_COMPANY_ID},
+                        ),
+                        {"platform_company_id": PLATFORM_COMPANY_ID},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
 
             usage = (
-                await session.execute(
-                    sa.text(
-                        """
+                (
+                    await session.execute(
+                        sa.text(
+                            """
                         SELECT
                             u.company_id,
                             c.name AS company_name,
@@ -129,15 +134,19 @@ async def get_platform_overview(
                         ORDER BY estimated_cost_usd DESC
                         LIMIT 100
                         """
-                    ),
-                    {"platform_company_id": PLATFORM_COMPANY_ID},
+                        ),
+                        {"platform_company_id": PLATFORM_COMPANY_ID},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
 
             audit_events = (
-                await session.execute(
-                    sa.text(
-                        """
+                (
+                    await session.execute(
+                        sa.text(
+                            """
                         SELECT
                             a.company_id,
                             c.name AS company_name,
@@ -151,10 +160,13 @@ async def get_platform_overview(
                         ORDER BY count DESC, a.event_type
                         LIMIT 50
                         """
-                    ),
-                    {"platform_company_id": PLATFORM_COMPANY_ID},
+                        ),
+                        {"platform_company_id": PLATFORM_COMPANY_ID},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
 
     return PlatformOverviewResponse(
         companies=[
@@ -219,11 +231,15 @@ async def delete_company(
     async with _get_session_factory()() as session:
         async with session.begin():
             row = (
-                await session.execute(
-                    sa.text("SELECT id, name FROM companies WHERE id = CAST(:id AS uuid)"),
-                    {"id": company_id},
+                (
+                    await session.execute(
+                        sa.text("SELECT id, name FROM companies WHERE id = CAST(:id AS uuid)"),
+                        {"id": company_id},
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if not row:
                 raise HTTPException(status_code=404, detail="Company not found")
 
@@ -233,31 +249,39 @@ async def delete_company(
             )
 
             cv_keys = (
-                await session.execute(
-                    sa.text(
-                        """
+                (
+                    await session.execute(
+                        sa.text(
+                            """
                         SELECT cv_blob_key AS key
                         FROM applications
                         WHERE company_id = CAST(:id AS uuid)
                         AND cv_blob_key IS NOT NULL
                         """
-                    ),
-                    {"id": company_id},
+                        ),
+                        {"id": company_id},
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             audio_keys = (
-                await session.execute(
-                    sa.text(
-                        """
+                (
+                    await session.execute(
+                        sa.text(
+                            """
                         SELECT audio_blob_key AS key
                         FROM interview_messages
                         WHERE company_id = CAST(:id AS uuid)
                         AND audio_blob_key IS NOT NULL
                         """
-                    ),
-                    {"id": company_id},
+                        ),
+                        {"id": company_id},
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             storage_keys = [str(key) for key in [*cv_keys, *audio_keys] if key]
 
             await session.execute(
@@ -265,14 +289,18 @@ async def delete_company(
                 {"id": company_id},
             )
 
-            await session.execute(sa.text("ALTER TABLE audit_logs DISABLE TRIGGER tg_audit_logs_no_update"))
+            await session.execute(
+                sa.text("ALTER TABLE audit_logs DISABLE TRIGGER tg_audit_logs_no_update")
+            )
             try:
                 await session.execute(
                     sa.text("DELETE FROM audit_logs WHERE company_id = CAST(:id AS uuid)"),
                     {"id": company_id},
                 )
             finally:
-                await session.execute(sa.text("ALTER TABLE audit_logs ENABLE TRIGGER tg_audit_logs_no_update"))
+                await session.execute(
+                    sa.text("ALTER TABLE audit_logs ENABLE TRIGGER tg_audit_logs_no_update")
+                )
 
             await session.execute(
                 sa.text("DELETE FROM companies WHERE id = CAST(:id AS uuid)"),

@@ -34,6 +34,7 @@ class ScreeningState(TypedDict):
 
 def _build_llm() -> ChatOpenAI:
     from app.config import get_settings
+
     settings = get_settings()
     return ChatOpenAI(
         model="gpt-4o-mini",

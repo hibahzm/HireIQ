@@ -5,13 +5,15 @@ Revises: 0010
 Create Date: 2026-06-11
 
 """
+
 from __future__ import annotations
 
 import os
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0011"
 down_revision = "0010"
@@ -103,12 +105,21 @@ def upgrade() -> None:
         sa.Column("prompt_tokens", sa.Integer(), server_default="0", nullable=False),
         sa.Column("completion_tokens", sa.Integer(), server_default="0", nullable=False),
         sa.Column("estimated_cost_usd", sa.Numeric(12, 6), server_default="0", nullable=False),
-        sa.Column("metadata", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb"), nullable=False),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "metadata", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb"), nullable=False
+        ),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_llm_usage_company_created", "llm_usage_events", ["company_id", "created_at"])
+    op.create_index(
+        "ix_llm_usage_company_created", "llm_usage_events", ["company_id", "created_at"]
+    )
     op.create_index("ix_llm_usage_agent_type", "llm_usage_events", ["agent_type"])
 
     _seed_platform_manager()

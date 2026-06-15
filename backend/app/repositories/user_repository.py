@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,8 +28,8 @@ class UserRepository:
             password_hash=password_hash,
             role=role,
             is_active=True,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         self._session.add(user)
         await self._session.flush()
@@ -96,7 +96,7 @@ class UserRepository:
         await self._session.execute(
             sa.update(User)
             .where(User.id == user_id)
-            .values(role=role, updated_at=datetime.now(timezone.utc))
+            .values(role=role, updated_at=datetime.now(UTC))
         )
         return await self.get_by_id(user_id)
 
@@ -104,5 +104,5 @@ class UserRepository:
         await self._session.execute(
             sa.update(User)
             .where(User.id == user_id)
-            .values(is_active=False, updated_at=datetime.now(timezone.utc))
+            .values(is_active=False, updated_at=datetime.now(UTC))
         )

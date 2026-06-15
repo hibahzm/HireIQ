@@ -7,6 +7,7 @@ evaluation payload (overall_score, dimension_scores with evidence_quotes,
 consistency_flags, communication_quality, confidence_flag) is persisted
 and PII-redacted.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -39,31 +40,32 @@ async def test_evaluation_pipeline_persists_full_payload(app, completed_intervie
     """
     session_id, company_id, application_id = completed_interview_session
 
-    with patch(
-        "httpx.AsyncClient.post", new_callable=AsyncMock
-    ) as mock_agents:
-        mock_agents.return_value = _agents_response({
-            "overall_score": 74,
-            "recommendation": "hire",
-            "dimension_scores": [
-                {
-                    "dimension": "technical_skills",
-                    "score": 80,
-                    "evidence_quotes": ["Candidate described async/await usage in Python."],
-                }
-            ],
-            "consistency_flags": [],
-            "communication_quality": {
-                "response_depth": 0.7,
-                "filler_word_frequency": 0.05,
-                "deflection_frequency": 0.0,
-            },
-            "confidence_flag": False,
-            "confidence_reason": None,
-        })
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_agents:
+        mock_agents.return_value = _agents_response(
+            {
+                "overall_score": 74,
+                "recommendation": "hire",
+                "dimension_scores": [
+                    {
+                        "dimension": "technical_skills",
+                        "score": 80,
+                        "evidence_quotes": ["Candidate described async/await usage in Python."],
+                    }
+                ],
+                "consistency_flags": [],
+                "communication_quality": {
+                    "response_depth": 0.7,
+                    "filler_word_frequency": 0.05,
+                    "deflection_frequency": 0.0,
+                },
+                "confidence_flag": False,
+                "confidence_reason": None,
+            }
+        )
+
+        import sqlalchemy as sa
 
         from app.db import _get_session_factory
-        import sqlalchemy as sa
 
         async with _get_session_factory()() as session:
             async with session.begin():
@@ -71,13 +73,11 @@ async def test_evaluation_pipeline_persists_full_payload(app, completed_intervie
                     sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                     {"cid": company_id},
                 )
-                from app.services.evaluation_service import EvaluationService
                 from app.redis_client import _redis
+                from app.services.evaluation_service import EvaluationService
 
                 svc = EvaluationService(session, _redis)
-                await svc.evaluate_from_session(
-                    session_id=session_id, company_id=company_id
-                )
+                await svc.evaluate_from_session(session_id=session_id, company_id=company_id)
 
         # Verify evaluation row was persisted
         async with _get_session_factory()() as session:
@@ -87,9 +87,7 @@ async def test_evaluation_pipeline_persists_full_payload(app, completed_intervie
                     {"cid": company_id},
                 )
                 result = await session.execute(
-                    sa.text(
-                        "SELECT * FROM evaluations WHERE application_id = :app_id"
-                    ),
+                    sa.text("SELECT * FROM evaluations WHERE application_id = :app_id"),
                     {"app_id": application_id},
                 )
                 row = result.mappings().first()
@@ -109,9 +107,7 @@ async def test_evaluation_pipeline_persists_full_payload(app, completed_intervie
 
     # PII check: no raw email addresses in any text field
     for field in ("dimension_scores", "consistency_flags"):
-        assert "@" not in str(row[field]) or "[EMAIL]" in str(row[field]), (
-            f"PII found in {field}"
-        )
+        assert "@" not in str(row[field]) or "[EMAIL]" in str(row[field]), f"PII found in {field}"
 
     # Application status must be updated
     async with _get_session_factory()() as session:
@@ -140,24 +136,27 @@ async def test_evaluation_confidence_flag_set_for_shallow_responses(
     session_id, company_id, application_id = completed_interview_session
 
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_agents:
-        mock_agents.return_value = _agents_response({
-            "overall_score": 30,
-            "recommendation": "no_hire",
-            "dimension_scores": [
-                {"dimension": "communication", "score": 25, "evidence_quotes": []},
-            ],
-            "consistency_flags": [],
-            "communication_quality": {
-                "response_depth": 0.1,
-                "filler_word_frequency": 0.5,
-                "deflection_frequency": 0.4,
-            },
-            "confidence_flag": True,
-            "confidence_reason": "Insufficient evidence — candidate gave one-word answers.",
-        })
+        mock_agents.return_value = _agents_response(
+            {
+                "overall_score": 30,
+                "recommendation": "no_hire",
+                "dimension_scores": [
+                    {"dimension": "communication", "score": 25, "evidence_quotes": []},
+                ],
+                "consistency_flags": [],
+                "communication_quality": {
+                    "response_depth": 0.1,
+                    "filler_word_frequency": 0.5,
+                    "deflection_frequency": 0.4,
+                },
+                "confidence_flag": True,
+                "confidence_reason": "Insufficient evidence — candidate gave one-word answers.",
+            }
+        )
+
+        import sqlalchemy as sa
 
         from app.db import _get_session_factory
-        import sqlalchemy as sa
 
         async with _get_session_factory()() as session:
             async with session.begin():
@@ -165,13 +164,11 @@ async def test_evaluation_confidence_flag_set_for_shallow_responses(
                     sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                     {"cid": company_id},
                 )
-                from app.services.evaluation_service import EvaluationService
                 from app.redis_client import _redis
+                from app.services.evaluation_service import EvaluationService
 
                 svc = EvaluationService(session, _redis)
-                await svc.evaluate_from_session(
-                    session_id=session_id, company_id=company_id
-                )
+                await svc.evaluate_from_session(session_id=session_id, company_id=company_id)
 
         async with _get_session_factory()() as session:
             async with session.begin():

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import httpx
 import structlog
 from fastapi.encoders import jsonable_encoder
-import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -86,12 +86,14 @@ class JobService:
                 f"genuinely missing or ambiguous:\n\n{job.description}"
             )
 
-        payload = jsonable_encoder({
-            "job_id": job_id,
-            "company_id": company_id,
-            "conversation_history": list(conv.messages),
-            "user_message": effective_user_message,
-        })
+        payload = jsonable_encoder(
+            {
+                "job_id": job_id,
+                "company_id": company_id,
+                "conversation_history": list(conv.messages),
+                "user_message": effective_user_message,
+            }
+        )
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
@@ -175,9 +177,7 @@ class JobService:
             min_screening_score=criteria.get("min_screening_score", 60),
         )
         existing = (
-            await self._session.execute(
-                sa.select(JobCriteria).where(JobCriteria.job_id == job_id)
-            )
+            await self._session.execute(sa.select(JobCriteria).where(JobCriteria.job_id == job_id))
         ).scalar_one_or_none()
         if existing:
             for k, v in fields.items():
@@ -281,8 +281,9 @@ class JobService:
         )
 
     async def _criteria_exists(self, job_id: str) -> bool:
-        from app.models.job_criteria import JobCriteria
         import sqlalchemy as sa
+
+        from app.models.job_criteria import JobCriteria
 
         result = await self._session.execute(
             sa.select(JobCriteria.id).where(JobCriteria.job_id == job_id).limit(1)

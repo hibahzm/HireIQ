@@ -4,9 +4,11 @@ Sila (the AI interviewer) answers candidate questions about the company using
 ONLY this text; questions it doesn't cover get a polite "I'll pass that to the
 hiring team" instead of hallucinated facts.
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0019"

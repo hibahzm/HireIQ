@@ -6,6 +6,7 @@ ROW LEVEL SECURITY with a tenant-only policy, so those SELECTs return nothing
 for a least-privilege app role (they only worked in dev because the Docker role
 is a superuser; same class of bug as the interview-token resolver in 0015).
 """
+
 from __future__ import annotations
 
 from alembic import op

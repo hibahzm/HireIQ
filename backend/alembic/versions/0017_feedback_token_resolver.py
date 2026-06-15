@@ -5,6 +5,7 @@ context exists. Like 0015 (interview tokens) and 0016 (auth lookups), the direct
 SELECT only worked when the app role was a superuser; under FORCE RLS a
 least-privilege role sees nothing.
 """
+
 from __future__ import annotations
 
 from alembic import op

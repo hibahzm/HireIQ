@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import json
 import uuid
 
@@ -15,8 +14,8 @@ from app.repositories.interview_repository import (
     InterviewMessageRepository,
     InterviewSessionRepository,
 )
-from app.services.stt_service import SttService
 from app.services.storage_service import StorageService
+from app.services.stt_service import SttService
 from app.services.tts_service import TtsService
 from app.services.usage_service import record_usage_events
 
@@ -296,21 +295,23 @@ class InterviewService:
         # Call agents interview/turn
         import httpx
 
-        payload = jsonable_encoder({
-            "company_id": company_id,
-            "session_id": session_id,
-            "conversation_history": history,
-            "dimensions_covered": state.get("dimensions_covered", []),
-            "dimensions_remaining": state.get(
-                "dimensions_remaining",
-                self._dimension_names(job_criteria),
-            ),
-            "turn_count": state_turn_count,
-            "max_turns": effective_max_turns,
-            "job_criteria": job_criteria,
-            "company_overview": company_overview,
-            "candidate_cv": candidate_cv,
-        })
+        payload = jsonable_encoder(
+            {
+                "company_id": company_id,
+                "session_id": session_id,
+                "conversation_history": history,
+                "dimensions_covered": state.get("dimensions_covered", []),
+                "dimensions_remaining": state.get(
+                    "dimensions_remaining",
+                    self._dimension_names(job_criteria),
+                ),
+                "turn_count": state_turn_count,
+                "max_turns": effective_max_turns,
+                "job_criteria": job_criteria,
+                "company_overview": company_overview,
+                "candidate_cv": candidate_cv,
+            }
+        )
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -383,6 +384,7 @@ class InterviewService:
             await session_repo.update_status(session_id, "completed")
             # Trigger evaluation asynchronously
             import asyncio
+
             asyncio.create_task(self._trigger_evaluation(session_id, company_id))
 
         # TTS
@@ -487,21 +489,23 @@ class InterviewService:
 
         import httpx
 
-        payload = jsonable_encoder({
-            "company_id": company_id,
-            "session_id": session_id,
-            "conversation_history": history,
-            "dimensions_covered": state.get("dimensions_covered", []),
-            "dimensions_remaining": state.get(
-                "dimensions_remaining",
-                self._dimension_names(job_criteria),
-            ),
-            "turn_count": state_turn_count,
-            "max_turns": effective_max_turns,
-            "job_criteria": job_criteria,
-            "company_overview": company_overview,
-            "candidate_cv": candidate_cv,
-        })
+        payload = jsonable_encoder(
+            {
+                "company_id": company_id,
+                "session_id": session_id,
+                "conversation_history": history,
+                "dimensions_covered": state.get("dimensions_covered", []),
+                "dimensions_remaining": state.get(
+                    "dimensions_remaining",
+                    self._dimension_names(job_criteria),
+                ),
+                "turn_count": state_turn_count,
+                "max_turns": effective_max_turns,
+                "job_criteria": job_criteria,
+                "company_overview": company_overview,
+                "candidate_cv": candidate_cv,
+            }
+        )
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -571,6 +575,7 @@ class InterviewService:
         if session_complete:
             await session_repo.update_status(session_id, "completed")
             import asyncio
+
             asyncio.create_task(self._trigger_evaluation(session_id, company_id))
 
         return {
@@ -635,14 +640,17 @@ class InterviewService:
             logger.warning("interview.redis_save_failed", session_id=session_id, error=str(exc))
 
     async def _trigger_evaluation(self, session_id: str, company_id: str) -> None:
-        from app.db import _get_session_factory
         import sqlalchemy as sa
+
+        from app.db import _get_session_factory
 
         async with _get_session_factory()() as db_session:
             async with db_session.begin():
                 await db_session.execute(
-                    sa.text("SELECT set_config('app.current_company_id', :cid, true)"), {"cid": company_id}
+                    sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
+                    {"cid": company_id},
                 )
                 from app.services.evaluation_service import EvaluationService
+
                 svc = EvaluationService(db_session, self._redis)
                 await svc.evaluate_from_session(session_id=session_id, company_id=company_id)

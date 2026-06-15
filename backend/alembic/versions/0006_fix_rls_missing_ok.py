@@ -12,6 +12,7 @@ With `true` it returns NULL instead, which safely matches no rows.
 Also adds a FOR SELECT policy on jobs so the public application endpoint
 can look up an active job by ID before the company context is known.
 """
+
 from __future__ import annotations
 
 from alembic import op
@@ -43,17 +44,12 @@ _SAFE_POLICY = (
 def upgrade() -> None:
     for table in _TENANT_TABLES:
         op.execute(f"DROP POLICY IF EXISTS tenant_isolation ON {table}")
-        op.execute(
-            f"CREATE POLICY tenant_isolation ON {table} "
-            f"USING ({_SAFE_POLICY})"
-        )
+        op.execute(f"CREATE POLICY tenant_isolation ON {table} " f"USING ({_SAFE_POLICY})")
 
     # Public SELECT: candidates can look up active jobs for the application form
     # without knowing the company_id ahead of time.
     op.execute(
-        "CREATE POLICY public_read_active_jobs ON jobs "
-        "FOR SELECT "
-        "USING (status = 'active')"
+        "CREATE POLICY public_read_active_jobs ON jobs " "FOR SELECT " "USING (status = 'active')"
     )
 
 
@@ -63,7 +59,4 @@ def downgrade() -> None:
     _ORIGINAL = "company_id = current_setting('app.current_company_id')::uuid"
     for table in _TENANT_TABLES:
         op.execute(f"DROP POLICY IF EXISTS tenant_isolation ON {table}")
-        op.execute(
-            f"CREATE POLICY tenant_isolation ON {table} "
-            f"USING ({_ORIGINAL})"
-        )
+        op.execute(f"CREATE POLICY tenant_isolation ON {table} " f"USING ({_ORIGINAL})")

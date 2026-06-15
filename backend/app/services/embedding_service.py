@@ -13,6 +13,7 @@ _TOKENIZER = "cl100k_base"
 class EmbeddingService:
     def __init__(self) -> None:
         from app.config import get_settings
+
         self._settings = get_settings()
         self._enc = tiktoken.get_encoding(_TOKENIZER)
 

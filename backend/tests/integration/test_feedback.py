@@ -10,10 +10,11 @@ Not constitution-mandated (Principle VIII covers auth / screening / interview /
 evaluation pipelines), but added per /speckit-analyze finding F3 to lock the
 public contract of GET /feedback/{token}.
 """
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import sqlalchemy as sa
@@ -30,11 +31,13 @@ async def client(app):
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 async def _seed_evaluation_with_token(
     *,
     token: str,
     expires_at: datetime,
-    summary: str | None = "Strengths: Clear communicator.\nAreas for improvement: More depth on system design.",
+    summary: str
+    | None = "Strengths: Clear communicator.\nAreas for improvement: More depth on system design.",
 ) -> None:
     """
     Insert a self-contained company → job → candidate → application → evaluation
@@ -49,7 +52,7 @@ async def _seed_evaluation_with_token(
     candidate_id = str(uuid.uuid4())
     application_id = str(uuid.uuid4())
     evaluation_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     async with _get_session_factory()() as session:
         async with session.begin():
@@ -76,7 +79,13 @@ async def _seed_evaluation_with_token(
                     "INSERT INTO jobs (id, company_id, title, status, created_by, created_at, updated_at) "
                     "VALUES (:id, :cid, :title, 'closed', :cb, :now, :now)"
                 ),
-                {"id": job_id, "cid": company_id, "title": "Backend Engineer", "cb": user_id, "now": now},
+                {
+                    "id": job_id,
+                    "cid": company_id,
+                    "title": "Backend Engineer",
+                    "cb": user_id,
+                    "now": now,
+                },
             )
             await session.execute(
                 sa.text(
@@ -136,12 +145,13 @@ async def _seed_evaluation_with_token(
 # Tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_valid_token_returns_report_without_recommendation(client: AsyncClient):
     """Valid token → 200; dimension scores + summary present; recommendation hidden."""
     token = str(uuid.uuid4())
     await _seed_evaluation_with_token(
-        token=token, expires_at=datetime.now(timezone.utc) + timedelta(days=30)
+        token=token, expires_at=datetime.now(UTC) + timedelta(days=30)
     )
 
     resp = await client.get(f"/feedback/{token}")
@@ -168,9 +178,7 @@ async def test_unknown_token_returns_404(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_expired_token_returns_410(client: AsyncClient):
     token = str(uuid.uuid4())
-    await _seed_evaluation_with_token(
-        token=token, expires_at=datetime.now(timezone.utc) - timedelta(days=1)
-    )
+    await _seed_evaluation_with_token(token=token, expires_at=datetime.now(UTC) - timedelta(days=1))
 
     resp = await client.get(f"/feedback/{token}")
     assert resp.status_code == 410

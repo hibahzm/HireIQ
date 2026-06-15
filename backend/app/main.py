@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,9 +27,8 @@ async def lifespan(app: FastAPI):
 
     async def expire_sessions():
         from app.db import _get_session_factory
-        import sqlalchemy as sa
-        from app.services.interview_service import InterviewService
         from app.redis_client import _redis as redis_client
+        from app.services.interview_service import InterviewService
 
         async with _get_session_factory()() as session:
             async with session.begin():
@@ -74,17 +72,17 @@ def create_app() -> FastAPI:
                 pass  # never let logging prevent us from returning a CORS-safe 500
             return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
-    from app.api.routers.health import router as health_router
-    from app.api.routers.auth import router as auth_router
-    from app.api.routers.jobs import router as jobs_router
-    from app.api.routers.users import router as users_router
+    from app.api.routers.analytics import router as analytics_router
     from app.api.routers.applications import router as applications_router
-    from app.api.routers.interviews import router as interviews_router
+    from app.api.routers.auth import router as auth_router
+    from app.api.routers.company import router as company_router
     from app.api.routers.evaluations import router as evaluations_router
     from app.api.routers.feedback import router as feedback_router
-    from app.api.routers.analytics import router as analytics_router
-    from app.api.routers.company import router as company_router
+    from app.api.routers.health import router as health_router
+    from app.api.routers.interviews import router as interviews_router
+    from app.api.routers.jobs import router as jobs_router
     from app.api.routers.platform import router as platform_router
+    from app.api.routers.users import router as users_router
 
     app.include_router(health_router)
     app.include_router(auth_router)

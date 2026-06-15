@@ -8,6 +8,7 @@ The original CHECK only permitted ('pending','qualified','rejected'), so add
 Revision ID: 0010
 Revises: 0009
 """
+
 from __future__ import annotations
 
 from alembic import op

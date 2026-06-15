@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.repositories.application_repository import ApplicationRepository
 from app.repositories.audit_log_repository import AuditLogRepository
-from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
-from app.repositories.interview_repository import InterviewMessageRepository, InterviewSessionRepository
-from app.repositories.job_repository import JobRepository
+from app.repositories.interview_repository import (
+    InterviewMessageRepository,
+)
 from app.services.usage_service import record_usage_events
 
 logger = structlog.get_logger()
@@ -31,7 +31,7 @@ class EvaluationService:
     async def generate_feedback_token(self, evaluation_id: str) -> str:
         """Mint a UUID feedback token with 30-day expiry and persist it."""
         token = str(uuid.uuid4())
-        expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+        expires_at = datetime.now(UTC) + timedelta(days=30)
         repo = EvaluationRepository(self._session)
         await repo.set_feedback_token(evaluation_id, token, expires_at)
         return token
@@ -42,17 +42,16 @@ class EvaluationService:
         log = logger.bind(session_id=session_id, company_id=company_id)
         log.info("evaluation.started")
 
-        session_repo = InterviewSessionRepository(self._session)
         msg_repo = InterviewMessageRepository(self._session)
         app_repo = ApplicationRepository(self._session)
         eval_repo = EvaluationRepository(self._session)
-        candidate_repo = CandidateRepository(self._session)
-        job_repo = JobRepository(self._session)
         audit = AuditLogRepository(self._session)
 
         # 1. Load interview session
         import sqlalchemy as sa
+
         from app.models.interview_session import InterviewSession
+
         result = await self._session.execute(
             sa.select(InterviewSession).where(InterviewSession.id == session_id)
         )
@@ -65,8 +64,8 @@ class EvaluationService:
 
         # 2. Load application + candidate + job criteria
         from app.models.application import Application
-        from app.models.job_criteria import JobCriteria
         from app.models.candidate import Candidate
+        from app.models.job_criteria import JobCriteria
 
         result = await self._session.execute(
             sa.select(Application).where(Application.id == application_id)
@@ -113,13 +112,15 @@ class EvaluationService:
         ]
 
         # 4. Call agents /evaluate
-        payload = jsonable_encoder({
-            "application_id": application_id,
-            "company_id": company_id,
-            "cv_text": cv_text,
-            "job_criteria": job_criteria,
-            "transcript": transcript,
-        })
+        payload = jsonable_encoder(
+            {
+                "application_id": application_id,
+                "company_id": company_id,
+                "cv_text": cv_text,
+                "job_criteria": job_criteria,
+                "transcript": transcript,
+            }
+        )
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:
                 resp = await client.post(
@@ -181,14 +182,14 @@ class EvaluationService:
         # report with growth tips. Best-effort: email failure never fails evaluation.
         if candidate and candidate.email:
             from app.models.job import Job
-            result = await self._session.execute(
-                sa.select(Job).where(Job.id == application.job_id)
-            )
+
+            result = await self._session.execute(sa.select(Job).where(Job.id == application.job_id))
             job = result.scalar_one_or_none()
             job_title = job.title if job else "the position"
             feedback_url = f"{self._settings.FRONTEND_ORIGIN}/feedback/{feedback_token}"
             try:
                 from app.services.notification_service import NotificationService
+
                 notifier = NotificationService(self._redis)
                 if evaluation.recommendation == "hire":
                     await notifier.send_interview_advance_email(
@@ -218,4 +219,8 @@ class EvaluationService:
                 "confidence_flag": evaluation.confidence_flag,
             },
         )
-        log.info("evaluation.completed", evaluation_id=evaluation.id, overall_score=evaluation.overall_score)
+        log.info(
+            "evaluation.completed",
+            evaluation_id=evaluation.id,
+            overall_score=evaluation.overall_score,
+        )

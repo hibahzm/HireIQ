@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,14 +83,14 @@ class InterviewSessionRepository:
             await self._session.execute(
                 sa.update(InterviewSession)
                 .where(InterviewSession.id == session.id)
-                .values(streaming_mode=True, updated_at=datetime.now(timezone.utc))
+                .values(streaming_mode=True, updated_at=datetime.now(UTC))
             )
             await self._session.flush()
         if needs_turn_cap:
             await self._session.execute(
                 sa.update(InterviewSession)
                 .where(InterviewSession.id == session.id)
-                .values(max_turns=DEFAULT_INTERVIEW_MAX_TURNS, updated_at=datetime.now(timezone.utc))
+                .values(max_turns=DEFAULT_INTERVIEW_MAX_TURNS, updated_at=datetime.now(UTC))
             )
             await self._session.flush()
             session.max_turns = DEFAULT_INTERVIEW_MAX_TURNS
@@ -114,23 +114,21 @@ class InterviewSessionRepository:
             status="pending",
             turn_count=0,
             max_turns=DEFAULT_INTERVIEW_MAX_TURNS,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         self._session.add(sess)
         await self._session.flush()
         return sess
 
     async def update_status(self, session_id: str, status: str) -> None:
-        updates: dict = {"status": status, "updated_at": datetime.now(timezone.utc)}
+        updates: dict = {"status": status, "updated_at": datetime.now(UTC)}
         if status == "in_progress":
-            updates["started_at"] = datetime.now(timezone.utc)
+            updates["started_at"] = datetime.now(UTC)
         elif status in ("completed", "expired", "system_interrupted", "abandoned"):
-            updates["completed_at"] = datetime.now(timezone.utc)
+            updates["completed_at"] = datetime.now(UTC)
         await self._session.execute(
-            sa.update(InterviewSession)
-            .where(InterviewSession.id == session_id)
-            .values(**updates)
+            sa.update(InterviewSession).where(InterviewSession.id == session_id).values(**updates)
         )
 
     async def increment_turn(self, session_id: str) -> None:
@@ -139,8 +137,8 @@ class InterviewSessionRepository:
             .where(InterviewSession.id == session_id)
             .values(
                 turn_count=InterviewSession.turn_count + 1,
-                last_active_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                last_active_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
         )
 
@@ -182,7 +180,7 @@ class InterviewMessageRepository:
             content_text="[blocked]" if is_blocked else content_text,
             audio_blob_key=audio_blob_key,
             is_blocked=is_blocked,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         self._session.add(msg)
         await self._session.flush()

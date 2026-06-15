@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from fastapi.encoders import jsonable_encoder
@@ -31,9 +31,10 @@ async def run_screening_background(
     run as an asyncio.Task without inheriting the request session. Owned here
     (not in the router) per Principle III.
     """
+    import sqlalchemy as sa
+
     from app.db import _get_session_factory
     from app.models.job_criteria import JobCriteria
-    import sqlalchemy as sa
 
     try:
         async with _get_session_factory()() as session:
@@ -73,6 +74,7 @@ async def run_screening_background(
                     "min_screening_score": criteria_model.min_screening_score,
                 }
                 from app.models.job import Job
+
                 job_desc_row = await session.execute(
                     sa.select(Job.description).where(Job.id == job_id)
                 )
@@ -176,13 +178,15 @@ class ScreeningService:
         # avoids ever mixing one candidate's CV into another's screening context.)
         import httpx
 
-        payload = jsonable_encoder({
-            "application_id": application_id,
-            "company_id": company_id,
-            "cv_text": cv_text,
-            "job_description": job_description,
-            "job_criteria": job_criteria,
-        })
+        payload = jsonable_encoder(
+            {
+                "application_id": application_id,
+                "company_id": company_id,
+                "cv_text": cv_text,
+                "job_description": job_description,
+                "job_criteria": job_criteria,
+            }
+        )
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 f"{self._settings.AGENTS_BASE_URL}/agents/cv-screen",
@@ -258,9 +262,7 @@ class ScreeningService:
     ) -> None:
         app_repo = ApplicationRepository(self._session)
         token = str(uuid.uuid4())
-        expires_at = datetime.now(timezone.utc) + timedelta(
-            hours=self._settings.INTERVIEW_LINK_EXPIRY_HOURS
-        )
+        expires_at = datetime.now(UTC) + timedelta(hours=self._settings.INTERVIEW_LINK_EXPIRY_HOURS)
         await app_repo.set_interview_token(application_id, token, expires_at)
 
         await AuditLogRepository(self._session).log_event(

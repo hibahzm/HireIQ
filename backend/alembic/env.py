@@ -13,14 +13,15 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Import all models so Alembic sees them for autogenerate
-from app.models import *  # noqa: F401, E402
 from app.db import Base  # noqa: E402
+from app.models import *  # noqa: F401, E402
 
 target_metadata = Base.metadata
 
 
 def get_url() -> str:
     import os
+
     return os.environ["DATABASE_URL"]
 
 

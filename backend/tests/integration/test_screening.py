@@ -2,6 +2,7 @@
 Integration tests for the CV screening pipeline.
 Constitution Principle VIII — write FIRST, confirm FAILING before T049.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -47,6 +48,7 @@ def _mock_agents_client(payload: dict):
 # T038 — Full CV screening pipeline
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_screening_pipeline_sets_score_and_rationale(client: AsyncClient, active_job_token):
     """
@@ -78,7 +80,9 @@ async def test_screening_pipeline_sets_score_and_rationale(client: AsyncClient, 
     }
     with (
         patch("app.services.ocr_service.OcrService.extract", new_callable=AsyncMock) as mock_ocr,
-        patch("app.services.embedding_service.EmbeddingService.embed_text", new_callable=AsyncMock) as mock_embed,
+        patch(
+            "app.services.embedding_service.EmbeddingService.embed_text", new_callable=AsyncMock
+        ) as mock_embed,
         patch("httpx.AsyncClient", _mock_agents_client(agents_payload)),
     ):
         mock_ocr.return_value = ("Software Engineer with 5 years Python experience.", "pymupdf")
@@ -129,6 +133,7 @@ async def test_screening_pipeline_sets_score_and_rationale(client: AsyncClient, 
 # T039 — Duplicate application + corrupt PDF rejection
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_duplicate_application_returns_409(client: AsyncClient, active_job):
     """Second application with same email + same job returns 409."""
@@ -137,9 +142,7 @@ async def test_duplicate_application_returns_409(client: AsyncClient, active_job
 
     # This test covers duplicate detection, not extraction — mock OCR so the
     # placeholder bytes pass validation.
-    with patch(
-        "app.services.ocr_service.OcrService.extract", new_callable=AsyncMock
-    ) as mock_ocr:
+    with patch("app.services.ocr_service.OcrService.extract", new_callable=AsyncMock) as mock_ocr:
         mock_ocr.return_value = ("Bob Builder, construction engineer.", "pymupdf")
 
         r1 = await client.post(
@@ -162,9 +165,7 @@ async def test_corrupt_pdf_returns_422_no_application_created(client: AsyncClien
     """Corrupt PDF → 422 response and no application record in DB."""
     job_id = active_job
 
-    with patch(
-        "app.services.ocr_service.OcrService.extract", new_callable=AsyncMock
-    ) as mock_ocr:
+    with patch("app.services.ocr_service.OcrService.extract", new_callable=AsyncMock) as mock_ocr:
         mock_ocr.side_effect = ValueError("corrupted_pdf")
 
         resp = await client.post(

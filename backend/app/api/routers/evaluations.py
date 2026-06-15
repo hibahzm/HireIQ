@@ -21,6 +21,7 @@ router = APIRouter(tags=["evaluations"])
 
 # ── Response schemas ─────────────────────────────────────────────────────────
 
+
 class CandidateSummary(BaseModel):
     full_name: str
 
@@ -77,6 +78,7 @@ class EvaluationDetailResponse(BaseModel):
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
+
 
 @router.get("/jobs/{job_id}/evaluations", response_model=list[ShortlistItem])
 async def list_evaluations(

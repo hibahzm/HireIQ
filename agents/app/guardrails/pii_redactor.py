@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 # Patterns ordered from most specific to least specific
 _PATTERNS: list[tuple[str, str]] = [
     # Email addresses

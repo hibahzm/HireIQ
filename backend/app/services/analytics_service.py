@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.repositories.analytics_repository import AnalyticsRepository
 from app.schemas.analytics import (
@@ -64,7 +64,7 @@ class AnalyticsService:
         jobs = await self._repo.company_jobs()
 
         return CompanyOverviewResponse(
-            period=datetime.now(timezone.utc).strftime("%Y-%m"),
+            period=datetime.now(UTC).strftime("%Y-%m"),
             total_applications=counts["total"],
             screening_pass_rate=self._ratio(counts["qualified"], counts["total"]),
             avg_evaluation_score=round(avg_score, 2) if avg_score is not None else None,

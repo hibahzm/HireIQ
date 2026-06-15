@@ -5,10 +5,12 @@ Revises: 0001
 Create Date: 2026-06-04
 
 """
+
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0002"
 down_revision = "0001"
@@ -32,8 +34,15 @@ def upgrade() -> None:
             server_default=sa.text("'{}'::jsonb"),
             nullable=False,
         ),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.CheckConstraint("actor_type IN ('system', 'user', 'candidate')", name="ck_audit_logs_actor_type"),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "actor_type IN ('system', 'user', 'candidate')", name="ck_audit_logs_actor_type"
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_audit_logs_company_id", "audit_logs", ["company_id"])

@@ -11,6 +11,7 @@ as the answer. RAGAS then scores:
 Skipped unless a real OPENAI_API_KEY is present and the agents service is
 reachable (RAGAS uses an LLM judge).
 """
+
 from __future__ import annotations
 
 import uuid
@@ -96,7 +97,8 @@ async def test_screening_rag_faithfulness_and_precision():
     if faith < FAITHFULNESS_THRESHOLD or prec < CONTEXT_PRECISION_THRESHOLD:
         warnings.warn(
             f"screening grounding below target: faithfulness={faith:.3f}, "
-            f"context_precision={prec:.3f}"
+            f"context_precision={prec:.3f}",
+            stacklevel=2,
         )
 
 

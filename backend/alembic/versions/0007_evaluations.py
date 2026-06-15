@@ -5,10 +5,12 @@ Revises: 0006
 Create Date: 2026-06-05
 
 """
+
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0007"
 down_revision = "0006"
@@ -32,8 +34,18 @@ def upgrade() -> None:
         sa.Column("summary", sa.Text(), nullable=True),
         sa.Column("feedback_token", sa.UUID(), nullable=True),
         sa.Column("feedback_token_expires_at", sa.TIMESTAMP(timezone=True), nullable=True),
-        sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint(
             "recommendation IN ('hire','no_hire','uncertain')",
             name="ck_evaluations_recommendation",
@@ -45,8 +57,16 @@ def upgrade() -> None:
         sa.UniqueConstraint("application_id", name="uq_evaluations_application_id"),
     )
 
-    op.create_index("ix_evaluations_company_score", "evaluations", ["company_id", sa.text("overall_score DESC")])
-    op.create_index("ix_evaluations_feedback_token", "evaluations", ["feedback_token"], unique=True, postgresql_where=sa.text("feedback_token IS NOT NULL"))
+    op.create_index(
+        "ix_evaluations_company_score", "evaluations", ["company_id", sa.text("overall_score DESC")]
+    )
+    op.create_index(
+        "ix_evaluations_feedback_token",
+        "evaluations",
+        ["feedback_token"],
+        unique=True,
+        postgresql_where=sa.text("feedback_token IS NOT NULL"),
+    )
 
     op.execute("ALTER TABLE evaluations ENABLE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE evaluations FORCE ROW LEVEL SECURITY")

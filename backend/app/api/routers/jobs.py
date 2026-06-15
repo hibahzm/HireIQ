@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException
@@ -79,7 +79,7 @@ async def update_job(
             title=body.title,
             description=body.description,
             streaming_interview=body.streaming_interview,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
     )
     job = await JobRepository(session).get_by_id(job_id, current_user.company_id)
@@ -99,9 +99,7 @@ async def delete_job(
         raise HTTPException(status_code=404, detail="Job not found")
 
     result = await session.execute(
-        sa.select(Application.id)
-        .where(Application.job_id == job_id)
-        .limit(1)
+        sa.select(Application.id).where(Application.job_id == job_id).limit(1)
     )
     if result.scalar_one_or_none():
         raise HTTPException(

@@ -8,9 +8,11 @@ Both additive with server defaults — existing rows and turn-based sessions are
 Revision ID: 0008
 Revises: 0007
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0008"

@@ -6,6 +6,7 @@ import io
 class SttService:
     async def transcribe(self, audio_bytes: bytes, filename: str = "audio.webm") -> str:
         from openai import AsyncOpenAI
+
         from app.config import get_settings
 
         settings = get_settings()

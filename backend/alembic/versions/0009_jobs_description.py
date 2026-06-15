@@ -8,9 +8,11 @@ Additive and nullable — existing rows are unaffected.
 Revision ID: 0009
 Revises: 0008
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0009"

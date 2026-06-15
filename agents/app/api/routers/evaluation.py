@@ -71,9 +71,9 @@ def _parse_summary(raw: str | None) -> FeedbackSummary | None:
     areas = ""
     for line in raw.splitlines():
         if line.lower().startswith("strengths:"):
-            strengths = line[len("strengths:"):].strip()
+            strengths = line[len("strengths:") :].strip()
         elif line.lower().startswith("areas for improvement:"):
-            areas = line[len("areas for improvement:"):].strip()
+            areas = line[len("areas for improvement:") :].strip()
     if not strengths and not areas:
         return FeedbackSummary(strengths=raw, areas_for_improvement="")
     return FeedbackSummary(strengths=strengths, areas_for_improvement=areas)

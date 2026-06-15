@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import sqlalchemy as sa
 import structlog
-import os
-
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from redis.asyncio import Redis
@@ -24,7 +23,7 @@ from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.evaluation_repository import EvaluationRepository
 from app.schemas.applications import ApplicationResponse
 from app.services.notification_service import NotificationService
-from app.services.ocr_service import OcrService, OcrValidationError
+from app.services.ocr_service import OcrService
 from app.services.screening_service import run_screening_background
 from app.services.storage_service import StorageService
 
@@ -56,11 +55,15 @@ async def _application_response(
     evaluation = await EvaluationRepository(session).get_by_application_id(application.id)
     response.evaluation_id = evaluation.id if evaluation else None
     candidate_row = (
-        await session.execute(
-            sa.text("SELECT full_name, email FROM candidates WHERE id = :cid"),
-            {"cid": str(application.candidate_id)},
+        (
+            await session.execute(
+                sa.text("SELECT full_name, email FROM candidates WHERE id = :cid"),
+                {"cid": str(application.candidate_id)},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     if candidate_row:
         response.candidate_name = candidate_row["full_name"]
         response.candidate_email = candidate_row["email"]
@@ -188,9 +191,7 @@ async def list_applications(
     if not await JobRepository(session).get_by_id(job_id, current_user.company_id):
         raise HTTPException(status_code=404, detail="Job not found")
 
-    apps = await ApplicationRepository(session).list_by_job(
-        job_id, status_filter=status, page=page
-    )
+    apps = await ApplicationRepository(session).list_by_job(job_id, status_filter=status, page=page)
     return [await _application_response(session, a) for a in apps]
 
 
@@ -200,9 +201,7 @@ async def get_application(
     current_user: User = Depends(require_recruiter_or_admin),
     session: AsyncSession = Depends(get_authed_session),
 ):
-    app = await ApplicationRepository(session).get_by_id(
-        application_id, current_user.company_id
-    )
+    app = await ApplicationRepository(session).get_by_id(application_id, current_user.company_id)
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
     return await _application_response(session, app)
@@ -225,9 +224,7 @@ async def download_cv(
     """Serve the candidate's original CV file to authorised company members.
     RLS-scoped via get_by_id(company_id) — a company can only fetch its own CVs.
     Works for both local-disk and Azure Blob storage (StorageService abstracts it)."""
-    app = await ApplicationRepository(session).get_by_id(
-        application_id, current_user.company_id
-    )
+    app = await ApplicationRepository(session).get_by_id(application_id, current_user.company_id)
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
     if not app.cv_blob_key:
@@ -274,9 +271,7 @@ async def invite_to_interview(
     from app.config import get_settings
 
     token = str(uuid.uuid4())
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        hours=get_settings().INTERVIEW_LINK_EXPIRY_HOURS
-    )
+    expires_at = datetime.now(UTC) + timedelta(hours=get_settings().INTERVIEW_LINK_EXPIRY_HOURS)
     await repo.set_interview_token(application_id, token, expires_at)
 
     await AuditLogRepository(session).log_event(
@@ -325,17 +320,21 @@ async def rescreen_application(
         )
 
     row = (
-        await session.execute(
-            sa.text(
-                "SELECT j.title AS job_title, c.email AS candidate_email "
-                "FROM applications a "
-                "JOIN jobs j ON j.id = a.job_id "
-                "JOIN candidates c ON c.id = a.candidate_id "
-                "WHERE a.id = :id"
-            ),
-            {"id": application_id},
+        (
+            await session.execute(
+                sa.text(
+                    "SELECT j.title AS job_title, c.email AS candidate_email "
+                    "FROM applications a "
+                    "JOIN jobs j ON j.id = a.job_id "
+                    "JOIN candidates c ON c.id = a.candidate_id "
+                    "WHERE a.id = :id"
+                ),
+                {"id": application_id},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
 
     # Reset to pending so the UI shows an in-flight re-run immediately.
     await repo.update_screening_status(application_id, "pending")

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import sqlalchemy as sa
@@ -40,8 +40,8 @@ class EvaluationRepository:
             confidence_flag=confidence_flag,
             confidence_reason=confidence_reason,
             summary=summary,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         self._session.add(ev)
         await self._session.flush()
@@ -124,13 +124,13 @@ class EvaluationRepository:
 
     async def get_by_feedback_token(self, token: str) -> Evaluation | None:
         """Public candidate access — the token is the authenticator. Expired → None."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         row = await self._resolve_feedback_token(token)
         if not row:
             return None
         expires_at = row.get("feedback_token_expires_at")
-        if not expires_at or expires_at <= datetime.now(timezone.utc):
+        if not expires_at or expires_at <= datetime.now(UTC):
             return None
         return Evaluation(**row)
 
@@ -168,6 +168,6 @@ class EvaluationRepository:
             .values(
                 feedback_token=token,
                 feedback_token_expires_at=expires_at,
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(UTC),
             )
         )

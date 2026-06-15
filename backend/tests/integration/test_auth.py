@@ -3,6 +3,7 @@ Integration tests for auth endpoints.
 These tests MUST be written first (constitution Principle VIII) and confirmed
 failing before implementing AuthService / auth router (T026/T027).
 """
+
 from __future__ import annotations
 
 import pytest
@@ -18,6 +19,7 @@ async def client(app):
 # ---------------------------------------------------------------------------
 # T021 — Company registration + admin user creation
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_register_company_returns_201_with_token(client: AsyncClient):
@@ -57,6 +59,7 @@ async def test_register_duplicate_email_returns_409(client: AsyncClient):
 # ---------------------------------------------------------------------------
 # T022 — Login → access token valid → refresh → old token rejected → logout
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_full_token_lifecycle(client: AsyncClient):

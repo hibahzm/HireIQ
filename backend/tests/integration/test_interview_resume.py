@@ -2,6 +2,7 @@
 Session resume and expiry integration tests.
 Constitution Principle VIII — T055.
 """
+
 from __future__ import annotations
 
 import pytest

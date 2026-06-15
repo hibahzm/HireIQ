@@ -15,6 +15,7 @@ These tests score the LLM pipelines against a curated golden set. Two flavours:
 They require a real OpenAI key (RAGAS uses an LLM judge) and are skipped in the
 normal unit/integration CI lane; a dedicated CI job runs them with a real key.
 """
+
 from __future__ import annotations
 
 import json
@@ -63,10 +64,7 @@ def load_cv_fixtures() -> list[dict]:
 
 
 def load_transcript_fixtures() -> list[dict]:
-    return [
-        json.loads(p.read_text())
-        for p in sorted((FIXTURES / "transcripts").glob("*.json"))
-    ]
+    return [json.loads(p.read_text()) for p in sorted((FIXTURES / "transcripts").glob("*.json"))]
 
 
 async def log_ragas_run(pipeline: str, scores: dict[str, float]) -> None:

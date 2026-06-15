@@ -68,9 +68,7 @@ class GuardRegistry:
 
         for pattern in _TOXIC_PATTERNS:
             if pattern in lowered:
-                logger.warning(
-                    "guardrail.output.blocked", reason="toxic_output", pattern=pattern
-                )
+                logger.warning("guardrail.output.blocked", reason="toxic_output", pattern=pattern)
                 return GuardResult(passed=False, reason="toxic_output")
 
         return GuardResult(passed=True)

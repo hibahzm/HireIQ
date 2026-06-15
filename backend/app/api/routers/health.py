@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
-from fastapi.responses import JSONResponse
-
 import httpx
 import sqlalchemy as sa
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 router = APIRouter(tags=["health"])
 
 
 @router.get("/health")
 async def health_check() -> JSONResponse:
+    from app.config import get_settings
     from app.db import _get_engine
     from app.redis_client import _redis
-    from app.config import get_settings
 
     settings = get_settings()
     result: dict = {"status": "ok", "db": "ok", "redis": "ok", "agents": "ok"}

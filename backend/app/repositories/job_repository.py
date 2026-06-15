@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,8 +31,8 @@ class JobRepository:
             streaming_interview=streaming_interview,
             status="draft",
             created_by=created_by,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         self._session.add(job)
         await self._session.flush()
@@ -58,7 +58,7 @@ class JobRepository:
         await self._session.execute(
             sa.update(Job)
             .where(Job.id == job_id)
-            .values(status=status, updated_at=datetime.now(timezone.utc))
+            .values(status=status, updated_at=datetime.now(UTC))
         )
         return await self.get_by_id(job_id)
 
@@ -70,7 +70,7 @@ class JobRepository:
         if existing:
             for key, value in criteria.items():
                 setattr(existing, key, value)
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             await self._session.flush()
             return existing
 
@@ -78,8 +78,8 @@ class JobRepository:
             id=str(uuid.uuid4()),
             job_id=job_id,
             company_id=company_id,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             **criteria,
         )
         self._session.add(jc)

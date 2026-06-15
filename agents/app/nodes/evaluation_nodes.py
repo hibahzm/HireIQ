@@ -47,13 +47,16 @@ class EvaluationState(TypedDict):
 
 def _llm(json_mode: bool = False) -> ChatOpenAI:
     from app.config import get_settings
+
     settings = get_settings()
     kwargs: dict[str, Any] = {}
     if json_mode:
         # Forces syntactically valid JSON output — parse failures here previously
         # produced empty dimension_scores and spurious low-confidence flags.
         kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
-    return ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY, temperature=0.1, **kwargs)
+    return ChatOpenAI(
+        model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY, temperature=0.1, **kwargs
+    )
 
 
 def _transcript_text(transcript: list[dict[str, Any]]) -> str:
@@ -69,7 +72,9 @@ async def score_dimensions(state: EvaluationState) -> EvaluationState:
     transcript_str = _transcript_text(state["transcript"])
 
     if not registry.check_input(transcript_str).passed:
-        logger.warning("evaluation.guardrail_triggered.input", application_id=state["application_id"])
+        logger.warning(
+            "evaluation.guardrail_triggered.input", application_id=state["application_id"]
+        )
         return {**state, "guardrail_triggered": True}
 
     prompt = EVALUATION_SCORE_DIMENSIONS.format(
@@ -87,22 +92,30 @@ async def score_dimensions(state: EvaluationState) -> EvaluationState:
     raw = response.content
 
     if not registry.check_output(raw).passed:
-        logger.warning("evaluation.guardrail_triggered.output", application_id=state["application_id"])
+        logger.warning(
+            "evaluation.guardrail_triggered.output", application_id=state["application_id"]
+        )
         return {**state, "guardrail_triggered": True, "usage_events": usage_events}
 
     data = parse_json_object(raw) or {}
     redacted = []
     for dim in data.get("dimension_scores", []):
         try:
-            redacted.append({
-                "dimension": str(dim.get("dimension", "")),
-                "score": int(dim.get("score", 0)),
-                "evidence_quotes": [PIIRedactor.redact(str(q)) for q in dim.get("evidence_quotes", [])],
-            })
+            redacted.append(
+                {
+                    "dimension": str(dim.get("dimension", "")),
+                    "score": int(dim.get("score", 0)),
+                    "evidence_quotes": [
+                        PIIRedactor.redact(str(q)) for q in dim.get("evidence_quotes", [])
+                    ],
+                }
+            )
         except (TypeError, ValueError):
             continue
     if not redacted:
-        logger.warning("evaluation.score_dimensions_unparseable", application_id=state["application_id"])
+        logger.warning(
+            "evaluation.score_dimensions_unparseable", application_id=state["application_id"]
+        )
 
     return {**state, "dimension_scores": redacted, "usage_events": usage_events}
 
@@ -180,8 +193,8 @@ async def assess_confidence(state: EvaluationState) -> EvaluationState:
     if state.get("guardrail_triggered"):
         return state
 
-    avg_evidence = (
-        sum(len(d.get("evidence_quotes", [])) for d in state["dimension_scores"]) / max(len(state["dimension_scores"]), 1)
+    avg_evidence = sum(len(d.get("evidence_quotes", [])) for d in state["dimension_scores"]) / max(
+        len(state["dimension_scores"]), 1
     )
     turn_depth = state["communication_quality"].get("response_depth", 0.5)
 

@@ -5,6 +5,7 @@ ck_applications_extraction check constraint from 0004 still only allowed
 ('pymupdf', 'document_intelligence') — so any DOCX CV that extracted natively
 crashed screening at persist time with a CheckViolationError.
 """
+
 from __future__ import annotations
 
 from alembic import op

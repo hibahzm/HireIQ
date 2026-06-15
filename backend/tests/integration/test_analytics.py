@@ -6,6 +6,7 @@ feature-level quality gates: accuracy (SC-001/003), ÷0 edge cases, tenant isola
 (FR-007), and authz. They follow the mocking style of test_screening.py — the
 OCR/embedding/agents boundaries are mocked so screening can drive funnel state.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -53,10 +54,14 @@ def _screening_mocks():
         patch("app.services.embedding_service.EmbeddingService.embed_text", new_callable=AsyncMock),
         patch(
             "httpx.AsyncClient",
-            _agents_client({
-                "score": 80, "rationale": "Good match.", "status": "qualified",
-                "guardrail_triggered": False,
-            }),
+            _agents_client(
+                {
+                    "score": 80,
+                    "rationale": "Good match.",
+                    "status": "qualified",
+                    "guardrail_triggered": False,
+                }
+            ),
         ),
     )
 
@@ -64,6 +69,7 @@ def _screening_mocks():
 # ---------------------------------------------------------------------------
 # T007 — per-job analytics accuracy + zero-application edge
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_job_analytics_zero_applications_edge(client: AsyncClient, active_job_token):
@@ -83,7 +89,11 @@ async def test_job_analytics_zero_applications_edge(client: AsyncClient, active_
     assert data["time_to_evaluate_seconds"] is None
     # Distribution always returns all five bands, zero-filled.
     assert [b["band"] for b in data["score_distribution"]] == [
-        "0-20", "21-40", "41-60", "61-80", "81-100"
+        "0-20",
+        "21-40",
+        "41-60",
+        "61-80",
+        "81-100",
     ]
     assert all(b["count"] == 0 for b in data["score_distribution"])
 
@@ -139,25 +149,35 @@ async def test_job_analytics_funnel_accuracy(client: AsyncClient, active_job_tok
 # T008 — tenant isolation (FR-007)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_job_analytics_tenant_isolation(client: AsyncClient):
     """Company B cannot read company A's job analytics — returns 404, no leakage."""
     # Company A registers and creates an active job.
-    a = await client.post("/auth/register", json={
-        "company_name": f"CompA-{uuid.uuid4().hex[:8]}",
-        "email": f"a-{uuid.uuid4().hex[:8]}@ex.com", "password": "Sup3rSecret!",
-    })
+    a = await client.post(
+        "/auth/register",
+        json={
+            "company_name": f"CompA-{uuid.uuid4().hex[:8]}",
+            "email": f"a-{uuid.uuid4().hex[:8]}@ex.com",
+            "password": "Sup3rSecret!",
+        },
+    )
     assert a.status_code in (200, 201)
     token_a = a.json()["access_token"]
-    job = await client.post("/jobs", json={"title": "Backend Eng"},
-                            headers={"Authorization": f"Bearer {token_a}"})
+    job = await client.post(
+        "/jobs", json={"title": "Backend Eng"}, headers={"Authorization": f"Bearer {token_a}"}
+    )
     job_id = job.json()["id"]
 
     # Company B registers.
-    b = await client.post("/auth/register", json={
-        "company_name": f"CompB-{uuid.uuid4().hex[:8]}",
-        "email": f"b-{uuid.uuid4().hex[:8]}@ex.com", "password": "Sup3rSecret!",
-    })
+    b = await client.post(
+        "/auth/register",
+        json={
+            "company_name": f"CompB-{uuid.uuid4().hex[:8]}",
+            "email": f"b-{uuid.uuid4().hex[:8]}@ex.com",
+            "password": "Sup3rSecret!",
+        },
+    )
     token_b = b.json()["access_token"]
 
     # B requesting A's job analytics is invisible across tenants.
@@ -171,14 +191,13 @@ async def test_job_analytics_tenant_isolation(client: AsyncClient):
 # T014 — company overview accuracy + edge + authz
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_company_overview_structure_and_edge(client: AsyncClient, active_job_token):
     """Overview returns period + KPIs + jobs; zero-eval period yields null avg score."""
     token, _ = active_job_token
 
-    resp = await client.get(
-        "/analytics/overview", headers={"Authorization": f"Bearer {token}"}
-    )
+    resp = await client.get("/analytics/overview", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
     data = resp.json()
     assert len(data["period"]) == 7 and data["period"][4] == "-"  # "YYYY-MM"

@@ -10,6 +10,7 @@ and whether the cited turns are relevant to each dimension (context precision).
 Skipped unless a real OPENAI_API_KEY is present and the agents service is
 reachable (RAGAS uses an LLM judge).
 """
+
 from __future__ import annotations
 
 import uuid
@@ -72,9 +73,7 @@ async def test_evaluation_rag_faithfulness_and_precision():
                 d["name"] if isinstance(d, dict) else str(d)
                 for d in criteria["evaluation_dimensions"]
             ]
-            questions.append(
-                f"Assess this candidate against {', '.join(dim_names)}."
-            )
+            questions.append(f"Assess this candidate against {', '.join(dim_names)}.")
             answers.append(answer)
             contexts.append(turns)
             references.append(" ".join(fx["ground_truth_evidence"].values()))
@@ -102,5 +101,6 @@ async def test_evaluation_rag_faithfulness_and_precision():
     if faith < FAITHFULNESS_THRESHOLD or prec < CONTEXT_PRECISION_THRESHOLD:
         warnings.warn(
             f"evaluation grounding below target: faithfulness={faith:.3f}, "
-            f"context_precision={prec:.3f}"
+            f"context_precision={prec:.3f}",
+            stacklevel=2,
         )

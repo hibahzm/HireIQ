@@ -8,6 +8,7 @@ asserting: streaming_mode is advertised, end-of-speech yields `ai_turn_text` the
 `ai_audio_chunk`s then `ai_audio_end`, captured audio is passed for assembly, guardrails
 block before any audio, and a streaming-init failure falls back cleanly.
 """
+
 from __future__ import annotations
 
 import base64
@@ -66,7 +67,9 @@ async def test_streaming_session_ready_advertises_mode(app, interview_token, mon
     """session_ready carries streaming_mode=true for a streaming-enabled session (FR-005)."""
     _force_streaming(monkeypatch)
     with TestClient(app) as client:
-        with patch("app.services.streaming_tts_service.StreamingTtsService.stream", _fake_tts_stream):
+        with patch(
+            "app.services.streaming_tts_service.StreamingTtsService.stream", _fake_tts_stream
+        ):
             with client.websocket_connect(f"/interviews/{interview_token}/connect") as ws:
                 msg = ws.receive_json()
                 assert msg["type"] == "session_ready"
@@ -82,7 +85,9 @@ async def test_streaming_turn_emits_text_then_ordered_audio(app, interview_token
     with TestClient(app) as client:
         with (
             patch("app.services.streaming_stt_service.StreamingSttService", _StubStt),
-            patch("app.services.streaming_tts_service.StreamingTtsService.stream", _fake_tts_stream),
+            patch(
+                "app.services.streaming_tts_service.StreamingTtsService.stream", _fake_tts_stream
+            ),
             patch(
                 "app.services.interview_service.InterviewService.handle_streaming_turn",
                 new_callable=AsyncMock,
@@ -127,7 +132,9 @@ async def test_streaming_guardrail_blocks_before_audio(app, interview_token, mon
     with TestClient(app) as client:
         with (
             patch("app.services.streaming_stt_service.StreamingSttService", _StubStt),
-            patch("app.services.streaming_tts_service.StreamingTtsService.stream", _fake_tts_stream),
+            patch(
+                "app.services.streaming_tts_service.StreamingTtsService.stream", _fake_tts_stream
+            ),
             patch(
                 "app.services.interview_service.InterviewService.handle_streaming_turn",
                 new_callable=AsyncMock,
@@ -165,7 +172,9 @@ async def test_streaming_init_failure_falls_back(app, interview_token, monkeypat
     with TestClient(app) as client:
         with (
             patch("app.services.streaming_stt_service.StreamingSttService", _BoomStt),
-            patch("app.services.streaming_tts_service.StreamingTtsService.stream", _fake_tts_stream),
+            patch(
+                "app.services.streaming_tts_service.StreamingTtsService.stream", _fake_tts_stream
+            ),
         ):
             with client.websocket_connect(f"/interviews/{interview_token}/connect") as ws:
                 assert ws.receive_json()["type"] == "session_ready"

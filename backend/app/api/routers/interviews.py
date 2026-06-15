@@ -9,7 +9,10 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.db import _get_session_factory
 from app.redis_client import get_redis_client
-from app.repositories.interview_repository import InterviewMessageRepository, InterviewSessionRepository
+from app.repositories.interview_repository import (
+    InterviewMessageRepository,
+    InterviewSessionRepository,
+)
 
 logger = structlog.get_logger()
 
@@ -27,7 +30,9 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
             interview_session = await session_repo.get_or_create_for_token(token)
 
             if not interview_session:
-                await websocket.send_json({"type": "session_expired", "message": "Invalid or expired interview link"})
+                await websocket.send_json(
+                    {"type": "session_expired", "message": "Invalid or expired interview link"}
+                )
                 await websocket.close(code=1008)
                 return
 
@@ -41,8 +46,9 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
 
             # Load job criteria
             import sqlalchemy as sa
-            from app.models.job_criteria import JobCriteria
+
             from app.models.application import Application
+            from app.models.job_criteria import JobCriteria
 
             result = await session.execute(
                 sa.select(Application).where(Application.id == interview_session.application_id)
@@ -119,29 +125,35 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
             pass
 
     if interview_status == "completed":
-        await _send_json({
-            "type": "interview_complete",
-            "message": "This interview is already complete.",
-        })
+        await _send_json(
+            {
+                "type": "interview_complete",
+                "message": "This interview is already complete.",
+            }
+        )
         await _close_websocket(code=1000)
         return
 
     # Send session_ready (streaming_mode tells the client whether to start continuous capture)
-    if not await _send_json({
-        "type": "session_ready",
-        "session_id": session_id,
-        "resuming": is_resuming,
-        "turn_count": current_turn_count,
-        "max_turns": max_turns,
-        "streaming_mode": streaming_mode,
-    }):
+    if not await _send_json(
+        {
+            "type": "session_ready",
+            "session_id": session_id,
+            "resuming": is_resuming,
+            "turn_count": current_turn_count,
+            "max_turns": max_turns,
+            "streaming_mode": streaming_mode,
+        }
+    ):
         return
 
     if history_payload:
-        if not await _send_json({
-            "type": "conversation_history",
-            "messages": history_payload,
-        }):
+        if not await _send_json(
+            {
+                "type": "conversation_history",
+                "messages": history_payload,
+            }
+        ):
             return
 
     async def _stream_ai_response(
@@ -151,12 +163,14 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
         append: bool = True,
     ) -> bool:
         """Send the guardrail-approved AI text, then stream its TTS audio in chunks."""
-        if not await _send_json({
-            "type": "ai_turn_text",
-            "text": text,
-            "counts_as_turn": counts_as_turn,
-            "append": append,
-        }):
+        if not await _send_json(
+            {
+                "type": "ai_turn_text",
+                "text": text,
+                "counts_as_turn": counts_as_turn,
+                "append": append,
+            }
+        ):
             return False
         seq = 0
         try:
@@ -170,14 +184,16 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                     chunk = await asyncio.wait_for(stream.__anext__(), timeout=15.0)
                 except StopAsyncIteration:
                     break
-                if not await _send_json({
-                    "type": "ai_audio_chunk",
-                    "audio": base64.b64encode(chunk).decode(),
-                    "seq": seq,
-                }):
+                if not await _send_json(
+                    {
+                        "type": "ai_audio_chunk",
+                        "audio": base64.b64encode(chunk).decode(),
+                        "seq": seq,
+                    }
+                ):
                     return False
                 seq += 1
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("interview.tts_stream_timeout", session_id=session_id)
         except Exception as exc:
             logger.warning("interview.tts_stream_failed", session_id=session_id, error=str(exc))
@@ -189,6 +205,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
             async with _get_session_factory()() as s:
                 async with s.begin():
                     import sqlalchemy as sa
+
                     from app.repositories.audit_log_repository import AuditLogRepository
 
                     await s.execute(
@@ -245,12 +262,16 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                         stt_service.start()
                         pcm_buffer = bytearray()
                     except Exception as exc:
-                        logger.error("interview.stt_init_failed", session_id=session_id, error=str(exc))
+                        logger.error(
+                            "interview.stt_init_failed", session_id=session_id, error=str(exc)
+                        )
                         await _log_streaming_fallback()
-                        if not await _send_json({
-                            "type": "service_error",
-                            "message": "Streaming voice is unavailable. Your session is preserved — reconnect to continue.",
-                        }):
+                        if not await _send_json(
+                            {
+                                "type": "service_error",
+                                "message": "Streaming voice is unavailable. Your session is preserved — reconnect to continue.",
+                            }
+                        ):
                             return
                         break
                 frame = base64.b64decode(msg.get("audio", ""))
@@ -258,7 +279,9 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                 try:
                     stt_service.push(frame)
                 except Exception as exc:
-                    logger.warning("interview.stt_push_failed", session_id=session_id, error=str(exc))
+                    logger.warning(
+                        "interview.stt_push_failed", session_id=session_id, error=str(exc)
+                    )
                 continue
 
             if streaming_mode and msg_type == "end_of_speech":
@@ -269,7 +292,9 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                 try:
                     candidate_text = await stt_service.finalize()
                 except Exception as exc:
-                    logger.warning("interview.stt_finalize_failed", session_id=session_id, error=str(exc))
+                    logger.warning(
+                        "interview.stt_finalize_failed", session_id=session_id, error=str(exc)
+                    )
                     candidate_text = ""
                 captured_pcm = bytes(pcm_buffer)
                 stt_service = None
@@ -286,6 +311,7 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                 async with _get_session_factory()() as session:
                     async with session.begin():
                         import sqlalchemy as sa
+
                         await session.execute(
                             sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                             {"cid": str(company_id)},
@@ -293,7 +319,9 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                         from app.services.interview_service import InterviewService
 
                         try:
-                            result = await InterviewService(session, redis_client).handle_streaming_turn(
+                            result = await InterviewService(
+                                session, redis_client
+                            ).handle_streaming_turn(
                                 session_id=session_id,
                                 company_id=company_id,
                                 candidate_text=candidate_text,
@@ -305,16 +333,24 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                                 current_turn_count=current_turn_count,
                             )
                         except Exception as exc:
-                            logger.error("interview.streaming_turn_failed", session_id=session_id, error=str(exc))
-                            if not await _send_json({
-                                "type": "service_error",
-                                "message": "An error occurred. Your session is preserved. Please reconnect to resume.",
-                            }):
+                            logger.error(
+                                "interview.streaming_turn_failed",
+                                session_id=session_id,
+                                error=str(exc),
+                            )
+                            if not await _send_json(
+                                {
+                                    "type": "service_error",
+                                    "message": "An error occurred. Your session is preserved. Please reconnect to resume.",
+                                }
+                            ):
                                 return
                             break
                 if result.get("guardrail_triggered"):
                     current_turn_count += 1
-                    if not await _send_json({"type": "turn_blocked", "message": result["ai_response"]}):
+                    if not await _send_json(
+                        {"type": "turn_blocked", "message": result["ai_response"]}
+                    ):
                         return
                 else:
                     current_turn_count += 1
@@ -337,11 +373,13 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
             async with _get_session_factory()() as session:
                 async with session.begin():
                     import sqlalchemy as sa
+
                     await session.execute(
                         sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
                         {"cid": str(company_id)},
                     )
                     from app.services.interview_service import InterviewService
+
                     svc = InterviewService(session, redis_client)
 
                     audio_bytes = None
@@ -365,19 +403,23 @@ async def interview_connect(websocket: WebSocket, token: str) -> None:
                         )
                     except Exception as exc:
                         logger.error("interview.turn_failed", session_id=session_id, error=str(exc))
-                        if not await _send_json({
-                            "type": "service_error",
-                            "message": "An error occurred. Your session is preserved. Please reconnect to resume.",
-                        }):
+                        if not await _send_json(
+                            {
+                                "type": "service_error",
+                                "message": "An error occurred. Your session is preserved. Please reconnect to resume.",
+                            }
+                        ):
                             return
                         break
 
             if result.get("guardrail_triggered"):
                 current_turn_count += 1
-                if not await _send_json({
-                    "type": "turn_blocked",
-                    "message": result["ai_response"],
-                }):
+                if not await _send_json(
+                    {
+                        "type": "turn_blocked",
+                        "message": result["ai_response"],
+                    }
+                ):
                     return
             elif result.get("session_complete"):
                 current_turn_count += 1
