@@ -14,6 +14,7 @@ import ApplicationDetailPage from "./pages/applications/ApplicationDetailPage";
 import JobApplicationPage from "./pages/applications/JobApplicationPage";
 import InterviewRoomPage from "./pages/interview/InterviewRoomPage";
 import UserManagementPage from "./pages/company/UserManagementPage";
+import CompanyAuditPage from "./pages/company/CompanyAuditPage";
 import ShortlistPage from "./pages/evaluations/ShortlistPage";
 import EvaluationDetailPage from "./pages/evaluations/EvaluationDetailPage";
 import FeedbackReportPage from "./pages/feedback/FeedbackReportPage";
@@ -78,6 +79,11 @@ function UserManagementWrapper() {
   const token = useAuth().token ?? "";
   const navigate = useNavigate();
   return <UserManagementPage token={token} onBack={() => navigate("/jobs")} />;
+}
+
+function CompanyAuditWrapper() {
+  const token = useAuth().token ?? "";
+  return <CompanyAuditPage token={token} />;
 }
 
 function ShortlistWrapper() {
@@ -223,6 +229,7 @@ function AppRoutes() {
         <Route path="/jobs/:jobId/evaluations" element={<ShortlistWrapper />} />
         <Route path="/evaluations/:evaluationId" element={<EvaluationDetailWrapper />} />
         <Route path="/users" element={<UserManagementWrapper />} />
+        <Route path="/audit" element={<CompanyAuditWrapper />} />
         <Route path="/platform" element={<PlatformOverviewWrapper />} />
       </Route>
 

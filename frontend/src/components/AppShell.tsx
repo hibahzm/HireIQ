@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { crumbsFor } from "./breadcrumbs";
 import {
+  ActivityIcon,
   ArrowLeftIcon,
   BriefcaseIcon,
   ChevronRightIcon,
@@ -20,7 +21,10 @@ const NAV = [
   { to: "/jobs", label: "Jobs", Icon: BriefcaseIcon },
 ];
 
-const ADMIN_NAV = [{ to: "/users", label: "Team", Icon: UsersIcon }];
+const ADMIN_NAV = [
+  { to: "/users", label: "Team", Icon: UsersIcon },
+  { to: "/audit", label: "Activity", Icon: ActivityIcon },
+];
 const MANAGER_NAV = [{ to: "/platform", label: "Platform", Icon: DashboardIcon }];
 
 function initials(email?: string): string {

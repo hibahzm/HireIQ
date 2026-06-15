@@ -44,3 +44,23 @@ class AuditLogRepository:
                 "metadata": __import__("json").dumps(metadata or {}),
             },
         )
+
+    async def list_by_company(
+        self, company_id: uuid.UUID | str, *, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Most-recent audit events for one company (newest first). Company-scoped
+        for the admin activity view; RLS + explicit company_id keep it tenant-safe."""
+        result = await self._session.execute(
+            sa.text(
+                """
+                SELECT id, actor_type, actor_id, event_type,
+                       entity_type, entity_id, metadata, created_at
+                FROM audit_logs
+                WHERE company_id = CAST(:company_id AS uuid)
+                ORDER BY created_at DESC
+                LIMIT :limit
+                """
+            ),
+            {"company_id": str(company_id), "limit": limit},
+        )
+        return [dict(row) for row in result.mappings().all()]

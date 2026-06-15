@@ -56,3 +56,41 @@ async def update_company_overview(
         company_id=current_user.company_id,
     )
     return CompanyResponse(id=str(company.id), name=company.name, overview=company.overview)
+
+
+class AuditEvent(BaseModel):
+    id: str
+    event_type: str
+    actor_type: str
+    actor_id: str | None = None
+    entity_type: str | None = None
+    entity_id: str | None = None
+    metadata: dict = Field(default_factory=dict)
+    created_at: str
+
+
+@router.get("/audit", response_model=list[AuditEvent])
+async def list_company_audit(
+    limit: int = 100,
+    current_user: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_authed_session),
+):
+    """Company-scoped audit trail for admins (who invited whom, screening/interview
+    events, CV downloads, etc.). Admin-only; never crosses company boundaries."""
+    limit = max(1, min(limit, 500))
+    rows = await AuditLogRepository(session).list_by_company(
+        current_user.company_id, limit=limit
+    )
+    return [
+        AuditEvent(
+            id=str(r["id"]),
+            event_type=r["event_type"],
+            actor_type=r["actor_type"],
+            actor_id=str(r["actor_id"]) if r["actor_id"] else None,
+            entity_type=r["entity_type"],
+            entity_id=str(r["entity_id"]) if r["entity_id"] else None,
+            metadata=r["metadata"] or {},
+            created_at=r["created_at"].isoformat() if r["created_at"] else "",
+        )
+        for r in rows
+    ]

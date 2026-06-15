@@ -57,6 +57,12 @@ export const UsersIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const ActivityIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+  </Svg>
+);
+
 export const LogOutIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
