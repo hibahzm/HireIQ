@@ -23,8 +23,8 @@ class ScreeningState(TypedDict):
     application_id: str
     company_id: str
     cv_text: str
+    job_description: str
     job_criteria: dict[str, Any]
-    hybrid_search_results: list[dict[str, Any]]
     score: int | None
     rationale: str | None
     status: str
@@ -54,13 +54,10 @@ async def score_cv(state: ScreeningState) -> ScreeningState:
             "guardrail_triggered": True,
         }
 
-    search_summary = "\n".join(
-        f"- {r.get('chunk_text', '')[:200]}" for r in state["hybrid_search_results"][:5]
-    )
     prompt = SCREENING_SYSTEM.format(
+        job_description=(state.get("job_description") or "").strip() or "(no description provided)",
         criteria=str(state["job_criteria"]),
-        search_results=search_summary,
-        cv_text=state["cv_text"][:3000],
+        cv_text=state["cv_text"],
     )
 
     response = await _build_llm().ainvoke([SystemMessage(content=prompt)])

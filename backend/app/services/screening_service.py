@@ -10,8 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.repositories.application_repository import ApplicationRepository
 from app.repositories.audit_log_repository import AuditLogRepository
-from app.repositories.cv_chunk_repository import CvChunkRepository
-from app.services.embedding_service import EmbeddingService
 from app.services.notification_service import NotificationService
 from app.services.ocr_service import OcrService, OcrValidationError
 from app.services.storage_service import StorageService
@@ -74,6 +72,11 @@ async def run_screening_background(
                     "dealbreakers": criteria_model.dealbreakers,
                     "min_screening_score": criteria_model.min_screening_score,
                 }
+                from app.models.job import Job
+                job_desc_row = await session.execute(
+                    sa.select(Job.description).where(Job.id == job_id)
+                )
+                job_description = job_desc_row.scalar_one_or_none() or ""
                 svc = ScreeningService(session)
                 await svc.screen(
                     application_id=application_id,
@@ -81,6 +84,7 @@ async def run_screening_background(
                     job_title=job_title,
                     candidate_email=candidate_email,
                     job_criteria=job_criteria,
+                    job_description=job_description,
                     job_id=job_id,
                 )
     except Exception:
@@ -114,7 +118,6 @@ class ScreeningService:
         self._settings = get_settings()
         self._storage = StorageService()
         self._ocr = OcrService()
-        self._embedding = EmbeddingService()
         self._notification = NotificationService(redis)
 
     async def screen(
@@ -126,8 +129,9 @@ class ScreeningService:
         candidate_email: str,
         job_criteria: dict,
         job_id: str,
+        job_description: str = "",
     ) -> None:
-        """Orchestrate: OCR → chunk+embed → hybrid search → agents /cv-screen → persist."""
+        """Orchestrate: OCR → agents /cv-screen (full job description + full CV) → persist."""
         app_repo = ApplicationRepository(self._session)
         audit = AuditLogRepository(self._session)
 
@@ -166,38 +170,18 @@ class ScreeningService:
             )
             return
 
-        # 3. Chunk + embed
-        chunks, embedding_usage_events = await self._embedding.embed_chunks(cv_text)
-        await record_usage_events(
-            self._session,
-            company_id=company_id,
-            events=embedding_usage_events,
-            metadata={"application_id": application_id, "job_id": job_id},
-        )
-        cv_chunk_repo = CvChunkRepository(self._session)
-        await cv_chunk_repo.bulk_insert(application_id, company_id, chunks)
-
-        # 4. Hybrid search for context
-        if chunks:
-            query_text = cv_text[:500]
-            query_embedding = chunks[0][1]
-            search_results = await cv_chunk_repo.hybrid_search(
-                job_id=job_id,
-                query_embedding=query_embedding,
-                query_text=query_text,
-            )
-        else:
-            search_results = []
-
-        # 5. Call agents /cv-screen
+        # 3. Call agents /cv-screen with the full job description + full CV text.
+        # (We deliberately do NOT chunk/embed/retrieve here: the screener reasons
+        # over the complete CV against the complete job, which is both simpler and
+        # avoids ever mixing one candidate's CV into another's screening context.)
         import httpx
 
         payload = jsonable_encoder({
             "application_id": application_id,
             "company_id": company_id,
             "cv_text": cv_text,
+            "job_description": job_description,
             "job_criteria": job_criteria,
-            "hybrid_search_results": search_results,
         })
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(

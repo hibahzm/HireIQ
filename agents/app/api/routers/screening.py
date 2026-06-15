@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.graphs.screening_graph import ScreeningState, screening_graph
+from app.observability import get_langfuse_callbacks
 
 logger = structlog.get_logger()
 
@@ -17,8 +18,8 @@ class CvScreenRequest(BaseModel):
     application_id: str
     company_id: str
     cv_text: str
+    job_description: str = ""
     job_criteria: dict[str, Any]
-    hybrid_search_results: list[dict[str, Any]]
 
 
 class CvScreenResponse(BaseModel):
@@ -39,8 +40,8 @@ async def cv_screen(body: CvScreenRequest) -> CvScreenResponse:
         "application_id": body.application_id,
         "company_id": body.company_id,
         "cv_text": body.cv_text,
+        "job_description": body.job_description,
         "job_criteria": body.job_criteria,
-        "hybrid_search_results": body.hybrid_search_results,
         "score": None,
         "rationale": None,
         "status": "pending",
@@ -48,7 +49,9 @@ async def cv_screen(body: CvScreenRequest) -> CvScreenResponse:
         "usage_events": [],
     }
 
-    result = await screening_graph.ainvoke(initial_state)
+    result = await screening_graph.ainvoke(
+        initial_state, config={"callbacks": get_langfuse_callbacks()}
+    )
 
     return CvScreenResponse(
         score=result["score"] or 0,
