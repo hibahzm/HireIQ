@@ -44,6 +44,7 @@ export default function ApplicationDetailPage({ token, applicationId, onInvite }
   const [error, setError] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
   const [copiedInvite, setCopiedInvite] = useState(false);
+  const [downloadingCv, setDownloadingCv] = useState(false);
 
   useEffect(() => {
     fetch(`${BASE_URL}/applications/${applicationId}`, {
@@ -80,6 +81,19 @@ export default function ApplicationDetailPage({ token, applicationId, onInvite }
     }
   }
 
+  async function handleDownloadCv() {
+    if (!app) return;
+    setDownloadingCv(true);
+    setError(null);
+    try {
+      await api.applications.downloadCv(token, app.id);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Failed to download CV");
+    } finally {
+      setDownloadingCv(false);
+    }
+  }
+
   const interviewLink =
     app?.interview_token ? `${window.location.origin}/interview/${app.interview_token}` : "";
 
@@ -103,8 +117,22 @@ export default function ApplicationDetailPage({ token, applicationId, onInvite }
           <dd className="text-sm font-mono text-gray-900">{app.id}</dd>
         </div>
         <div>
-          <dt className="text-sm font-medium text-gray-500">CV extraction method</dt>
-          <dd className="text-sm text-gray-900">{app.cv_extraction_method ?? "Not yet extracted"}</dd>
+          <dt className="text-sm font-medium text-gray-500">CV</dt>
+          <dd className="mt-1 flex items-center gap-3 text-sm text-gray-900">
+            <span>
+              {app.cv_extraction_method
+                ? `Extracted via ${app.cv_extraction_method}`
+                : "Not yet extracted"}
+            </span>
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={downloadingCv}
+              onClick={handleDownloadCv}
+            >
+              Download CV
+            </Button>
+          </dd>
         </div>
         <div>
           <dt className="text-sm font-medium text-gray-500">Screening score</dt>

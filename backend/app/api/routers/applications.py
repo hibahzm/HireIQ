@@ -7,7 +7,10 @@ from datetime import datetime, timedelta, timezone
 
 import sqlalchemy as sa
 import structlog
+import os
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import Response
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -203,6 +206,55 @@ async def get_application(
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
     return await _application_response(session, app)
+
+
+_CV_MEDIA_TYPES = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".jpg": "image/jpeg",
+    ".png": "image/png",
+}
+
+
+@router.get("/applications/{application_id}/cv")
+async def download_cv(
+    application_id: str,
+    current_user: User = Depends(require_recruiter_or_admin),
+    session: AsyncSession = Depends(get_authed_session),
+):
+    """Serve the candidate's original CV file to authorised company members.
+    RLS-scoped via get_by_id(company_id) — a company can only fetch its own CVs.
+    Works for both local-disk and Azure Blob storage (StorageService abstracts it)."""
+    app = await ApplicationRepository(session).get_by_id(
+        application_id, current_user.company_id
+    )
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+    if not app.cv_blob_key:
+        raise HTTPException(status_code=404, detail="No CV on file for this application")
+
+    try:
+        data = await StorageService().download(app.cv_blob_key)
+    except Exception:
+        raise HTTPException(status_code=404, detail="CV file not found in storage")
+
+    ext = os.path.splitext(app.cv_blob_key)[1].lower()
+    media_type = _CV_MEDIA_TYPES.get(ext, "application/octet-stream")
+
+    await AuditLogRepository(session).log_event(
+        event_type="application.cv_downloaded",
+        actor_type="user",
+        actor_id=current_user.id,
+        entity_type="application",
+        entity_id=application_id,
+        company_id=current_user.company_id,
+    )
+
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={"Content-Disposition": f'inline; filename="cv-{application_id}{ext}"'},
+    )
 
 
 @router.post("/applications/{application_id}/invite", status_code=200)

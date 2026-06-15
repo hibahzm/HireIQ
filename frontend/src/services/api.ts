@@ -98,12 +98,36 @@ export const api = {
         undefined,
         token
       ),
+    downloadCv: async (token: string, applicationId: string) => {
+      const res = await fetch(`${BASE_URL}/applications/${applicationId}/cv`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new ApiError(res.status, detail.detail ?? "Failed to download CV");
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const match = cd.match(/filename="?([^"]+)"?/);
+      const filename = match?.[1] ?? `cv-${applicationId}`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
   },
   company: {
     get: (token: string) =>
       request<CompanyProfile>("GET", "/company", undefined, token),
     updateOverview: (token: string, overview: string) =>
       request<CompanyProfile>("PUT", "/company/overview", { overview }, token),
+    audit: (token: string, limit = 100) =>
+      request<AuditEvent[]>("GET", `/company/audit?limit=${limit}`, undefined, token),
   },
   users: {
     list: (token: string) =>
@@ -193,6 +217,17 @@ export interface CompanyProfile {
   id: string;
   name: string;
   overview: string | null;
+}
+
+export interface AuditEvent {
+  id: string;
+  event_type: string;
+  actor_type: string;
+  actor_id: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
 }
 
 export interface UserProfile {
