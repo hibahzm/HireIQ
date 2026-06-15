@@ -11,9 +11,21 @@
       "NLP"
     ],
     "evaluation_dimensions": [
-      "technical_skills",
-      "problem_solving",
-      "communication"
+      {
+        "name": "technical_skills",
+        "weight": 1.0,
+        "description": "technical skills"
+      },
+      {
+        "name": "problem_solving",
+        "weight": 1.0,
+        "description": "problem solving"
+      },
+      {
+        "name": "communication",
+        "weight": 1.0,
+        "description": "communication"
+      }
     ]
   },
   "cv_text": "Candidate for Machine Learning Engineer. Skills: PyTorch, Python, MLOps, feature engineering, NLP.",

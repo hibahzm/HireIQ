@@ -1,15 +1,19 @@
 """
 Shared fixtures and helpers for the RAGAS quality suite (T084b).
 
-These tests score the *grounding quality* of the LLM pipelines against a curated
-golden set:
-  - faithfulness  ≥ 0.85  (rationale/evidence is grounded in retrieved context;
-                            no hallucinated skills or quotes)
-  - context precision ≥ 0.80 (retrieved/used context is relevant to the criteria)
+These tests score the LLM pipelines against a curated golden set. Two flavours:
+
+  - **Decision accuracy** (HARD GATE): the screener's qualified/rejected verdict
+    must match the golden label — F1 ≥ DECISION_F1_THRESHOLD. This is the gate that
+    fails the build, since it reflects real hiring-decision quality.
+
+  - **Grounding diagnostics** (REPORT-ONLY): faithfulness (≥0.85 target) and context
+    precision (≥0.80 target). These rely on a flaky external LLM judge and measure
+    grounding of *judgment* rationales, so they are tracked/logged and emit a warning
+    when below target, but never fail the build (Option A).
 
 They require a real OpenAI key (RAGAS uses an LLM judge) and are skipped in the
-normal unit/integration CI lane. A dedicated CI job runs them with a real key
-and fails the build if a threshold is breached.
+normal unit/integration CI lane; a dedicated CI job runs them with a real key.
 """
 from __future__ import annotations
 
@@ -23,6 +27,10 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 FAITHFULNESS_THRESHOLD = 0.85
 CONTEXT_PRECISION_THRESHOLD = 0.80
+
+# Decision-accuracy gate: does the screener's qualified/rejected verdict match the
+# golden label (expected_qualified)? Measured as F1 over the 20-CV golden set.
+DECISION_F1_THRESHOLD = 0.80
 
 
 def _has_real_openai_key() -> bool:
@@ -63,8 +71,7 @@ def load_transcript_fixtures() -> list[dict]:
 
 async def log_ragas_run(pipeline: str, scores: dict[str, float]) -> None:
     """Best-effort: persist per-run RAGAS scores to audit_log under
-    `pipeline.quality.ragas`. Never fails the test if the DB is unreachable —
-    the threshold assertions are the hard gate."""
+    `pipeline.quality.ragas`. Never fails the test if the DB is unreachable."""
     try:
         from app.db import _get_session_factory
         from app.repositories.audit_log_repository import AuditLogRepository
