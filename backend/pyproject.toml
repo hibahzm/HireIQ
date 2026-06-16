@@ -24,6 +24,7 @@ dependencies = [
     "azure-cognitiveservices-speech==1.41.1",
     "openai==1.56.2",
     "azure-identity==1.19.0",
+    "azure-keyvault-secrets==4.9.0",
     "hvac==2.3.0",
     "structlog==24.4.0",
     "pydantic-settings==2.6.1",

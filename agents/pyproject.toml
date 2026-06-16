@@ -17,6 +17,7 @@ dependencies = [
     "pydantic-settings==2.6.1",
     "hvac==2.3.0",
     "azure-identity==1.19.0",
+    "azure-keyvault-secrets==4.9.0",
     "httpx==0.28.0",
     # 2.x exposes langfuse.callback.CallbackHandler used by app/observability.py;
     # 3.x changed that API. Keep on the 2.x line to match langchain 0.3 / langgraph 0.2.
