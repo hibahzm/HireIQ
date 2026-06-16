@@ -22,7 +22,17 @@ target_metadata = Base.metadata
 def get_url() -> str:
     import os
 
-    return os.environ["DATABASE_URL"]
+    # CI, tests, and the local docker `migrate` service set DATABASE_URL directly.
+    url = os.environ.get("DATABASE_URL")
+    if url:
+        return url
+    # Production (e.g. `alembic upgrade head` in the api container): the connection
+    # string lives in Key Vault and is loaded by config.py via the container's
+    # managed identity — it is never exposed as a plain env var. Going through
+    # get_settings() triggers that Key Vault load (ENV=production).
+    from app.config import get_settings
+
+    return get_settings().DATABASE_URL
 
 
 def run_migrations_offline() -> None:
