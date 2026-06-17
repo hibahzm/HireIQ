@@ -40,6 +40,12 @@ class NotificationService:
         await self._send_html(candidate_email, subject, html)
         await self._mark_sent("invitation", candidate_email)
 
+    async def send_password_reset_email(self, to_email: str, reset_link: str) -> None:
+        """Forgot-password reset link. No daily dedup — a user may legitimately
+        request a reset more than once a day."""
+        subject, html = email_templates.password_reset_email(reset_link=reset_link, expiry_hours=1)
+        await self._send_html(to_email, subject, html)
+
     async def send_rejection_email(self, candidate_email: str, job_title: str) -> None:
         """CV not qualified → warm rejection that invites future applications."""
         if not await self._should_send("rejection", candidate_email):

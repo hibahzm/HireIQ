@@ -78,6 +78,25 @@ def team_invite_email(*, invite_link: str, expiry_hours: int) -> tuple[str, str]
     return subject, html
 
 
+def password_reset_email(*, reset_link: str, expiry_hours: int) -> tuple[str, str]:
+    """Sent when a user requests a password reset — one-time, short-lived link."""
+    subject = "Reset your HireIQ password"
+    html = _layout(
+        heading="Reset your password",
+        paragraphs=[
+            "We received a request to reset the password for your HireIQ account.",
+            "Click the button below to choose a new one. "
+            f"<strong>This link is valid for {expiry_hours} hour(s)</strong> and can be used once.",
+            "If you didn't request this, you can safely ignore this email — your "
+            "password won't change.",
+        ],
+        cta_label="Reset my password →",
+        cta_url=reset_link,
+        footnote="For your security, this link expires soon and works only once.",
+    )
+    return subject, html
+
+
 def invitation_email(*, interview_link: str, expiry_hours: int) -> tuple[str, str]:
     """Sent when a candidate's CV is qualified — carries the interview link."""
     subject = "You're invited to your HireIQ interview"

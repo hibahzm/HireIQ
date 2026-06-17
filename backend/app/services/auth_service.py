@@ -145,10 +145,27 @@ class AuthService:
 
     # ── private ───────────────────────────────────────────────────────────────
 
+    def _user_tokens_key(self, user_id: str) -> str:
+        return f"user_refresh_tokens:{user_id}"
+
     async def _store_refresh_token(self, refresh_token: str, user_id: str) -> None:
         token_hash = self._hash_token(refresh_token)
         expire_seconds = self._settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400
         await self._redis.set(self._refresh_token_key(token_hash), user_id, ex=expire_seconds)
+        # Per-user index so every refresh token can be revoked at once (e.g. when an
+        # admin deactivates the user, or after a password reset). Refresh is already
+        # is_active-gated; this gives an immediate, total cutoff.
+        index_key = self._user_tokens_key(user_id)
+        await self._redis.sadd(index_key, token_hash)
+        await self._redis.expire(index_key, expire_seconds)
+
+    async def revoke_user_refresh_tokens(self, user_id: str) -> None:
+        """Delete all stored refresh tokens for a user (deactivation / password reset)."""
+        index_key = self._user_tokens_key(user_id)
+        hashes = await self._redis.smembers(index_key)
+        for token_hash in hashes:
+            await self._redis.delete(self._refresh_token_key(token_hash))
+        await self._redis.delete(index_key)
 
     # ── invite / set-password ─────────────────────────────────────────────────
 
@@ -195,6 +212,56 @@ class AuthService:
             .where(UserModel.id == user_id)
             .values(password_hash=new_hash, updated_at=datetime.now(UTC))
         )
+
+        user = await user_repo.get_by_id(user_id)
+        if not user:
+            raise AuthError("user_not_found")
+        return user
+
+    # ── forgot / reset password ─────────────────────────────────────────────────
+
+    def _reset_token_key(self, token: str) -> str:
+        return f"reset_token:{token}"
+
+    async def request_password_reset(self, email: str) -> tuple[User, str] | None:
+        """Mint a 1-hour reset token for an active user. Returns (user, token), or
+        None when there is no active user — the caller must not reveal which."""
+        user = await UserRepository(self._session).get_by_email_global(email)
+        if not user or not user.is_active:
+            return None
+        token = str(uuid.uuid4())
+        await self._redis.set(self._reset_token_key(token), str(user.id), ex=3600)
+        return user, token
+
+    async def reset_password_via_token(self, *, token: str, new_password: str) -> User:
+        """Consume a reset token, set the new password, and revoke existing sessions."""
+        user_id = await self._redis.get(self._reset_token_key(token))
+        if not user_id:
+            raise AuthError("invalid_or_expired_reset_token")
+        if len(new_password) < 8:
+            raise AuthError("password_too_short")
+        await self._redis.delete(self._reset_token_key(token))
+
+        import sqlalchemy as sa
+
+        from app.models.user import User as UserModel
+
+        user_repo = UserRepository(self._session)
+        user = await user_repo.get_by_id_global(user_id)
+        if not user:
+            raise AuthError("user_not_found")
+
+        await self._session.execute(
+            sa.text("SELECT set_config('app.current_company_id', :cid, true)"),
+            {"cid": str(user.company_id)},
+        )
+        await self._session.execute(
+            sa.update(UserModel)
+            .where(UserModel.id == user_id)
+            .values(password_hash=self._hash_password(new_password), updated_at=datetime.now(UTC))
+        )
+        # A password reset invalidates any existing sessions.
+        await self.revoke_user_refresh_tokens(user_id)
 
         user = await user_repo.get_by_id(user_id)
         if not user:

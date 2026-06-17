@@ -9,6 +9,7 @@ from app.db import _get_session_factory
 from app.redis_client import get_redis
 from app.repositories.audit_log_repository import AuditLogRepository
 from app.schemas.auth import (
+    ForgotPasswordRequest,
     LoginRequest,
     RegisterRequest,
     SetPasswordRequest,
@@ -16,6 +17,7 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.services.auth_service import AuthError, AuthService
+from app.services.notification_service import NotificationService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -166,6 +168,60 @@ async def set_password(
                 )
             except AuthError as exc:
                 raise HTTPException(status_code=400, detail=str(exc))
+
+            access_token = svc._create_access_token(user.id, user.company_id, user.role)
+            refresh_token = svc._create_refresh_token()
+            await svc._store_refresh_token(refresh_token, user.id)
+
+    _set_refresh_cookie(response, refresh_token)
+    return TokenResponse(access_token=access_token)
+
+
+@router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
+async def forgot_password(
+    body: ForgotPasswordRequest,
+    redis_client: Redis = Depends(get_redis),
+):
+    """Email a one-time reset link if the address belongs to an active user.
+    Always returns 204 — never reveals whether an account exists."""
+    async with _get_session_factory()() as session:
+        async with session.begin():
+            svc = AuthService(session, redis_client)
+            result = await svc.request_password_reset(body.email)
+            if result:
+                user, token = result
+                reset_link = f"{get_settings().FRONTEND_ORIGIN}/reset-password?token={token}"
+                await NotificationService(redis_client).send_password_reset_email(
+                    user.email, reset_link
+                )
+                await AuditLogRepository(session).log_event(
+                    event_type="auth.password_reset_requested",
+                    actor_type="user",
+                    actor_id=user.id,
+                    entity_type="user",
+                    entity_id=user.id,
+                    company_id=user.company_id,
+                )
+    return None
+
+
+@router.post("/reset-password", response_model=TokenResponse)
+async def reset_password(
+    body: SetPasswordRequest,
+    response: Response,
+    redis_client: Redis = Depends(get_redis),
+):
+    """Consume a one-time reset token, set the new password, and log the user in."""
+    async with _get_session_factory()() as session:
+        async with session.begin():
+            svc = AuthService(session, redis_client)
+            try:
+                user = await svc.reset_password_via_token(
+                    token=body.token,
+                    new_password=body.new_password,
+                )
+            except AuthError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
 
             access_token = svc._create_access_token(user.id, user.company_id, user.role)
             refresh_token = svc._create_refresh_token()

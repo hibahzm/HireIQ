@@ -107,6 +107,7 @@ async def deactivate_user(
     user_id: str,
     current_user: User = Depends(require_admin),
     session: AsyncSession = Depends(get_authed_session),
+    redis_client: Redis = Depends(get_redis),
 ):
     repo = UserRepository(session)
     target = await repo.get_by_id(user_id, current_user.company_id)
@@ -122,3 +123,8 @@ async def deactivate_user(
             detail="Every company must keep at least one active admin.",
         )
     await repo.deactivate(user_id)
+    # Kill active sessions immediately so the user can't keep using an existing
+    # token until it expires (login + every request are already is_active-gated).
+    from app.services.auth_service import AuthService
+
+    await AuthService(session, redis_client).revoke_user_refresh_tokens(user_id)
