@@ -135,6 +135,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Any 401 from the API (expired, deactivated, or revoked session) clears the
+  // session so protected routes redirect to login instead of showing a stale UI.
+  useEffect(() => {
+    const onUnauthorized = () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      setTokenState(null);
+      setUser(null);
+      setStatus("anonymous");
+    };
+    window.addEventListener("auth:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("auth:unauthorized", onUnauthorized);
+  }, []);
+
   return (
     <AuthContext.Provider value={{ token, user, status, setToken, logout }}>
       {children}

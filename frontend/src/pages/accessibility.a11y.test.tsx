@@ -26,7 +26,9 @@ async function expectNoViolations(ui: React.ReactElement) {
 
 describe("Accessibility (axe-core, WCAG 2.1 AA)", () => {
   it("LoginPage has no violations", async () => {
-    await expectNoViolations(<LoginPage onSuccess={noop} onRegister={noop} />);
+    await expectNoViolations(
+      <LoginPage onSuccess={noop} onRegister={noop} onForgotPassword={noop} />
+    );
   });
 
   it("RegisterPage has no violations", async () => {

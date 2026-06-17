@@ -6,9 +6,10 @@ import Button from "../../components/ui/Button";
 interface Props {
   onSuccess: (token: string) => void;
   onRegister: () => void;
+  onForgotPassword: () => void;
 }
 
-export default function LoginPage({ onSuccess, onRegister }: Props) {
+export default function LoginPage({ onSuccess, onRegister, onForgotPassword }: Props) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +64,13 @@ export default function LoginPage({ onSuccess, onRegister }: Props) {
         <Button type="submit" loading={loading} className="w-full">
           Sign in
         </Button>
+        <button
+          type="button"
+          onClick={onForgotPassword}
+          className="w-full text-sm text-primary-500 hover:text-primary-700"
+        >
+          Forgot your password?
+        </button>
       </form>
     </AuthLayout>
   );

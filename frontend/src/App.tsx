@@ -7,6 +7,8 @@ import SplashScreen from "./components/ui/SplashScreen";
 import LoginPage from "./pages/auth/LoginPage";
 import RegisterPage from "./pages/auth/RegisterPage";
 import SetPasswordPage from "./pages/auth/SetPasswordPage";
+import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import JobListPage from "./pages/jobs/JobListPage";
 import JobSetupPage from "./pages/jobs/JobSetupPage";
 import ApplicationListPage from "./pages/applications/ApplicationListPage";
@@ -169,6 +171,7 @@ function LoginWrapper() {
     <LoginPage
       onSuccess={(t) => { setToken(t); navigate("/"); }}
       onRegister={() => navigate("/register")}
+      onForgotPassword={() => navigate("/forgot-password")}
     />
   );
 }
@@ -194,6 +197,17 @@ function SetPasswordWrapper() {
   );
 }
 
+function ForgotPasswordWrapper() {
+  const navigate = useNavigate();
+  return <ForgotPasswordPage onBackToLogin={() => navigate("/login")} />;
+}
+
+function ResetPasswordWrapper() {
+  const { setToken } = useAuth();
+  const navigate = useNavigate();
+  return <ResetPasswordPage onSuccess={(t) => { setToken(t); navigate("/"); }} />;
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 // Protected pages share the persistent app shell (sidebar + top bar + breadcrumbs).
@@ -214,6 +228,8 @@ function AppRoutes() {
       <Route path="/login" element={<LoginWrapper />} />
       <Route path="/register" element={<RegisterWrapper />} />
       <Route path="/set-password" element={<SetPasswordWrapper />} />
+      <Route path="/forgot-password" element={<ForgotPasswordWrapper />} />
+      <Route path="/reset-password" element={<ResetPasswordWrapper />} />
       <Route path="/apply/:jobId" element={<JobApplicationWrapper />} />
       <Route path="/interview/:token" element={<InterviewWrapper />} />
       <Route path="/feedback/:token" element={<FeedbackReportPage />} />

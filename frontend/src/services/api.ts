@@ -32,6 +32,13 @@ async function request<T>(
   });
 
   if (!res.ok) {
+    // A 401 on a non-auth call means the session is no longer valid (expired,
+    // deactivated, or revoked). Drop it so the app redirects to login instead
+    // of showing a stale UI. Auth endpoints handle their own 401s (e.g. bad
+    // login, or the expected refresh failure when anonymous).
+    if (res.status === 401 && !path.startsWith("/auth/")) {
+      window.dispatchEvent(new Event("auth:unauthorized"));
+    }
     const detail = await res.json().catch(() => ({ detail: res.statusText }));
     throw new ApiError(res.status, detail.detail ?? res.statusText);
   }
@@ -50,6 +57,10 @@ export const api = {
     logout: (token: string) => request<void>("POST", "/auth/logout", undefined, token),
     setPassword: (data: { token: string; new_password: string }) =>
       request<{ access_token: string; token_type: string }>("POST", "/auth/set-password", data),
+    forgotPassword: (email: string) =>
+      request<void>("POST", "/auth/forgot-password", { email }),
+    resetPassword: (data: { token: string; new_password: string }) =>
+      request<{ access_token: string; token_type: string }>("POST", "/auth/reset-password", data),
     me: (token: string) =>
       request<{ id: string; company_id: string; email: string; role: string; is_active: boolean }>(
         "GET",
@@ -104,6 +115,7 @@ export const api = {
         credentials: "include",
       });
       if (!res.ok) {
+        if (res.status === 401) window.dispatchEvent(new Event("auth:unauthorized"));
         const detail = await res.json().catch(() => ({ detail: res.statusText }));
         throw new ApiError(res.status, detail.detail ?? "Failed to download CV");
       }
