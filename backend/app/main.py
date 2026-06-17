@@ -75,6 +75,7 @@ def create_app() -> FastAPI:
     from app.api.routers.analytics import router as analytics_router
     from app.api.routers.applications import router as applications_router
     from app.api.routers.auth import router as auth_router
+    from app.api.routers.candidates import router as candidates_router
     from app.api.routers.company import router as company_router
     from app.api.routers.evaluations import router as evaluations_router
     from app.api.routers.feedback import router as feedback_router
@@ -82,10 +83,12 @@ def create_app() -> FastAPI:
     from app.api.routers.interviews import router as interviews_router
     from app.api.routers.jobs import router as jobs_router
     from app.api.routers.platform import router as platform_router
+    from app.api.routers.sourcing import router as sourcing_router
     from app.api.routers.users import router as users_router
 
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(candidates_router)
     app.include_router(jobs_router)
     app.include_router(users_router)
     app.include_router(applications_router)
@@ -95,6 +98,7 @@ def create_app() -> FastAPI:
     app.include_router(analytics_router)
     app.include_router(company_router)
     app.include_router(platform_router)
+    app.include_router(sourcing_router)
 
     return app
 

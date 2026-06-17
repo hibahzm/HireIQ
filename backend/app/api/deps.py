@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db import _get_session_factory
+from app.models.candidate import Candidate
 from app.models.user import User
+from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.user_repository import UserRepository
 
 _bearer = HTTPBearer(auto_error=False)
@@ -37,6 +39,13 @@ async def get_current_user(
         )
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    # Candidate (job-seeker) tokens carry no company_id and must never satisfy a
+    # company route — reject them before touching company_id (which they lack).
+    if payload.get("typ") == "candidate":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a company user"
+        )
 
     user_id: str = payload["sub"]
     company_id: str = payload["company_id"]
@@ -98,3 +107,41 @@ async def require_manager(current_user: User = Depends(get_current_user)) -> Use
     if current_user.role != "manager":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager required")
     return current_user
+
+
+async def get_current_candidate(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> Candidate:
+    """Decode a candidate Bearer JWT and return the authenticated Candidate.
+
+    Rejects company tokens (typ != 'candidate'). `candidates` is a global, no-RLS
+    table, so no tenant context is needed for the lookup.
+    """
+    if not credentials:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+    settings = get_settings()
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    if payload.get("typ") != "candidate":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a candidate"
+        )
+
+    candidate_id: str = payload["sub"]
+    async with _get_session_factory()() as session:
+        async with session.begin():
+            candidate = await CandidateRepository(session).get_by_id(candidate_id)
+            if not candidate or not candidate.password_hash or not candidate.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Candidate not found or inactive",
+                )
+            return candidate

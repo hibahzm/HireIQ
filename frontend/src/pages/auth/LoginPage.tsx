@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, ApiError } from "../../services/api";
 import AuthLayout, { Field } from "../../components/AuthLayout";
 import Button from "../../components/ui/Button";
+import AccountTypeToggle, { type AccountType } from "../../components/ui/AccountTypeToggle";
 
 interface Props {
   onSuccess: (token: string) => void;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function LoginPage({ onSuccess, onRegister, onForgotPassword }: Props) {
+  const [accountType, setAccountType] = useState<AccountType>("company");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +22,10 @@ export default function LoginPage({ onSuccess, onRegister, onForgotPassword }: P
     setError(null);
     setLoading(true);
     try {
-      const res = await api.auth.login({ email, password });
+      const res =
+        accountType === "candidate"
+          ? await api.candidateAuth.login({ email, password })
+          : await api.auth.login({ email, password });
       onSuccess(res.access_token);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
@@ -36,12 +41,13 @@ export default function LoginPage({ onSuccess, onRegister, onForgotPassword }: P
         <>
           No account?{" "}
           <button onClick={onRegister} className="font-medium text-brand-700 hover:underline cursor-pointer">
-            Register your company
+            Create one
           </button>
         </>
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        <AccountTypeToggle value={accountType} onChange={setAccountType} />
         <Field
           id="email"
           label="Email"

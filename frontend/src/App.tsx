@@ -23,6 +23,8 @@ import FeedbackReportPage from "./pages/feedback/FeedbackReportPage";
 import CompanyOverviewPage from "./pages/analytics/CompanyOverviewPage";
 import JobAnalyticsPage from "./pages/analytics/JobAnalyticsPage";
 import PlatformOverviewPage from "./pages/platform/PlatformOverviewPage";
+import CandidatePortalPage from "./pages/candidate/CandidatePortalPage";
+import SourcingPage from "./pages/jobs/SourcingPage";
 
 // ── Page wrappers that pull route params and auth token ──────────────────────
 
@@ -123,8 +125,16 @@ function JobListWrapper() {
       token={token}
       onSelectJob={(id) => navigate(`/jobs/${id}/applications`)}
       onSetupJob={(id) => navigate(`/jobs/${id}/setup`)}
+      onSourceJob={(id) => navigate(`/jobs/${id}/sourcing`)}
     />
   );
+}
+
+function SourcingWrapper() {
+  const { jobId = "" } = useParams();
+  const token = useAuth().token ?? "";
+  const navigate = useNavigate();
+  return <SourcingPage token={token} jobId={jobId} onBack={() => navigate("/jobs")} />;
 }
 
 function CompanyOverviewWrapper() {
@@ -153,13 +163,23 @@ function PlatformOverviewWrapper() {
 }
 
 function HomeRedirect() {
-  const { status, user } = useAuth();
+  const { status, user, kind } = useAuth();
   if (status === "loading") {
     return <SplashScreen />;
   }
   if (status === "anonymous") return <Navigate to="/login" replace />;
+  if (kind === "candidate") return <Navigate to="/candidate" replace />;
   if (!user) return <SplashScreen />;
   return <Navigate to={user?.role === "manager" ? "/platform" : "/overview"} replace />;
+}
+
+// Guard for the candidate portal: authenticated AND a candidate principal.
+function CandidateRoute({ children }: { children: React.ReactNode }) {
+  const { status, kind } = useAuth();
+  if (status === "loading") return <SplashScreen label="Restoring your session…" />;
+  if (status === "anonymous") return <Navigate to="/login" replace />;
+  if (kind !== "candidate") return <Navigate to="/" replace />;
+  return <>{children}</>;
 }
 
 // ── Auth pages that set token on success ─────────────────────────────────────
@@ -241,6 +261,7 @@ function AppRoutes() {
         <Route path="/jobs/:jobId/analytics" element={<JobAnalyticsWrapper />} />
         <Route path="/jobs/:jobId/setup" element={<JobSetupWrapper />} />
         <Route path="/jobs/:jobId/applications" element={<ApplicationListWrapper />} />
+        <Route path="/jobs/:jobId/sourcing" element={<SourcingWrapper />} />
         <Route path="/applications/:applicationId" element={<ApplicationDetailWrapper />} />
         <Route path="/jobs/:jobId/evaluations" element={<ShortlistWrapper />} />
         <Route path="/evaluations/:evaluationId" element={<EvaluationDetailWrapper />} />
@@ -248,6 +269,16 @@ function AppRoutes() {
         <Route path="/audit" element={<CompanyAuditWrapper />} />
         <Route path="/platform" element={<PlatformOverviewWrapper />} />
       </Route>
+
+      {/* Candidate portal (job-seeker) */}
+      <Route
+        path="/candidate"
+        element={
+          <CandidateRoute>
+            <CandidatePortalPage />
+          </CandidateRoute>
+        }
+      />
 
       {/* Default — post-login landing is the company overview (FR-005) */}
       <Route path="/" element={<HomeRedirect />} />

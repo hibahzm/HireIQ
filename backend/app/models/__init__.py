@@ -1,6 +1,7 @@
 # Import all models here so Alembic's autogenerate sees them.
 from app.models.application import Application  # noqa: F401
 from app.models.candidate import Candidate  # noqa: F401
+from app.models.candidate_cv import CandidateCv  # noqa: F401
 from app.models.company import Company  # noqa: F401
 from app.models.cv_chunk import CvChunk  # noqa: F401
 from app.models.evaluation import Evaluation  # noqa: F401
@@ -11,4 +12,5 @@ from app.models.job_chunk import JobChunk  # noqa: F401
 from app.models.job_criteria import JobCriteria  # noqa: F401
 from app.models.llm_usage_event import LlmUsageEvent  # noqa: F401
 from app.models.setup_conversation import SetupConversation  # noqa: F401
+from app.models.sourcing_invitation import SourcingInvitation  # noqa: F401
 from app.models.user import User  # noqa: F401

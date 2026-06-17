@@ -72,8 +72,10 @@ export const api = {
   jobs: {
     list: (token: string, status?: string) =>
       request<Job[]>("GET", `/jobs${status ? `?status=${status}` : ""}`, undefined, token),
-    create: (token: string, data: { title: string; description?: string; streaming_interview?: boolean }) =>
-      request<Job>("POST", "/jobs", data, token),
+    create: (
+      token: string,
+      data: { title: string; description?: string; streaming_interview?: boolean; sourcing_enabled?: boolean }
+    ) => request<Job>("POST", "/jobs", data, token),
     get: (token: string, id: string) => request<Job>("GET", `/jobs/${id}`, undefined, token),
     setupConversation: (token: string, id: string) =>
       request<SetupConversation>("GET", `/jobs/${id}/setup/conversation`, undefined, token),
@@ -173,7 +175,126 @@ export const api = {
     deleteCompany: (token: string, companyId: string) =>
       request<void>("DELETE", `/platform/companies/${companyId}`, undefined, token),
   },
+  candidateAuth: {
+    register: (data: { email: string; full_name: string; password: string }) =>
+      request<{ access_token: string; token_type: string }>(
+        "POST",
+        "/auth/candidate/register",
+        data
+      ),
+    login: (data: { email: string; password: string }) =>
+      request<{ access_token: string; token_type: string }>("POST", "/auth/candidate/login", data),
+    refresh: () =>
+      request<{ access_token: string; token_type: string }>("POST", "/auth/candidate/refresh"),
+    me: (token: string) =>
+      request<CandidateProfile>("GET", "/auth/candidate/me", undefined, token),
+    updateProfile: (
+      token: string,
+      data: { full_name?: string; open_to_work?: boolean }
+    ) => request<CandidateProfile>("PATCH", "/candidate/me", data, token),
+  },
+  candidate: {
+    getCv: (token: string) => request<CandidateCv>("GET", "/candidate/cv", undefined, token),
+    uploadCv: async (token: string, file: File) => {
+      const form = new FormData();
+      form.append("cv_file", file);
+      const res = await fetch(`${BASE_URL}/candidate/cv`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+        body: form,
+      });
+      if (!res.ok) {
+        if (res.status === 401) window.dispatchEvent(new Event("auth:unauthorized"));
+        const detail = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new ApiError(res.status, detail.detail ?? "Failed to upload CV");
+      }
+      return res.json() as Promise<CandidateCv>;
+    },
+    browseJobs: (token: string) =>
+      request<OpenJob[]>("GET", "/candidate/jobs", undefined, token),
+    apply: (token: string, jobId: string) =>
+      request<CandidateApplication>("POST", `/candidate/jobs/${jobId}/apply`, undefined, token),
+    myApplications: (token: string) =>
+      request<CandidateApplication[]>("GET", "/candidate/applications", undefined, token),
+    invitations: (token: string) =>
+      request<Invitation[]>("GET", "/candidate/invitations", undefined, token),
+    acceptInvitation: (token: string, invitationId: string) =>
+      request<CandidateApplication>(
+        "POST",
+        `/candidate/invitations/${invitationId}/accept`,
+        undefined,
+        token
+      ),
+  },
+  sourcing: {
+    search: (token: string, jobId: string) =>
+      request<SourcedCandidate[]>("GET", `/jobs/${jobId}/sourcing`, undefined, token),
+    invite: (token: string, jobId: string, candidateId: string, message?: string) =>
+      request<{ id: string; status: string }>(
+        "POST",
+        `/jobs/${jobId}/sourcing/${candidateId}/invite`,
+        { message: message ?? null },
+        token
+      ),
+  },
 };
+
+export interface Invitation {
+  id: string;
+  job_id: string;
+  job_title?: string | null;
+  company_name?: string | null;
+  status: string;
+  message?: string | null;
+  created_at: string;
+}
+
+export interface SourcedCandidate {
+  candidate_id: string;
+  full_name?: string | null;
+  match_score: number;
+  experience_score: number;
+  matched_skills: { skill: string; years: number | null; required: boolean }[];
+  missing_skills: string[];
+  already_applied: boolean;
+}
+
+export interface CandidateProfile {
+  id: string;
+  email: string;
+  full_name: string;
+  is_active: boolean;
+  open_to_work: boolean;
+  has_cv: boolean;
+}
+
+export interface CandidateCv {
+  has_cv: boolean;
+  cv_extraction_method?: string | null;
+  embedding_truncated: boolean;
+  skills: unknown[];
+  updated_at?: string | null;
+}
+
+export interface OpenJob {
+  id: string;
+  title: string;
+  description?: string | null;
+  company_name?: string | null;
+  created_at: string;
+  already_applied: boolean;
+}
+
+export interface CandidateApplication {
+  id: string;
+  job_id: string;
+  job_title?: string | null;
+  company_name?: string | null;
+  status: string;
+  screening_status: string;
+  created_at: string;
+}
 
 export interface InterviewInviteResponse {
   interview_token: string;
@@ -186,6 +307,7 @@ export interface Job {
   title: string;
   description?: string | null;
   streaming_interview: boolean;
+  sourcing_enabled?: boolean;
   status: string;
   created_by: string;
   created_at: string;

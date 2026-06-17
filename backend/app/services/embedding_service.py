@@ -8,6 +8,8 @@ _CHUNK_SIZE_TOKENS = 512
 _CHUNK_OVERLAP_TOKENS = 64
 _MODEL = "text-embedding-3-small"
 _TOKENIZER = "cl100k_base"
+# text-embedding-3-small accepts up to 8191 input tokens; leave headroom.
+_MAX_CV_EMBED_TOKENS = 8000
 
 
 class EmbeddingService:
@@ -35,6 +37,26 @@ class EmbeddingService:
             "metadata": {"operation": "cv_chunk_embedding"},
         }
         return response.data[0].embedding, usage_event
+
+    async def embed_whole_cv(self, cv_text: str) -> tuple[list[float], bool, dict]:
+        """Embed the entire CV as a SINGLE vector (for cross-company sourcing).
+
+        Returns (embedding, truncated, usage_event). When the CV exceeds the model's
+        token cap, the OLDEST content (trailing tokens — CVs are reverse-chronological,
+        so most-recent experience sits at the top) is dropped and `truncated=True` is
+        returned so the caller can audit-log it. Content is never silently lost without
+        signalling truncation.
+        """
+        tokens = self._enc.encode(cv_text)
+        truncated = len(tokens) > _MAX_CV_EMBED_TOKENS
+        text_to_embed = self._enc.decode(tokens[:_MAX_CV_EMBED_TOKENS]) if truncated else cv_text
+        embedding, usage_event = await self.embed_text(text_to_embed)
+        usage_event["metadata"] = {
+            "operation": "candidate_cv_embedding",
+            "truncated": truncated,
+            "original_tokens": len(tokens),
+        }
+        return embedding, truncated, usage_event
 
     def chunk_cv(self, cv_text: str) -> list[str]:
         """Split cv_text into overlapping token-bounded chunks."""

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, ApiError } from "../../services/api";
 import AuthLayout, { Field } from "../../components/AuthLayout";
 import Button from "../../components/ui/Button";
+import AccountTypeToggle, { type AccountType } from "../../components/ui/AccountTypeToggle";
 
 interface Props {
   onSuccess: (token: string) => void;
@@ -9,18 +10,23 @@ interface Props {
 }
 
 export default function RegisterPage({ onSuccess, onLogin }: Props) {
+  const [accountType, setAccountType] = useState<AccountType>("company");
   const [companyName, setCompanyName] = useState("");
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const isCandidate = accountType === "candidate";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      const res = await api.auth.register({ company_name: companyName, email, password });
+      const res = isCandidate
+        ? await api.candidateAuth.register({ email, full_name: fullName, password })
+        : await api.auth.register({ company_name: companyName, email, password });
       onSuccess(res.access_token);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Registration failed");
@@ -31,7 +37,11 @@ export default function RegisterPage({ onSuccess, onLogin }: Props) {
   return (
     <AuthLayout
       title="Create your HireIQ account"
-      subtitle="Set up your company workspace in a minute."
+      subtitle={
+        isCandidate
+          ? "Build your profile and apply to roles in one click."
+          : "Set up your company workspace in a minute."
+      }
       footer={
         <>
           Already have an account?{" "}
@@ -42,14 +52,26 @@ export default function RegisterPage({ onSuccess, onLogin }: Props) {
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Field
-          id="company"
-          label="Company name"
-          type="text"
-          value={companyName}
-          onChange={(e) => setCompanyName(e.target.value)}
-          required
-        />
+        <AccountTypeToggle value={accountType} onChange={setAccountType} />
+        {isCandidate ? (
+          <Field
+            id="full_name"
+            label="Full name"
+            type="text"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            required
+          />
+        ) : (
+          <Field
+            id="company"
+            label="Company name"
+            type="text"
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
+            required
+          />
+        )}
         <Field
           id="email"
           label="Email"

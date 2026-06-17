@@ -21,6 +21,28 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class CandidateRegisterRequest(BaseModel):
+    email: str
+    full_name: str
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def password_min_length(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v
+
+
+class CandidateResponse(BaseModel):
+    id: str
+    email: str
+    full_name: str
+    is_active: bool
+    open_to_work: bool
+    has_cv: bool = False
+
+
 class ForgotPasswordRequest(BaseModel):
     email: str
 

@@ -10,7 +10,9 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.models.candidate import Candidate
 from app.models.user import User
+from app.repositories.candidate_repository import CandidateRepository
 from app.repositories.company_repository import CompanyRepository
 from app.repositories.user_repository import UserRepository
 
@@ -43,6 +45,21 @@ class AuthService:
             "exp": now + timedelta(minutes=self._settings.ACCESS_TOKEN_EXPIRE_MINUTES),
             # Unique per token: two tokens minted in the same second must still
             # differ (refresh rotation guarantees a new token).
+            "jti": str(uuid.uuid4()),
+        }
+        return jwt.encode(
+            payload, self._settings.JWT_SECRET, algorithm=self._settings.JWT_ALGORITHM
+        )
+
+    def _create_candidate_token(self, candidate_id: str) -> str:
+        """Candidate access token: NO company_id, marked typ='candidate' so company
+        routes reject it and candidate routes reject company tokens."""
+        now = datetime.now(UTC)
+        payload = {
+            "sub": candidate_id,
+            "typ": "candidate",
+            "iat": now,
+            "exp": now + timedelta(minutes=self._settings.ACCESS_TOKEN_EXPIRE_MINUTES),
             "jti": str(uuid.uuid4()),
         }
         return jwt.encode(
@@ -108,6 +125,76 @@ class AuthService:
         refresh_token = self._create_refresh_token()
         await self._store_refresh_token(refresh_token, user.id)
         return user, access_token, refresh_token
+
+    # ── candidate (job-seeker) auth ─────────────────────────────────────────────
+
+    async def register_candidate(
+        self, *, email: str, full_name: str, password: str
+    ) -> tuple[Candidate, str, str]:
+        """Create (or upgrade) a candidate account. Returns (candidate, access, refresh).
+
+        Email is globally unique across ALL accounts: if it already belongs to a
+        company user, registration is rejected; if it belongs to an apply-only
+        candidate record (no password), that same row is upgraded to an account so
+        the one-email-one-identity invariant holds across the account and the
+        public external-apply routes.
+        """
+        if await UserRepository(self._session).get_by_email_global(email):
+            raise AuthError("email_already_registered")
+
+        cand_repo = CandidateRepository(self._session)
+        password_hash = self._hash_password(password)
+        existing = await cand_repo.get_by_email(email)
+        if existing and existing.password_hash:
+            raise AuthError("email_already_registered")
+        if existing:
+            candidate = await cand_repo.set_account_credentials(
+                candidate_id=existing.id, full_name=full_name, password_hash=password_hash
+            )
+        else:
+            candidate = await cand_repo.create_account(
+                email=email, full_name=full_name, password_hash=password_hash
+            )
+
+        access_token = self._create_candidate_token(candidate.id)
+        refresh_token = self._create_refresh_token()
+        await self._store_refresh_token(refresh_token, candidate.id)
+        return candidate, access_token, refresh_token
+
+    async def authenticate_candidate(
+        self, *, email: str, password: str
+    ) -> tuple[Candidate, str, str]:
+        candidate = await CandidateRepository(self._session).get_by_email(email)
+        if not candidate or not candidate.password_hash:
+            raise AuthError("invalid_credentials")
+        if not self._verify_password(password, candidate.password_hash):
+            raise AuthError("invalid_credentials")
+        if not candidate.is_active:
+            raise AuthError("account_inactive")
+
+        access_token = self._create_candidate_token(candidate.id)
+        refresh_token = self._create_refresh_token()
+        await self._store_refresh_token(refresh_token, candidate.id)
+        return candidate, access_token, refresh_token
+
+    async def refresh_candidate(self, refresh_token: str) -> tuple[Candidate, str, str]:
+        token_hash = self._hash_token(refresh_token)
+        key = self._refresh_token_key(token_hash)
+        candidate_id = await self._redis.get(key)
+        if not candidate_id:
+            raise AuthError("invalid_refresh_token")
+        await self._redis.delete(key)
+
+        candidate = await CandidateRepository(self._session).get_by_id(candidate_id)
+        # A company user's refresh token resolves to a non-candidate id here and
+        # fails safe (not found), so this path only succeeds for real candidates.
+        if not candidate or not candidate.password_hash or not candidate.is_active:
+            raise AuthError("candidate_not_found")
+
+        new_access_token = self._create_candidate_token(candidate.id)
+        new_refresh_token = self._create_refresh_token()
+        await self._store_refresh_token(new_refresh_token, candidate.id)
+        return candidate, new_access_token, new_refresh_token
 
     async def refresh(self, refresh_token: str) -> tuple[User, str, str]:
         token_hash = self._hash_token(refresh_token)
