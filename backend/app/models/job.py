@@ -24,6 +24,9 @@ class Job(Base):
     streaming_interview: Mapped[bool] = mapped_column(
         Boolean, server_default="true", nullable=False
     )
+    sourcing_enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False
+    )
     created_by: Mapped[str] = mapped_column(
         UUID(as_uuid=False), ForeignKey("users.id"), nullable=False
     )

@@ -1,0 +1,215 @@
+"""In-app talent sourcing: experience-aware hybrid search over candidate CVs.
+
+Combines three signals into a ranked shortlist for a sourcing-enabled job:
+  1. dense recall  — pgvector cosine between a job-query embedding and the
+     candidate's single whole-CV embedding,
+  2. keyword       — Postgres full-text over the candidate's CV tsv,
+  3. experience    — a DETERMINISTIC skill/years match against job_criteria, so
+     a candidate with more relevant years of a required skill outranks one with
+     fewer (e.g. Node.js 3y > 2y). This is the differentiator pure cosine can't give.
+
+Only `open_to_work` candidates are eligible. Contact details (email) are never
+returned here — they are revealed only after the candidate accepts an invitation
+(spec FR-018).
+"""
+
+from __future__ import annotations
+
+import asyncio
+
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.services.cv_skill_extractor import normalize_skill_name
+from app.services.embedding_service import EmbeddingService
+
+# Map a job's experience level to a target years-of-experience for required skills.
+_LEVEL_TARGET_YEARS: dict[str, float] = {
+    "intern": 0.5,
+    "junior": 1.0,
+    "entry": 1.0,
+    "mid": 3.0,
+    "mid-level": 3.0,
+    "intermediate": 3.0,
+    "senior": 5.0,
+    "lead": 7.0,
+    "principal": 8.0,
+    "staff": 8.0,
+}
+_DEFAULT_TARGET_YEARS = 3.0
+# Credit for a matched skill whose years are unknown (present but unquantified):
+# better than missing, worse than a confirmed sufficient duration.
+_UNKNOWN_YEARS_CREDIT = 0.5
+_OPTIONAL_WEIGHT = 0.3
+
+
+def target_years_for_level(experience_level: str | None) -> float:
+    if not experience_level:
+        return _DEFAULT_TARGET_YEARS
+    key = experience_level.strip().lower()
+    for level, years in _LEVEL_TARGET_YEARS.items():
+        if level in key:
+            return years
+    return _DEFAULT_TARGET_YEARS
+
+
+def score_experience(
+    candidate_skills: list[dict],
+    *,
+    required_skills: list[str],
+    optional_skills: list[str] | None = None,
+    experience_level: str | None = None,
+) -> dict:
+    """Pure, deterministic experience score in [0, 1] for a candidate vs a job.
+
+    A required skill scores `min(candidate_years / target_years, 1)`; unknown years
+    get partial credit; missing required skills score 0. Optional skills add a small
+    weighted bonus. More years of a required skill ⇒ strictly higher score.
+    """
+    optional_skills = optional_skills or []
+    target = target_years_for_level(experience_level)
+    by_skill = {normalize_skill_name(s["skill"]): s for s in candidate_skills if s.get("skill")}
+
+    matched: list[dict] = []
+    missing: list[str] = []
+
+    req_score = 0.0
+    for raw in required_skills:
+        canonical = normalize_skill_name(raw)
+        cand = by_skill.get(canonical)
+        if not cand:
+            missing.append(raw)
+            continue
+        years = cand.get("years")
+        if years is None:
+            contribution = _UNKNOWN_YEARS_CREDIT
+        else:
+            contribution = min(float(years) / target, 1.0) if target > 0 else 1.0
+        req_score += contribution
+        matched.append({"skill": canonical, "years": years, "required": True})
+
+    req_component = req_score / len(required_skills) if required_skills else 0.0
+
+    opt_hits = 0
+    for raw in optional_skills:
+        canonical = normalize_skill_name(raw)
+        if canonical in by_skill:
+            opt_hits += 1
+            matched.append(
+                {"skill": canonical, "years": by_skill[canonical].get("years"), "required": False}
+            )
+    opt_component = (opt_hits / len(optional_skills)) if optional_skills else 0.0
+
+    score = req_component + _OPTIONAL_WEIGHT * opt_component
+    score = min(score, 1.0)
+    return {"experience_score": round(score, 4), "matched_skills": matched, "missing_skills": missing}
+
+
+def _vec(embedding: list[float]) -> str:
+    return "[" + ",".join(str(v) for v in embedding) + "]"
+
+
+async def search_candidates_for_job(
+    session: AsyncSession,
+    *,
+    job_id: str,
+    query_text: str,
+    required_skills: list[str],
+    optional_skills: list[str] | None = None,
+    experience_level: str | None = None,
+    limit: int = 25,
+) -> list[dict]:
+    """Return a ranked shortlist of open-to-work candidates for the job.
+
+    `query_text` is the job's searchable text (criteria + description). The caller
+    supplies job_criteria fields so this service stays free of company-scoped reads.
+    """
+    embedding, _usage = await EmbeddingService().embed_text(query_text)
+    vec = _vec(embedding)
+
+    # Dense + sparse recall over the GLOBAL candidate_cvs, gated to open_to_work.
+    dense_q = sa.text(
+        """
+        SELECT cc.candidate_id, c.full_name, cc.skills,
+               1 - (cc.embedding <=> CAST(:vec AS vector)) AS score
+        FROM candidate_cvs cc
+        JOIN candidates c ON c.id = cc.candidate_id
+        WHERE c.open_to_work = true AND cc.embedding IS NOT NULL
+        ORDER BY score DESC
+        LIMIT 50
+        """
+    )
+    sparse_q = sa.text(
+        """
+        SELECT cc.candidate_id, c.full_name, cc.skills,
+               ts_rank(cc.tsv, plainto_tsquery('english', :q)) AS score
+        FROM candidate_cvs cc
+        JOIN candidates c ON c.id = cc.candidate_id
+        WHERE c.open_to_work = true
+          AND cc.tsv @@ plainto_tsquery('english', :q)
+        ORDER BY score DESC
+        LIMIT 50
+        """
+    )
+    dense_res, sparse_res = await asyncio.gather(
+        session.execute(dense_q, {"vec": vec}),
+        session.execute(sparse_q, {"q": query_text}),
+    )
+    dense_rows = list(dense_res.mappings().all())
+    sparse_rows = list(sparse_res.mappings().all())
+
+    # Reciprocal-rank fusion (k=60), mirroring cv_chunk hybrid_search.
+    k = 60
+    fusion: dict[str, float] = {}
+    rows_by_id: dict[str, dict] = {}
+    for rank, row in enumerate(dense_rows):
+        cid = str(row["candidate_id"])
+        fusion[cid] = fusion.get(cid, 0.0) + 1 / (k + rank + 1)
+        rows_by_id[cid] = dict(row)
+    for rank, row in enumerate(sparse_rows):
+        cid = str(row["candidate_id"])
+        fusion[cid] = fusion.get(cid, 0.0) + 1 / (k + rank + 1)
+        rows_by_id.setdefault(cid, dict(row))
+
+    # Which of these candidates already have an application to this job (dedup hint).
+    invited_ids: set[str] = set()
+    if rows_by_id:
+        existing = await session.execute(
+            sa.text(
+                "SELECT candidate_id FROM applications "
+                "WHERE job_id = :jid AND candidate_id = ANY(:ids)"
+            ),
+            {"jid": job_id, "ids": list(rows_by_id.keys())},
+        )
+        invited_ids = {str(r[0]) for r in existing.all()}
+
+    results: list[dict] = []
+    for cid, row in rows_by_id.items():
+        skills = row.get("skills") or []
+        exp = score_experience(
+            skills,
+            required_skills=required_skills,
+            optional_skills=optional_skills,
+            experience_level=experience_level,
+        )
+        # Balanced score: experience-years matter (so 3y > 2y for a required skill),
+        # but they do NOT dominate — the whole-CV semantic + keyword recall (skills
+        # breadth, projects, education, overall fit) is weighted equally so ranking
+        # isn't only about years of experience.
+        recall = min(fusion.get(cid, 0.0) * 10, 1.0)
+        final = 0.5 * exp["experience_score"] + 0.5 * recall
+        results.append(
+            {
+                "candidate_id": cid,
+                "full_name": row.get("full_name"),
+                "match_score": round(final, 4),
+                "experience_score": exp["experience_score"],
+                "matched_skills": exp["matched_skills"],
+                "missing_skills": exp["missing_skills"],
+                "already_applied": cid in invited_ids,
+                # NOTE: email intentionally omitted — revealed only post-acceptance.
+            }
+        )
+
+    results.sort(key=lambda r: r["match_score"], reverse=True)
+    return results[:limit]

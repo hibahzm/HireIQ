@@ -10,6 +10,7 @@ class CreateJobRequest(BaseModel):
     title: str
     description: str | None = None
     streaming_interview: bool = True
+    sourcing_enabled: bool = False
 
 
 class JobResponse(BaseModel):
@@ -18,6 +19,7 @@ class JobResponse(BaseModel):
     title: str
     description: str | None = None
     streaming_interview: bool
+    sourcing_enabled: bool = False
     status: str
     created_by: str
     created_at: datetime

@@ -40,6 +40,21 @@ class NotificationService:
         await self._send_html(candidate_email, subject, html)
         await self._mark_sent("invitation", candidate_email)
 
+    async def send_sourcing_invitation_email(
+        self, candidate_email: str, company_name: str, job_title: str, link: str
+    ) -> None:
+        """A company sourced this candidate and invited them to a job."""
+        if not await self._should_send("sourcing_invitation", candidate_email):
+            return
+        subject = f"{company_name} invited you to apply for {job_title}"
+        html = (
+            f"<p>{company_name} found your profile and would like you to apply for "
+            f"<strong>{job_title}</strong>.</p>"
+            f'<p><a href="{link}">View the invitation in HireIQ</a> to accept and apply.</p>'
+        )
+        await self._send_html(candidate_email, subject, html)
+        await self._mark_sent("sourcing_invitation", candidate_email)
+
     async def send_password_reset_email(self, to_email: str, reset_link: str) -> None:
         """Forgot-password reset link. No daily dedup — a user may legitimately
         request a reset more than once a day."""

@@ -31,6 +31,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(CorrelationIdMiddleware)
 
+    from app.api.routers.cv_skills import router as cv_skills_router
     from app.api.routers.evaluation import router as evaluation_router
     from app.api.routers.health import router as health_router
     from app.api.routers.interview import router as interview_router
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(job_setup_router)
     app.include_router(screening_router)
+    app.include_router(cv_skills_router)
     app.include_router(interview_router)
     app.include_router(evaluation_router)
 

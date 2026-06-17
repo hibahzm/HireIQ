@@ -32,6 +32,7 @@ class JobService:
         created_by: str,
         description: str | None = None,
         streaming_interview: bool = True,
+        sourcing_enabled: bool = False,
     ) -> Job:
         repo = JobRepository(self._session)
         job = await repo.create(
@@ -40,6 +41,7 @@ class JobService:
             created_by=created_by,
             description=description,
             streaming_interview=streaming_interview,
+            sourcing_enabled=sourcing_enabled,
         )
 
         audit = AuditLogRepository(self._session)

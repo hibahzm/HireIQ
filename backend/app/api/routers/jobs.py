@@ -48,6 +48,7 @@ async def create_job(
         title=body.title,
         description=body.description,
         streaming_interview=body.streaming_interview,
+        sourcing_enabled=body.sourcing_enabled,
         created_by=current_user.id,
     )
     return JobResponse(**job.__dict__)
@@ -79,6 +80,7 @@ async def update_job(
             title=body.title,
             description=body.description,
             streaming_interview=body.streaming_interview,
+            sourcing_enabled=body.sourcing_enabled,
             updated_at=datetime.now(UTC),
         )
     )

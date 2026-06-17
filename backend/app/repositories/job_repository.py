@@ -22,6 +22,7 @@ class JobRepository:
         created_by: str,
         description: str | None = None,
         streaming_interview: bool = True,
+        sourcing_enabled: bool = False,
     ) -> Job:
         job = Job(
             id=str(uuid.uuid4()),
@@ -29,6 +30,7 @@ class JobRepository:
             title=title,
             description=description,
             streaming_interview=streaming_interview,
+            sourcing_enabled=sourcing_enabled,
             status="draft",
             created_by=created_by,
             created_at=datetime.now(UTC),

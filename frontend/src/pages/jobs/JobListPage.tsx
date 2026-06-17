@@ -13,9 +13,10 @@ interface Props {
   token: string;
   onSelectJob: (id: string) => void;
   onSetupJob: (id: string) => void;
+  onSourceJob: (id: string) => void;
 }
 
-export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
+export default function JobListPage({ token, onSelectJob, onSetupJob, onSourceJob }: Props) {
   const { user } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +25,7 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [useRealtimeInterview, setUseRealtimeInterview] = useState(true);
+  const [enableSourcing, setEnableSourcing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
@@ -47,6 +49,7 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
         title: newTitle.trim(),
         description: newDescription.trim() || undefined,
         streaming_interview: useRealtimeInterview,
+        sourcing_enabled: enableSourcing,
       });
       // Continue straight into AI-guided setup, where the agent reads the
       // description and only asks about whatever is missing.
@@ -175,6 +178,15 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
               />
               <span>Realtime voice interview</span>
             </label>
+            <label className="flex items-center gap-3 rounded-lg border border-primary-200 px-3 py-2.5 text-sm text-primary-700">
+              <input
+                type="checkbox"
+                checked={enableSourcing}
+                onChange={(e) => setEnableSourcing(e.target.checked)}
+                className="h-4 w-4 rounded border-primary-300 text-brand-600 focus:ring-brand-500"
+              />
+              <span>Enable in-app sourcing (proactively search candidates)</span>
+            </label>
             <div className="flex gap-2">
               <Button type="submit" loading={creating} disabled={!newTitle.trim()}>
                 Create &amp; start setup
@@ -275,6 +287,11 @@ export default function JobListPage({ token, onSelectJob, onSetupJob }: Props) {
                           }
                         >
                           Activate
+                        </Button>
+                      )}
+                      {job.status === "active" && job.sourcing_enabled && (
+                        <Button size="sm" variant="secondary" onClick={() => onSourceJob(job.id)}>
+                          Source
                         </Button>
                       )}
                       {job.status === "active" && (
