@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   ApiError,
@@ -13,6 +13,8 @@ import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Spinner from "../../components/ui/Spinner";
 import Badge from "../../components/ui/Badge";
+import Modal from "../../components/ui/Modal";
+import EmptyState from "../../components/ui/EmptyState";
 import { statusColor } from "../../components/ui/status";
 import { BriefcaseIcon, LogOutIcon } from "../../components/ui/icons";
 
@@ -25,6 +27,12 @@ const TABS: [Tab, string][] = [
   ["applications", "My applications"],
   ["profile", "My CV & profile"],
 ];
+
+function interviewActive(a: CandidateApplication): boolean {
+  if (!a.interview_token) return false;
+  if (!a.interview_token_expires_at) return true;
+  return new Date(a.interview_token_expires_at).getTime() > Date.now();
+}
 
 export default function CandidatePortalPage() {
   const { token, logout } = useAuth();
@@ -45,7 +53,6 @@ export default function CandidatePortalPage() {
     void loadProfile();
   }, [loadProfile]);
 
-  // Auto-dismiss the banner so it doesn't linger across tab switches.
   useEffect(() => {
     if (!banner) return;
     const id = setTimeout(() => setBanner(null), 4000);
@@ -142,19 +149,13 @@ export default function CandidatePortalPage() {
   );
 }
 
-function EmptyState({ title, hint }: { title: string; hint: string }) {
-  return (
-    <Card className="p-10 text-center">
-      <BriefcaseIcon className="mx-auto h-8 w-8 text-primary-300" />
-      <p className="mt-3 text-sm font-medium text-primary-700">{title}</p>
-      <p className="mx-auto mt-1 max-w-sm text-sm text-primary-500">{hint}</p>
-    </Card>
-  );
-}
+const briefcase = <BriefcaseIcon className="h-7 w-7" />;
 
 function BrowseJobs({ token, hasCv, onNotify }: { token: string; hasCv: boolean; onNotify: Notify }) {
   const [jobs, setJobs] = useState<OpenJob[] | null>(null);
+  const [query, setQuery] = useState("");
   const [applying, setApplying] = useState<string | null>(null);
+  const [selected, setSelected] = useState<OpenJob | null>(null);
 
   const load = useCallback(async () => {
     setJobs(await api.candidate.browseJobs(token));
@@ -164,11 +165,23 @@ function BrowseJobs({ token, hasCv, onNotify }: { token: string; hasCv: boolean;
     void load();
   }, [load]);
 
+  const filtered = useMemo(() => {
+    if (!jobs) return null;
+    const q = query.trim().toLowerCase();
+    if (!q) return jobs;
+    return jobs.filter((j) =>
+      [j.title, j.company_name, j.description]
+        .filter(Boolean)
+        .some((v) => (v as string).toLowerCase().includes(q))
+    );
+  }, [jobs, query]);
+
   async function apply(jobId: string) {
     setApplying(jobId);
     try {
       await api.candidate.apply(token, jobId);
       onNotify({ kind: "ok", text: "Application submitted." });
+      setSelected(null);
       await load();
     } catch (err) {
       onNotify({ kind: "err", text: err instanceof ApiError ? err.message : "Could not apply" });
@@ -178,8 +191,6 @@ function BrowseJobs({ token, hasCv, onNotify }: { token: string; hasCv: boolean;
   }
 
   if (!jobs) return <Spinner label="Loading open roles…" />;
-  if (jobs.length === 0)
-    return <EmptyState title="No open roles right now" hint="New roles will appear here as companies post them." />;
 
   return (
     <div className="space-y-4">
@@ -188,42 +199,106 @@ function BrowseJobs({ token, hasCv, onNotify }: { token: string; hasCv: boolean;
           Upload a CV in <span className="font-medium">My CV &amp; profile</span> before you can apply.
         </div>
       )}
-      <ul className="space-y-3">
-        {jobs.map((job) => (
-          <li key={job.id}>
-            <Card className="flex items-start justify-between gap-4 p-5">
-              <div className="min-w-0">
-                <h3 className="font-semibold text-primary-900">{job.title}</h3>
-                {job.company_name && (
-                  <p className="mt-0.5 text-sm text-primary-500">{job.company_name}</p>
-                )}
-                {job.description && (
-                  <p className="mt-2 line-clamp-2 text-sm text-primary-600">{job.description}</p>
-                )}
-              </div>
+
+      <label className="relative block">
+        <span className="sr-only">Search roles</span>
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search roles by title, company, or keyword…"
+          className="w-full rounded-lg border border-primary-200 bg-surface px-4 py-2.5 text-sm text-primary-800 placeholder:text-primary-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+        />
+      </label>
+
+      {filtered && filtered.length === 0 ? (
+        <EmptyState
+          icon={briefcase}
+          title={query ? "No roles match your search" : "No open roles right now"}
+          description={
+            query ? "Try a different keyword." : "New roles will appear here as companies post them."
+          }
+        />
+      ) : (
+        <ul className="space-y-3">
+          {filtered?.map((job) => (
+            <li key={job.id}>
+              <Card interactive className="p-5" onClick={() => setSelected(job)}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-primary-900">{job.title}</h3>
+                    {job.company_name && (
+                      <p className="mt-0.5 text-sm text-primary-500">{job.company_name}</p>
+                    )}
+                    {job.description && (
+                      <p className="mt-2 line-clamp-2 text-sm text-primary-600">{job.description}</p>
+                    )}
+                    <span className="mt-2 inline-block text-xs font-medium text-brand-600">
+                      View details →
+                    </span>
+                  </div>
+                  {job.already_applied && <Badge status="invited">Applied</Badge>}
+                </div>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <Modal
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        title={selected?.title}
+        footer={
+          selected && (
+            <>
+              <Button variant="secondary" size="sm" onClick={() => setSelected(null)}>
+                Close
+              </Button>
               <Button
                 size="sm"
-                disabled={!hasCv || job.already_applied}
-                loading={applying === job.id}
-                onClick={() => apply(job.id)}
-                className="shrink-0"
+                disabled={!hasCv || selected.already_applied}
+                loading={applying === selected.id}
+                onClick={() => apply(selected.id)}
               >
-                {job.already_applied ? "Applied" : "Apply"}
+                {selected.already_applied ? "Already applied" : "Apply now"}
               </Button>
-            </Card>
-          </li>
-        ))}
-      </ul>
+            </>
+          )
+        }
+      >
+        {selected && (
+          <div>
+            {selected.company_name && (
+              <p className="text-sm font-medium text-primary-500">{selected.company_name}</p>
+            )}
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-primary-700">
+              {selected.description || "No description provided."}
+            </p>
+            {!hasCv && (
+              <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Upload a CV in your profile to apply.
+              </p>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
 
 function Invitations({ token, onNotify }: { token: string; onNotify: Notify }) {
   const [invites, setInvites] = useState<Invitation[] | null>(null);
+  const [apps, setApps] = useState<CandidateApplication[] | null>(null);
   const [accepting, setAccepting] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setInvites(await api.candidate.invitations(token));
+    const [inv, ap] = await Promise.all([
+      api.candidate.invitations(token),
+      api.candidate.myApplications(token),
+    ]);
+    setInvites(inv);
+    setApps(ap);
   }, [token]);
 
   useEffect(() => {
@@ -243,48 +318,85 @@ function Invitations({ token, onNotify }: { token: string; onNotify: Notify }) {
     }
   }
 
-  if (!invites) return <Spinner label="Loading invitations…" />;
-  if (invites.length === 0)
+  if (!invites || !apps) return <Spinner label="Loading invitations…" />;
+
+  const pendingSourcing = invites.filter((i) => i.status === "pending");
+  const interviewReady = apps.filter(interviewActive);
+
+  if (pendingSourcing.length === 0 && interviewReady.length === 0)
     return (
       <EmptyState
+        icon={briefcase}
         title="No invitations yet"
-        hint="When a company sources you for a role, their invitation shows up here."
+        description="When a company invites you to apply, or you're invited to interview after applying, it shows up here."
       />
     );
 
   return (
-    <ul className="space-y-3">
-      {invites.map((inv) => (
-        <li key={inv.id}>
-          <Card className="flex items-start justify-between gap-4 p-5">
-            <div className="min-w-0">
-              <h3 className="font-semibold text-primary-900">{inv.job_title ?? "Role"}</h3>
-              {inv.company_name && (
-                <p className="mt-0.5 text-sm text-primary-500">{inv.company_name}</p>
-              )}
-              {inv.message && <p className="mt-2 text-sm text-primary-600">{inv.message}</p>}
-            </div>
-            {inv.status === "pending" ? (
-              <Button
-                size="sm"
-                loading={accepting === inv.id}
-                onClick={() => accept(inv.id)}
-                className="shrink-0"
-              >
-                Accept &amp; apply
-              </Button>
-            ) : (
-              <Badge status={inv.status} />
-            )}
-          </Card>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-6">
+      {interviewReady.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-semibold text-primary-700">Interview invitations</h2>
+          <ul className="space-y-3">
+            {interviewReady.map((a) => (
+              <li key={a.id}>
+                <Card className="flex items-center justify-between gap-4 p-5">
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-primary-900">{a.job_title ?? "Role"}</h3>
+                    {a.company_name && (
+                      <p className="mt-0.5 text-sm text-primary-500">{a.company_name}</p>
+                    )}
+                    <p className="mt-1 text-xs text-primary-400">
+                      You're qualified — complete your interview.
+                    </p>
+                  </div>
+                  <a href={`/interview/${a.interview_token}`}>
+                    <Button size="sm" className="shrink-0">
+                      Start interview
+                    </Button>
+                  </a>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {pendingSourcing.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-semibold text-primary-700">Job invitations</h2>
+          <ul className="space-y-3">
+            {pendingSourcing.map((inv) => (
+              <li key={inv.id}>
+                <Card className="flex items-start justify-between gap-4 p-5">
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-primary-900">{inv.job_title ?? "Role"}</h3>
+                    {inv.company_name && (
+                      <p className="mt-0.5 text-sm text-primary-500">{inv.company_name}</p>
+                    )}
+                    {inv.message && <p className="mt-2 text-sm text-primary-600">{inv.message}</p>}
+                  </div>
+                  <Button
+                    size="sm"
+                    loading={accepting === inv.id}
+                    onClick={() => accept(inv.id)}
+                    className="shrink-0"
+                  >
+                    Accept &amp; apply
+                  </Button>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
   );
 }
 
 function MyApplications({ token }: { token: string }) {
   const [apps, setApps] = useState<CandidateApplication[] | null>(null);
+  const [selected, setSelected] = useState<CandidateApplication | null>(null);
 
   useEffect(() => {
     void api.candidate.myApplications(token).then(setApps);
@@ -294,33 +406,96 @@ function MyApplications({ token }: { token: string }) {
   if (apps.length === 0)
     return (
       <EmptyState
+        icon={briefcase}
         title="No applications yet"
-        hint="Roles you apply to — directly or by accepting an invitation — appear here."
+        description="Roles you apply to — directly or by accepting an invitation — appear here."
       />
     );
 
   return (
-    <ul className="space-y-3">
-      {apps.map((a) => (
-        <li key={a.id}>
-          <Card className="flex items-center justify-between gap-4 p-5">
-            <div className="min-w-0">
-              <h3 className="font-semibold text-primary-900">{a.job_title ?? "Role"}</h3>
-              {a.company_name && (
-                <p className="mt-0.5 text-sm text-primary-500">{a.company_name}</p>
-              )}
+    <>
+      <ul className="space-y-3">
+        {apps.map((a) => (
+          <li key={a.id}>
+            <Card interactive className="p-5" onClick={() => setSelected(a)}>
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-primary-900">{a.job_title ?? "Role"}</h3>
+                  {a.company_name && (
+                    <p className="mt-0.5 text-sm text-primary-500">{a.company_name}</p>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {interviewActive(a) && <Badge status="invited">Interview ready</Badge>}
+                  {a.feedback_token && <Badge status="evaluated">Feedback ready</Badge>}
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColor(
+                      a.screening_status
+                    )}`}
+                  >
+                    {a.screening_status === "pending" ? "Under review" : a.screening_status}
+                  </span>
+                </div>
+              </div>
+            </Card>
+          </li>
+        ))}
+      </ul>
+
+      <Modal open={!!selected} onClose={() => setSelected(null)} title={selected?.job_title ?? "Application"}>
+        {selected && (
+          <div className="space-y-4">
+            {selected.company_name && (
+              <p className="text-sm font-medium text-primary-500">{selected.company_name}</p>
+            )}
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-primary-500">Screening:</span>
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColor(
+                  selected.screening_status
+                )}`}
+              >
+                {selected.screening_status === "pending" ? "Under review" : selected.screening_status}
+              </span>
             </div>
-            <span
-              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColor(
-                a.screening_status
-              )}`}
-            >
-              {a.screening_status === "pending" ? "Under review" : a.screening_status}
-            </span>
-          </Card>
-        </li>
-      ))}
-    </ul>
+
+            {interviewActive(selected) && (
+              <div className="rounded-lg border border-brand-100 bg-brand-50/60 p-4">
+                <p className="text-sm font-medium text-primary-800">You're invited to interview</p>
+                <p className="mt-1 text-xs text-primary-500">
+                  Complete your interview to move forward.
+                </p>
+                <a href={`/interview/${selected.interview_token}`}>
+                  <Button size="sm" className="mt-3">
+                    Start interview
+                  </Button>
+                </a>
+              </div>
+            )}
+
+            {selected.feedback_token ? (
+              <div className="rounded-lg border border-primary-100 bg-primary-50/60 p-4">
+                <p className="text-sm font-medium text-primary-800">Interview feedback</p>
+                {typeof selected.overall_score === "number" && (
+                  <p className="mt-1 text-xs text-primary-500">
+                    Overall score: {selected.overall_score}/100
+                  </p>
+                )}
+                <a href={`/feedback/${selected.feedback_token}`} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" variant="secondary" className="mt-3">
+                    View feedback report
+                  </Button>
+                </a>
+              </div>
+            ) : (
+              <p className="text-sm text-primary-500">
+                Feedback will appear here once your interview has been evaluated.
+              </p>
+            )}
+          </div>
+        )}
+      </Modal>
+    </>
   );
 }
 
@@ -339,6 +514,7 @@ function ProfileTab({
   const [uploading, setUploading] = useState(false);
   const [truncated, setTruncated] = useState(false);
   const [savingToggle, setSavingToggle] = useState(false);
+  const openToWork = !!profile?.open_to_work;
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -357,7 +533,8 @@ function ProfileTab({
     }
   }
 
-  async function toggleOpenToWork(next: boolean) {
+  async function toggleOpenToWork() {
+    const next = !openToWork;
     setSavingToggle(true);
     try {
       await api.candidateAuth.updateProfile(token, { open_to_work: next });
@@ -407,30 +584,33 @@ function ProfileTab({
         </div>
       </Card>
 
-      <Card className="flex items-center justify-between gap-4 p-6">
-        <div>
-          <h3 className="font-semibold text-primary-900">Open to work</h3>
-          <p className="mt-1 max-w-md text-sm text-primary-500">
-            When on, companies sourcing for roles can discover your profile. Your contact details
-            stay private until you accept an invitation.
-          </p>
-        </div>
-        <button
-          role="switch"
-          aria-checked={!!profile?.open_to_work}
-          aria-label="Toggle open to work"
-          disabled={savingToggle}
-          onClick={() => toggleOpenToWork(!profile?.open_to_work)}
-          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 disabled:opacity-60 ${
-            profile?.open_to_work ? "bg-brand-600" : "bg-primary-300"
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
-              profile?.open_to_work ? "translate-x-[22px]" : "translate-x-0.5"
+      <Card className="p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="font-semibold text-primary-900">Open to work</h3>
+            <p className="mt-1 max-w-md text-sm text-primary-500">
+              When on, companies sourcing for roles can discover your profile. Your contact details
+              stay private until you accept an invitation.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={openToWork}
+            aria-label="Toggle open to work"
+            disabled={savingToggle}
+            onClick={toggleOpenToWork}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 disabled:opacity-60 ${
+              openToWork ? "bg-brand-600" : "bg-primary-300"
             }`}
-          />
-        </button>
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                openToWork ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
       </Card>
     </div>
   );
