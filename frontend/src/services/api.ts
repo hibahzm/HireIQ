@@ -292,6 +292,10 @@ export interface CandidateApplication {
   status: string;
   screening_status: string;
   created_at: string;
+  interview_token?: string | null;
+  interview_token_expires_at?: string | null;
+  feedback_token?: string | null;
+  overall_score?: number | null;
 }
 
 export interface InterviewInviteResponse {

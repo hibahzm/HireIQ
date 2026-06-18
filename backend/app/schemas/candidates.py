@@ -35,6 +35,11 @@ class CandidateApplicationResponse(BaseModel):
     status: str
     screening_status: str
     created_at: datetime
+    # Surfaced so the candidate can act on their application from their account.
+    interview_token: str | None = None
+    interview_token_expires_at: datetime | None = None
+    feedback_token: str | None = None
+    overall_score: int | None = None
 
 
 class SourcingCandidate(BaseModel):

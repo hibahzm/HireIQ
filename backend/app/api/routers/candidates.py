@@ -239,6 +239,10 @@ async def my_applications(candidate: Candidate = Depends(get_current_candidate))
             status=r["status"],
             screening_status=r["screening_status"],
             created_at=r["created_at"],
+            interview_token=str(r["interview_token"]) if r["interview_token"] else None,
+            interview_token_expires_at=r["interview_token_expires_at"],
+            feedback_token=str(r["feedback_token"]) if r["feedback_token"] else None,
+            overall_score=r["overall_score"],
         )
         for r in rows
     ]
