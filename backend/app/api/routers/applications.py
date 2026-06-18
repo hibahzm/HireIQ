@@ -13,6 +13,7 @@ from fastapi.responses import Response
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.cv_uploads import ACCEPTED_CV_TYPES, MAX_CV_SIZE, UNSUPPORTED_CV_MESSAGE
 from app.api.deps import get_authed_session, require_recruiter_or_admin
 from app.db import _get_session_factory
 from app.models.user import User
@@ -31,18 +32,8 @@ logger = structlog.get_logger()
 
 router = APIRouter(tags=["applications"])
 
-MAX_CV_SIZE = 10 * 1024 * 1024  # 10 MB
 RATE_LIMIT_MAX = 5
 RATE_LIMIT_WINDOW = 3600  # 1 hour
-
-# Accepted CV content types (V2-1: PDF + DOCX + JPG/PNG). Mapped to a blob extension.
-ACCEPTED_CV_TYPES = {
-    "application/pdf": ".pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-}
-UNSUPPORTED_CV_MESSAGE = "Unsupported file type. Accepted: PDF, DOCX, JPG, PNG."
 
 
 async def _application_response(

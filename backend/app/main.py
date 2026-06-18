@@ -75,6 +75,7 @@ def create_app() -> FastAPI:
     from app.api.routers.analytics import router as analytics_router
     from app.api.routers.applications import router as applications_router
     from app.api.routers.auth import router as auth_router
+    from app.api.routers.candidate_jobs import router as candidate_jobs_router
     from app.api.routers.candidates import router as candidates_router
     from app.api.routers.company import router as company_router
     from app.api.routers.evaluations import router as evaluations_router
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(candidates_router)
+    app.include_router(candidate_jobs_router)
     app.include_router(jobs_router)
     app.include_router(users_router)
     app.include_router(applications_router)

@@ -183,7 +183,7 @@ async def test_one_click_apply_then_duplicate_409(client: AsyncClient, active_jo
     with p_ocr, p_embed:
         await client.post("/candidate/cv", headers=_auth(token), files=_cv_upload())
 
-    with patch("app.api.routers.candidates.run_screening_background", new_callable=AsyncMock):
+    with patch("app.api.routers.candidate_jobs.run_screening_background", new_callable=AsyncMock):
         first = await client.post(f"/candidate/jobs/{active_job}/apply", headers=_auth(token))
         assert first.status_code == 201, first.text
         second = await client.post(f"/candidate/jobs/{active_job}/apply", headers=_auth(token))
@@ -193,7 +193,7 @@ async def test_one_click_apply_then_duplicate_409(client: AsyncClient, active_jo
 @pytest.mark.asyncio
 async def test_apply_without_cv_422(client: AsyncClient, active_job: str):
     token = await _register_candidate(client)
-    with patch("app.api.routers.candidates.run_screening_background", new_callable=AsyncMock):
+    with patch("app.api.routers.candidate_jobs.run_screening_background", new_callable=AsyncMock):
         resp = await client.post(f"/candidate/jobs/{active_job}/apply", headers=_auth(token))
     assert resp.status_code == 422
 
@@ -223,7 +223,7 @@ async def test_account_apply_blocked_after_external_same_email(
     p_ocr, p_embed = _patch_cv_processing()
     with p_ocr, p_embed:
         await client.post("/candidate/cv", headers=_auth(token), files=_cv_upload())
-    with patch("app.api.routers.candidates.run_screening_background", new_callable=AsyncMock):
+    with patch("app.api.routers.candidate_jobs.run_screening_background", new_callable=AsyncMock):
         resp = await client.post(f"/candidate/jobs/{active_job}/apply", headers=_auth(token))
     assert resp.status_code == 409
 

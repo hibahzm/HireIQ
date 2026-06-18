@@ -195,7 +195,7 @@ async def test_invite_then_accept_creates_deduped_application(client: AsyncClien
 
     # Accept → application created (screening dispatch mocked away)
     with patch(
-        "app.api.routers.candidates.run_screening_background", new_callable=AsyncMock
+        "app.api.routers.candidate_jobs.run_screening_background", new_callable=AsyncMock
     ):
         accept = await client.post(
             f"/candidate/invitations/{invitation_id}/accept", headers=_auth(cand_token)

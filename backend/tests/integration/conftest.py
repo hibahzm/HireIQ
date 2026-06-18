@@ -1,14 +1,14 @@
 """
-Integration-test harness (closes KNOWN_GAPS.md #1).
+Integration-test harness.
 
-Provides the previously-missing fixtures the integration suite references:
+Provides the fixtures the integration suite references:
   - ``app``                          — a FastAPI app built with ENV=test
   - ``active_job``                   — job_id of an active job (with criteria)
   - ``active_job_token``             — (admin access token, job_id) for that job
   - ``completed_interview_session``  — (session_id, company_id, application_id)
   - ``interview_token``              — a valid interview token (str)
 
-Design (per the gap spec):
+Design:
   * Migrations run via Alembic as the **admin/superuser** role (CREATE EXTENSION
     vector + FORCE ROW LEVEL SECURITY require it).
   * The **app** connects as a separate **non-superuser** role so RLS policies are
@@ -16,7 +16,7 @@ Design (per the gap spec):
     silently pass against a superuser that bypasses RLS.
   * Tables are truncated between tests for isolation.
 
-Requirements (cannot be validated in an env without pgvector — see KNOWN_GAPS #1):
+Requirements:
   A running pgvector Postgres. Override connection via env vars if needed:
     TEST_DATABASE_URL      admin/superuser URL (default: dev-compose creds, DB ``hireiq_test``)
     TEST_APP_DATABASE_URL  non-superuser app URL (default: role ``hireiq_test_app``)
