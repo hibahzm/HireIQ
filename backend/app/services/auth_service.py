@@ -113,18 +113,39 @@ class AuthService:
         await self._store_refresh_token(refresh_token, user.id)
         return user, access_token, refresh_token
 
-    async def login(self, *, email: str, password: str) -> tuple[User, str, str]:
-        user_repo = UserRepository(self._session)
-        user = await user_repo.get_by_email_global(email)
-        if not user or not self._verify_password(password, user.password_hash):
-            raise AuthError("invalid_credentials")
-        if not user.is_active:
-            raise AuthError("account_inactive")
+    async def login_any(
+        self, *, email: str, password: str
+    ) -> tuple[str, object, str, str]:
+        """Unified login: resolve the principal type from the credentials.
 
-        access_token = self._create_access_token(user.id, user.company_id, user.role)
-        refresh_token = self._create_refresh_token()
-        await self._store_refresh_token(refresh_token, user.id)
-        return user, access_token, refresh_token
+        Email is globally unique across company users and candidates (FR-002), so
+        an email maps to at most one account of one type — the caller never has to
+        say which. Returns (kind, principal, access_token, refresh_token) where
+        kind is "company" or "candidate".
+        """
+        user = await UserRepository(self._session).get_by_email_global(email)
+        if user:
+            if not self._verify_password(password, user.password_hash):
+                raise AuthError("invalid_credentials")
+            if not user.is_active:
+                raise AuthError("account_inactive")
+            access = self._create_access_token(user.id, user.company_id, user.role)
+            refresh = self._create_refresh_token()
+            await self._store_refresh_token(refresh, user.id)
+            return "company", user, access, refresh
+
+        candidate = await CandidateRepository(self._session).get_by_email(email)
+        if candidate and candidate.password_hash:
+            if not self._verify_password(password, candidate.password_hash):
+                raise AuthError("invalid_credentials")
+            if not candidate.is_active:
+                raise AuthError("account_inactive")
+            access = self._create_candidate_token(candidate.id)
+            refresh = self._create_refresh_token()
+            await self._store_refresh_token(refresh, candidate.id)
+            return "candidate", candidate, access, refresh
+
+        raise AuthError("invalid_credentials")
 
     # ── candidate (job-seeker) auth ─────────────────────────────────────────────
 
@@ -155,22 +176,6 @@ class AuthService:
             candidate = await cand_repo.create_account(
                 email=email, full_name=full_name, password_hash=password_hash
             )
-
-        access_token = self._create_candidate_token(candidate.id)
-        refresh_token = self._create_refresh_token()
-        await self._store_refresh_token(refresh_token, candidate.id)
-        return candidate, access_token, refresh_token
-
-    async def authenticate_candidate(
-        self, *, email: str, password: str
-    ) -> tuple[Candidate, str, str]:
-        candidate = await CandidateRepository(self._session).get_by_email(email)
-        if not candidate or not candidate.password_hash:
-            raise AuthError("invalid_credentials")
-        if not self._verify_password(password, candidate.password_hash):
-            raise AuthError("invalid_credentials")
-        if not candidate.is_active:
-            raise AuthError("account_inactive")
 
         access_token = self._create_candidate_token(candidate.id)
         refresh_token = self._create_refresh_token()

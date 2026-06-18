@@ -2,7 +2,6 @@ import { useState } from "react";
 import { api, ApiError } from "../../services/api";
 import AuthLayout, { Field } from "../../components/AuthLayout";
 import Button from "../../components/ui/Button";
-import AccountTypeToggle, { type AccountType } from "../../components/ui/AccountTypeToggle";
 
 interface Props {
   onSuccess: (token: string) => void;
@@ -11,7 +10,6 @@ interface Props {
 }
 
 export default function LoginPage({ onSuccess, onRegister, onForgotPassword }: Props) {
-  const [accountType, setAccountType] = useState<AccountType>("company");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -22,10 +20,9 @@ export default function LoginPage({ onSuccess, onRegister, onForgotPassword }: P
     setError(null);
     setLoading(true);
     try {
-      const res =
-        accountType === "candidate"
-          ? await api.candidateAuth.login({ email, password })
-          : await api.auth.login({ email, password });
+      // Unified login — the backend resolves whether this is a company or a
+      // candidate and the app opens the right experience automatically.
+      const res = await api.auth.login({ email, password });
       onSuccess(res.access_token);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
@@ -36,7 +33,7 @@ export default function LoginPage({ onSuccess, onRegister, onForgotPassword }: P
   return (
     <AuthLayout
       title="Sign in to HireIQ"
-      subtitle="Welcome back — sign in to manage your hiring."
+      subtitle="Welcome back — sign in to your account."
       footer={
         <>
           No account?{" "}
@@ -47,7 +44,6 @@ export default function LoginPage({ onSuccess, onRegister, onForgotPassword }: P
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <AccountTypeToggle value={accountType} onChange={setAccountType} />
         <Field
           id="email"
           label="Email"

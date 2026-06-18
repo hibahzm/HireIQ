@@ -95,21 +95,32 @@ async def login(
         async with session.begin():
             svc = AuthService(session, redis_client)
             try:
-                user, access_token, refresh_token = await svc.login(
+                # Unified login: the type (company vs candidate) is resolved from
+                # the credentials, so the user never has to pick at sign-in.
+                kind, principal, access_token, refresh_token = await svc.login_any(
                     email=body.email,
                     password=body.password,
                 )
             except AuthError:
                 raise HTTPException(status_code=401, detail="Invalid credentials")
 
-            await AuditLogRepository(session).log_event(
-                event_type="auth.login",
-                actor_type="user",
-                actor_id=user.id,
-                entity_type="user",
-                entity_id=user.id,
-                company_id=user.company_id,
-            )
+            if kind == "candidate":
+                await AuditLogRepository(session).log_event(
+                    event_type="auth.candidate_login",
+                    actor_type="candidate",
+                    actor_id=principal.id,
+                    entity_type="candidate",
+                    entity_id=principal.id,
+                )
+            else:
+                await AuditLogRepository(session).log_event(
+                    event_type="auth.login",
+                    actor_type="user",
+                    actor_id=principal.id,
+                    entity_type="user",
+                    entity_id=principal.id,
+                    company_id=principal.company_id,
+                )
 
     _set_refresh_cookie(response, refresh_token)
     return TokenResponse(access_token=access_token)
@@ -142,35 +153,6 @@ async def candidate_register(
 
             await AuditLogRepository(session).log_event(
                 event_type="auth.candidate_register",
-                actor_type="candidate",
-                actor_id=candidate.id,
-                entity_type="candidate",
-                entity_id=candidate.id,
-            )
-
-    _set_refresh_cookie(response, refresh_token)
-    return TokenResponse(access_token=access_token)
-
-
-@router.post("/candidate/login", response_model=TokenResponse)
-async def candidate_login(
-    body: LoginRequest,
-    response: Response,
-    redis_client: Redis = Depends(get_redis),
-):
-    async with _get_session_factory()() as session:
-        async with session.begin():
-            svc = AuthService(session, redis_client)
-            try:
-                candidate, access_token, refresh_token = await svc.authenticate_candidate(
-                    email=body.email,
-                    password=body.password,
-                )
-            except AuthError:
-                raise HTTPException(status_code=401, detail="Invalid credentials")
-
-            await AuditLogRepository(session).log_event(
-                event_type="auth.candidate_login",
                 actor_type="candidate",
                 actor_id=candidate.id,
                 entity_type="candidate",

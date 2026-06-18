@@ -110,6 +110,35 @@ async def test_candidate_token_rejected_on_company_route(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_unified_login_resolves_candidate(client: AsyncClient):
+    """The single /auth/login endpoint detects a candidate from the credentials."""
+    await _register_candidate(client)
+    resp = await client.post(
+        "/auth/login", json={"email": CAND["email"], "password": CAND["password"]}
+    )
+    assert resp.status_code == 200
+    token = resp.json()["access_token"]
+    # The minted token is a candidate token: works on candidate routes, not company.
+    assert (await client.get("/auth/candidate/me", headers=_auth(token))).status_code == 200
+    assert (await client.get("/auth/me", headers=_auth(token))).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_unified_login_resolves_company(client: AsyncClient):
+    reg = await client.post(
+        "/auth/register",
+        json={"company_name": "Acme", "email": "co@acme.com", "password": "S3cur3P@ss!"},
+    )
+    assert reg.status_code == 201
+    resp = await client.post(
+        "/auth/login", json={"email": "co@acme.com", "password": "S3cur3P@ss!"}
+    )
+    assert resp.status_code == 200
+    token = resp.json()["access_token"]
+    assert (await client.get("/auth/me", headers=_auth(token))).status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_company_token_rejected_on_candidate_route(client: AsyncClient):
     reg = await client.post(
         "/auth/register",
