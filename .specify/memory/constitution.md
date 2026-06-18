@@ -15,7 +15,7 @@ Deferred TODOs resolved:
   - TODO(TECH_STACK): Python/FastAPI confirmed (resolved)
 Remaining deferred TODOs:
   - (none) — TODO(PERFORMANCE_BASELINE) resolved in v1.1.1: load profile defined
-    under Technical Standards → Performance and enforced by infra/perf/.
+    under Technical Standards → Performance.
 Templates requiring updates:
   - .specify/templates/plan-template.md  ✅ No structural changes required
   - .specify/templates/spec-template.md  ✅ No structural changes required
@@ -99,8 +99,7 @@ Tests for other areas are encouraged but not gating.
   profile: 50 concurrent users, ~200 req/s on synchronous REST endpoints,
   sustained 5 minutes, at MVP launch scale (~20 companies, ~500 applications/job).
   Async pipelines are budgeted separately by their SLAs (CV screening ≤ 2 min /
-  SC-002; evaluation ≤ 5 min / SC-004). The profile is enforced by the load
-  harness in `infra/perf/` (Locust + `check_p95.py` gate).
+  SC-002; evaluation ≤ 5 min / SC-004).
 - **Accessibility**: All UI components MUST conform to WCAG 2.1 AA.
 - **Code Quality**: `ruff` for linting and formatting; enforced in CI; lint errors block merge.
 - **Dependency Vetting**: All new dependencies evaluated for CVEs, maintenance status, and
