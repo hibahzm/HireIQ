@@ -163,27 +163,6 @@ async def candidate_register(
     return TokenResponse(access_token=access_token)
 
 
-@router.post("/candidate/refresh", response_model=TokenResponse)
-async def candidate_refresh(
-    response: Response,
-    refresh_token: str | None = Cookie(default=None, alias=REFRESH_COOKIE),
-    redis_client: Redis = Depends(get_redis),
-):
-    if not refresh_token:
-        raise HTTPException(status_code=401, detail="No refresh token")
-
-    async with _get_session_factory()() as session:
-        async with session.begin():
-            svc = AuthService(session, redis_client)
-            try:
-                _, access_token, new_refresh = await svc.refresh_candidate(refresh_token)
-            except AuthError:
-                raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
-
-    _set_refresh_cookie(response, new_refresh)
-    return TokenResponse(access_token=access_token)
-
-
 @router.get("/candidate/me", response_model=CandidateResponse)
 async def candidate_me(candidate: Candidate = Depends(get_current_candidate)):
     async with _get_session_factory()() as session:
@@ -212,7 +191,9 @@ async def refresh(
         async with session.begin():
             svc = AuthService(session, redis_client)
             try:
-                _, access_token, new_refresh = await svc.refresh(refresh_token)
+                # Unified refresh: resolves company vs candidate from the stored
+                # token, so a page reload keeps either kind signed in.
+                _, _, access_token, new_refresh = await svc.refresh_any(refresh_token)
             except AuthError:
                 raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 

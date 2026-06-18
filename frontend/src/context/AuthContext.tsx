@@ -87,8 +87,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Holds the latest silentRefresh so the scheduled timer can call it without
   // creating a circular useCallback dependency.
   const silentRefreshRef = useRef<() => void>(() => {});
-  // The known principal kind, so a scheduled refresh hits the right endpoint.
-  const kindRef = useRef<AuthKind | null>(null);
 
   const loadUser = useCallback(async (accessToken: string, principalKind: AuthKind) => {
     try {
@@ -115,7 +113,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const applyToken = useCallback(
     (accessToken: string) => {
       const principalKind = kindFromToken(accessToken);
-      kindRef.current = principalKind;
       setTokenState(accessToken);
       setKind(principalKind);
       setUser(userFromToken(accessToken));
@@ -130,25 +127,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [loadUser]
   );
 
-  // Exchange the httpOnly refresh cookie for a fresh access token. The refresh
-  // cookie is shared, so when the kind is unknown (first load) we try the
-  // company endpoint first, then fall back to the candidate endpoint.
+  // Exchange the httpOnly refresh cookie for a fresh access token. One unified
+  // endpoint resolves company vs candidate from the stored token, so a page
+  // reload keeps either kind signed in for the life of the refresh cookie.
   const silentRefresh = useCallback(async () => {
-    const tryRefresh = async () => {
-      const known = kindRef.current;
-      if (known === "candidate") return api.candidateAuth.refresh();
-      if (known === "company") return api.auth.refresh();
-      try {
-        return await api.auth.refresh();
-      } catch {
-        return api.candidateAuth.refresh();
-      }
-    };
     try {
-      const res = await tryRefresh();
+      const res = await api.auth.refresh();
       applyToken(res.access_token);
     } catch {
-      kindRef.current = null;
       setTokenState(null);
       setUser(null);
       setKind(null);
@@ -169,7 +155,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Ignore — clear local state regardless.
     }
-    kindRef.current = null;
     setTokenState(null);
     setUser(null);
     setKind(null);
@@ -190,7 +175,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const onUnauthorized = () => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
-      kindRef.current = null;
       setTokenState(null);
       setUser(null);
       setKind(null);

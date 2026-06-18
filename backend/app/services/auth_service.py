@@ -142,7 +142,7 @@ class AuthService:
                 raise AuthError("account_inactive")
             access = self._create_candidate_token(candidate.id)
             refresh = self._create_refresh_token()
-            await self._store_refresh_token(refresh, candidate.id)
+            await self._store_refresh_token(refresh, candidate.id, "candidate")
             return "candidate", candidate, access, refresh
 
         raise AuthError("invalid_credentials")
@@ -179,47 +179,46 @@ class AuthService:
 
         access_token = self._create_candidate_token(candidate.id)
         refresh_token = self._create_refresh_token()
-        await self._store_refresh_token(refresh_token, candidate.id)
+        await self._store_refresh_token(refresh_token, candidate.id, "candidate")
         return candidate, access_token, refresh_token
 
-    async def refresh_candidate(self, refresh_token: str) -> tuple[Candidate, str, str]:
+    async def refresh_any(self, refresh_token: str) -> tuple[str, object, str, str]:
+        """Unified token refresh for both principal kinds.
+
+        The stored value encodes the kind, so we resolve company vs candidate
+        BEFORE doing anything destructive — fixing the bug where a candidate's
+        session was wiped by a company-first refresh attempt on page reload.
+        Returns (kind, principal, access_token, refresh_token).
+        """
         token_hash = self._hash_token(refresh_token)
         key = self._refresh_token_key(token_hash)
-        candidate_id = await self._redis.get(key)
-        if not candidate_id:
-            raise AuthError("invalid_refresh_token")
-        await self._redis.delete(key)
-
-        candidate = await CandidateRepository(self._session).get_by_id(candidate_id)
-        # A company user's refresh token resolves to a non-candidate id here and
-        # fails safe (not found), so this path only succeeds for real candidates.
-        if not candidate or not candidate.password_hash or not candidate.is_active:
-            raise AuthError("candidate_not_found")
-
-        new_access_token = self._create_candidate_token(candidate.id)
-        new_refresh_token = self._create_refresh_token()
-        await self._store_refresh_token(new_refresh_token, candidate.id)
-        return candidate, new_access_token, new_refresh_token
-
-    async def refresh(self, refresh_token: str) -> tuple[User, str, str]:
-        token_hash = self._hash_token(refresh_token)
-        key = self._refresh_token_key(token_hash)
-        user_id = await self._redis.get(key)
-        if not user_id:
+        stored = await self._redis.get(key)
+        if not stored:
             raise AuthError("invalid_refresh_token")
 
-        # Rotate: delete old token
+        # Rotate: delete old token.
         await self._redis.delete(key)
 
-        user_repo = UserRepository(self._session)
-        user = await user_repo.get_by_id_global(user_id)
+        kind, sep, subject_id = stored.partition(":")
+        if not sep:  # legacy value (bare id) → treat as company
+            kind, subject_id = "company", stored
+
+        if kind == "candidate":
+            candidate = await CandidateRepository(self._session).get_by_id(subject_id)
+            if not candidate or not candidate.password_hash or not candidate.is_active:
+                raise AuthError("candidate_not_found")
+            access = self._create_candidate_token(candidate.id)
+            new_refresh = self._create_refresh_token()
+            await self._store_refresh_token(new_refresh, candidate.id, "candidate")
+            return "candidate", candidate, access, new_refresh
+
+        user = await UserRepository(self._session).get_by_id_global(subject_id)
         if not user or not user.is_active:
             raise AuthError("user_not_found")
-
-        new_access_token = self._create_access_token(user.id, user.company_id, user.role)
-        new_refresh_token = self._create_refresh_token()
-        await self._store_refresh_token(new_refresh_token, user.id)
-        return user, new_access_token, new_refresh_token
+        access = self._create_access_token(user.id, user.company_id, user.role)
+        new_refresh = self._create_refresh_token()
+        await self._store_refresh_token(new_refresh, user.id, "company")
+        return "company", user, access, new_refresh
 
     async def logout(self, refresh_token: str) -> None:
         token_hash = self._hash_token(refresh_token)
@@ -240,10 +239,16 @@ class AuthService:
     def _user_tokens_key(self, user_id: str) -> str:
         return f"user_refresh_tokens:{user_id}"
 
-    async def _store_refresh_token(self, refresh_token: str, user_id: str) -> None:
+    async def _store_refresh_token(
+        self, refresh_token: str, user_id: str, kind: str = "company"
+    ) -> None:
         token_hash = self._hash_token(refresh_token)
         expire_seconds = self._settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400
-        await self._redis.set(self._refresh_token_key(token_hash), user_id, ex=expire_seconds)
+        # Value encodes the principal kind so a single refresh endpoint can resolve
+        # company vs candidate without a destructive wrong-guess (rotation deletes).
+        await self._redis.set(
+            self._refresh_token_key(token_hash), f"{kind}:{user_id}", ex=expire_seconds
+        )
         # Per-user index so every refresh token can be revoked at once (e.g. when an
         # admin deactivates the user, or after a password reset). Refresh is already
         # is_active-gated; this gives an immediate, total cutoff.

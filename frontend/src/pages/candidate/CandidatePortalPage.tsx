@@ -30,6 +30,9 @@ const TABS: [Tab, string][] = [
 
 function interviewActive(a: CandidateApplication): boolean {
   if (!a.interview_token) return false;
+  // Once the interview is done (evaluated / feedback available), the invite is
+  // no longer actionable — only the feedback should show.
+  if (a.feedback_token || a.status === "evaluated") return false;
   if (!a.interview_token_expires_at) return true;
   return new Date(a.interview_token_expires_at).getTime() > Date.now();
 }

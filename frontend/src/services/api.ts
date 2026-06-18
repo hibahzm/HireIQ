@@ -182,8 +182,6 @@ export const api = {
         "/auth/candidate/register",
         data
       ),
-    refresh: () =>
-      request<{ access_token: string; token_type: string }>("POST", "/auth/candidate/refresh"),
     me: (token: string) =>
       request<CandidateProfile>("GET", "/auth/candidate/me", undefined, token),
     updateProfile: (
