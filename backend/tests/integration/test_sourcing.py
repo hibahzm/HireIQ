@@ -213,6 +213,40 @@ async def test_invite_then_accept_creates_deduped_application(client: AsyncClien
 
 
 @pytest.mark.asyncio
+async def test_low_semantic_similarity_candidate_excluded(client: AsyncClient):
+    """A candidate whose CV is semantically unrelated to the job is filtered out."""
+    token, company_id = await _register_company(client, "co5@acme.com")
+    user_id = (await client.get("/auth/me", headers=_auth(token))).json()["id"]
+    job_id = await _seed_sourcing_job(company_id, user_id, sourcing=True)
+
+    far_cid, _ = await _register_candidate_with_cv(
+        client, "far@x.com", open_to_work=True, skills=[]
+    )
+    # Force an embedding orthogonal to the query vector (cosine ~0 < threshold).
+    import sqlalchemy as sa2
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    far_vec = "[" + ",".join("1.0" if i == 0 else "0.0" for i in range(1536)) + "]"
+    engine = create_async_engine(ADMIN_URL, isolation_level="AUTOCOMMIT")
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(
+                sa2.text(
+                    "UPDATE candidate_cvs SET embedding = CAST(:v AS vector), "
+                    "tsv = to_tsvector('english', 'unrelated pastry chef') WHERE candidate_id = :id"
+                ),
+                {"v": far_vec, "id": far_cid},
+            )
+    finally:
+        await engine.dispose()
+
+    with _patch_query_embedding():
+        resp = await client.get(f"/jobs/{job_id}/sourcing", headers=_auth(token))
+    assert resp.status_code == 200
+    assert far_cid not in [r["candidate_id"] for r in resp.json()]
+
+
+@pytest.mark.asyncio
 async def test_invite_not_open_to_work_candidate_422(client: AsyncClient):
     token, company_id = await _register_company(client, "co4@acme.com")
     user_id = (await client.get("/auth/me", headers=_auth(token))).json()["id"]

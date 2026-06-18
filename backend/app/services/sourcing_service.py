@@ -41,6 +41,12 @@ _DEFAULT_TARGET_YEARS = 3.0
 # better than missing, worse than a confirmed sufficient duration.
 _UNKNOWN_YEARS_CREDIT = 0.5
 _OPTIONAL_WEIGHT = 0.3
+# Semantic confidence gate: a candidate must clear this whole-CV cosine similarity
+# to the job query to be eligible via dense recall — weak/unrelated CVs are dropped
+# instead of padding the shortlist. (text-embedding-3-small job↔CV cosine.)
+_MIN_SEMANTIC_SIMILARITY = 0.20
+# Final blended-score floor: drop low-confidence matches from the shortlist.
+_MIN_MATCH_SCORE = 0.12
 
 
 def target_years_for_level(experience_level: str | None) -> float:
@@ -135,6 +141,7 @@ async def search_candidates_for_job(
         FROM candidate_cvs cc
         JOIN candidates c ON c.id = cc.candidate_id
         WHERE c.open_to_work = true AND cc.embedding IS NOT NULL
+          AND (1 - (cc.embedding <=> CAST(:vec AS vector))) >= :min_sim
         ORDER BY score DESC
         LIMIT 50
         """
@@ -152,7 +159,7 @@ async def search_candidates_for_job(
         """
     )
     dense_res, sparse_res = await asyncio.gather(
-        session.execute(dense_q, {"vec": vec}),
+        session.execute(dense_q, {"vec": vec, "min_sim": _MIN_SEMANTIC_SIMILARITY}),
         session.execute(sparse_q, {"q": query_text}),
     )
     dense_rows = list(dense_res.mappings().all())
@@ -198,6 +205,8 @@ async def search_candidates_for_job(
         # isn't only about years of experience.
         recall = min(fusion.get(cid, 0.0) * 10, 1.0)
         final = 0.5 * exp["experience_score"] + 0.5 * recall
+        if final < _MIN_MATCH_SCORE:
+            continue  # below the confidence floor — not a credible match
         results.append(
             {
                 "candidate_id": cid,
