@@ -64,6 +64,18 @@ def test_experience_level_sets_year_target():
     assert target_years_for_level(None) == 3.0
 
 
+def test_accepts_criteria_object_shape():
+    """job_criteria stores skills as objects ({skill, priority}), not strings."""
+    out = score_experience(
+        _skills(("node.js", 4.0)),
+        required_skills=[{"skill": "Node.js", "priority": "required"}],
+        optional_skills=[{"skill": "AWS", "priority": "optional"}],
+        experience_level="senior",
+    )
+    assert out["missing_skills"] == []
+    assert any(m["skill"] == "node.js" for m in out["matched_skills"])
+
+
 def test_score_capped_at_one():
     out = score_experience(
         _skills(("python", 20.0)),

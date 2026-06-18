@@ -59,11 +59,28 @@ def target_years_for_level(experience_level: str | None) -> float:
     return _DEFAULT_TARGET_YEARS
 
 
+def skill_name(entry) -> str:
+    """Coerce a criteria skill entry to its name.
+
+    job_criteria.required_skills/optional_skills are stored as objects
+    (``{"skill": "Node.js", "priority": "required"}``), but a plain string is also
+    accepted for robustness.
+    """
+    if isinstance(entry, dict):
+        return str(entry.get("skill") or "")
+    return str(entry or "")
+
+
+def skill_names(entries) -> list[str]:
+    """Map a criteria skills list to non-empty skill-name strings."""
+    return [name for name in (skill_name(e) for e in (entries or [])) if name]
+
+
 def score_experience(
     candidate_skills: list[dict],
     *,
-    required_skills: list[str],
-    optional_skills: list[str] | None = None,
+    required_skills: list,
+    optional_skills: list | None = None,
     experience_level: str | None = None,
 ) -> dict:
     """Pure, deterministic experience score in [0, 1] for a candidate vs a job.
@@ -71,8 +88,11 @@ def score_experience(
     A required skill scores `min(candidate_years / target_years, 1)`; unknown years
     get partial credit; missing required skills score 0. Optional skills add a small
     weighted bonus. More years of a required skill ⇒ strictly higher score.
+
+    `required_skills`/`optional_skills` may be criteria objects or plain strings.
     """
-    optional_skills = optional_skills or []
+    required_names = skill_names(required_skills)
+    optional_names = skill_names(optional_skills)
     target = target_years_for_level(experience_level)
     by_skill = {normalize_skill_name(s["skill"]): s for s in candidate_skills if s.get("skill")}
 
@@ -80,7 +100,7 @@ def score_experience(
     missing: list[str] = []
 
     req_score = 0.0
-    for raw in required_skills:
+    for raw in required_names:
         canonical = normalize_skill_name(raw)
         cand = by_skill.get(canonical)
         if not cand:
@@ -94,17 +114,17 @@ def score_experience(
         req_score += contribution
         matched.append({"skill": canonical, "years": years, "required": True})
 
-    req_component = req_score / len(required_skills) if required_skills else 0.0
+    req_component = req_score / len(required_names) if required_names else 0.0
 
     opt_hits = 0
-    for raw in optional_skills:
+    for raw in optional_names:
         canonical = normalize_skill_name(raw)
         if canonical in by_skill:
             opt_hits += 1
             matched.append(
                 {"skill": canonical, "years": by_skill[canonical].get("years"), "required": False}
             )
-    opt_component = (opt_hits / len(optional_skills)) if optional_skills else 0.0
+    opt_component = (opt_hits / len(optional_names)) if optional_names else 0.0
 
     score = req_component + _OPTIONAL_WEIGHT * opt_component
     score = min(score, 1.0)

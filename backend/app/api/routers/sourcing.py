@@ -16,7 +16,7 @@ from app.repositories.job_repository import JobRepository
 from app.repositories.sourcing_invitation_repository import SourcingInvitationRepository
 from app.schemas.candidates import InviteCandidateRequest, SourcingCandidate
 from app.services.notification_service import NotificationService
-from app.services.sourcing_service import search_candidates_for_job
+from app.services.sourcing_service import search_candidates_for_job, skill_names
 
 router = APIRouter(prefix="/jobs", tags=["sourcing"])
 
@@ -26,8 +26,8 @@ def _build_query_text(description: str | None, criteria: JobCriteria | None) -> 
     if description:
         parts.append(description)
     if criteria:
-        parts.extend(criteria.required_skills or [])
-        parts.extend(criteria.optional_skills or [])
+        parts.extend(skill_names(criteria.required_skills))
+        parts.extend(skill_names(criteria.optional_skills))
         if criteria.experience_level:
             parts.append(criteria.experience_level)
     return " ".join(parts).strip()

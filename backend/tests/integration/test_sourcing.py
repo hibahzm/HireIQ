@@ -118,7 +118,8 @@ async def _seed_sourcing_job(company_id: str, created_by: str, *, sourcing: bool
                     "id": str(uuid.uuid4()),
                     "jid": job_id,
                     "cid": company_id,
-                    "req": '["Node.js"]',
+                    # Real criteria shape: objects, not plain strings.
+                    "req": '[{"skill": "Node.js", "priority": "required"}]',
                     "dims": '[{"name": "Tech", "weight": 1.0, "description": "x"}]',
                 },
             )
