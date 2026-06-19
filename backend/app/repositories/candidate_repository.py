@@ -59,9 +59,7 @@ class CandidateRepository:
         )
         return self._from_row(result.mappings().first())
 
-    async def create_account(
-        self, *, email: str, full_name: str, password_hash: str
-    ) -> Candidate:
+    async def create_account(self, *, email: str, full_name: str, password_hash: str) -> Candidate:
         """Create a brand-new candidate account row."""
         cand = Candidate(
             id=str(uuid.uuid4()),

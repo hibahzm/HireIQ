@@ -43,9 +43,7 @@ def test_alias_matching_counts_as_a_match():
 def test_missing_required_skill_is_reported_and_lowers_score():
     have = score_experience(_skills(("python", 3.0)), required_skills=["python", "go"])
     assert "go" in have["missing_skills"]
-    full = score_experience(
-        _skills(("python", 5.0), ("go", 5.0)), required_skills=["python", "go"]
-    )
+    full = score_experience(_skills(("python", 5.0), ("go", 5.0)), required_skills=["python", "go"])
     assert full["experience_score"] > have["experience_score"]
 
 
@@ -53,9 +51,9 @@ def test_unknown_years_beats_missing_but_loses_to_quantified():
     unknown = score_experience(_skills(("react", None)), required_skills=["react"])
     missing = score_experience(_skills(("vue", 5.0)), required_skills=["react"])
     quantified = score_experience(_skills(("react", 5.0)), required_skills=["react"])
-    assert missing["experience_score"] < unknown["experience_score"] < quantified[
-        "experience_score"
-    ]
+    assert (
+        missing["experience_score"] < unknown["experience_score"] < quantified["experience_score"]
+    )
 
 
 def test_experience_level_sets_year_target():

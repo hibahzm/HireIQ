@@ -85,7 +85,9 @@ async def _register_candidate_with_cv(
                 {"o": open_to_work, "id": cid},
             )
             await conn.execute(
-                sa.text("UPDATE candidate_cvs SET skills = CAST(:s AS jsonb) WHERE candidate_id = :id"),
+                sa.text(
+                    "UPDATE candidate_cvs SET skills = CAST(:s AS jsonb) WHERE candidate_id = :id"
+                ),
                 {"s": json.dumps(skills), "id": cid},
             )
     finally:
@@ -183,7 +185,8 @@ async def test_bulk_invite_persists_invitation_when_resend_fails(client: AsyncCl
     job_id = await _seed_sourcing_job(company_id, user_id, sourcing=True)
 
     _cand_id, cand_token = await _register_candidate_with_cv(
-        client, "resend-fail@x.com",
+        client,
+        "resend-fail@x.com",
         open_to_work=True,
         skills=[{"skill": "node.js", "years": 3.0}],
     )
@@ -233,9 +236,7 @@ async def test_invite_then_accept_creates_deduped_application(client: AsyncClien
     invitation_id = invitations[0]["id"]
 
     # Accept → application created (screening dispatch mocked away).
-    with patch(
-        "app.api.routers.candidate_jobs.run_screening_background", new_callable=AsyncMock
-    ):
+    with patch("app.api.routers.candidate_jobs.run_screening_background", new_callable=AsyncMock):
         accept = await client.post(
             f"/candidate/invitations/{invitation_id}/accept", headers=_auth(cand_token)
         )

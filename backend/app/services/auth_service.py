@@ -113,9 +113,7 @@ class AuthService:
         await self._store_refresh_token(refresh_token, user.id)
         return user, access_token, refresh_token
 
-    async def login_any(
-        self, *, email: str, password: str
-    ) -> tuple[str, object, str, str]:
+    async def login_any(self, *, email: str, password: str) -> tuple[str, object, str, str]:
         """Unified login: resolve the principal type from the credentials.
 
         Email is globally unique across company users and candidates (FR-002), so

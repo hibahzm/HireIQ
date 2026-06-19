@@ -43,9 +43,7 @@ async def get_current_user(
     # Candidate (job-seeker) tokens carry no company_id and must never satisfy a
     # company route — reject them before touching company_id (which they lack).
     if payload.get("typ") == "candidate":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a company user"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a company user")
 
     user_id: str = payload["sub"]
     company_id: str = payload["company_id"]
@@ -131,9 +129,7 @@ async def get_current_candidate(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     if payload.get("typ") != "candidate":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a candidate"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a candidate")
 
     candidate_id: str = payload["sub"]
     async with _get_session_factory()() as session:

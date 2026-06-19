@@ -83,9 +83,7 @@ async def invite_matches(
     )
     # Strong matches only, and never re-invite someone who already applied.
     strong = [
-        r
-        for r in results
-        if r["match_score"] >= AUTO_INVITE_MIN_SCORE and not r["already_applied"]
+        r for r in results if r["match_score"] >= AUTO_INVITE_MIN_SCORE and not r["already_applied"]
     ]
 
     company_name = (

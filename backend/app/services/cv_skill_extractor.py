@@ -83,9 +83,7 @@ def parse_years_from_evidence(
     return None, "unknown"
 
 
-def normalize_skills(
-    raw_skills: list[dict], *, now_year: int | None = None
-) -> list[dict]:
+def normalize_skills(raw_skills: list[dict], *, now_year: int | None = None) -> list[dict]:
     """Normalize raw {skill, evidence} pairs into the structured schema.
 
     Deduplicates by canonical skill name, keeping the highest confident year count

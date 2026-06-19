@@ -126,7 +126,11 @@ def score_experience(
 
     score = req_component + _OPTIONAL_WEIGHT * opt_component
     score = min(score, 1.0)
-    return {"experience_score": round(score, 4), "matched_skills": matched, "missing_skills": missing}
+    return {
+        "experience_score": round(score, 4),
+        "matched_skills": matched,
+        "missing_skills": missing,
+    }
 
 
 def _vec(embedding: list[float]) -> str:

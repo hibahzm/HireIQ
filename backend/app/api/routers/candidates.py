@@ -130,9 +130,7 @@ async def upload_cv(
             )
 
     # Fire-and-forget structured skill/years extraction (owns its own session).
-    asyncio.create_task(
-        run_skill_extraction_background(candidate_id=candidate.id, cv_text=cv_text)
-    )
+    asyncio.create_task(run_skill_extraction_background(candidate_id=candidate.id, cv_text=cv_text))
 
     return CandidateCvResponse(
         has_cv=True,

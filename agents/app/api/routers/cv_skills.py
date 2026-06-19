@@ -56,9 +56,7 @@ async def cv_extract_skills(body: CvExtractSkillsRequest) -> CvExtractSkillsResp
     prompt = CV_SKILL_EXTRACTION_SYSTEM.format(cv_text=body.cv_text)
     response = await _build_llm().ainvoke([SystemMessage(content=prompt)])
 
-    usage = usage_event_from_response(
-        response, company_id=None, agent_type="cv_skill_extraction"
-    )
+    usage = usage_event_from_response(response, company_id=None, agent_type="cv_skill_extraction")
     parsed = parse_json_object(response.content) or {}
     raw_skills = parsed.get("skills", []) if isinstance(parsed, dict) else []
 

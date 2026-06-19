@@ -27,7 +27,13 @@ class SourcingInvitationRepository:
                 RETURNING id
                 """
             ),
-            {"id": invitation_id, "jid": job_id, "cid": candidate_id, "coid": company_id, "msg": message},
+            {
+                "id": invitation_id,
+                "jid": job_id,
+                "cid": candidate_id,
+                "coid": company_id,
+                "msg": message,
+            },
         )
         row = result.first()
         return str(row[0]) if row else None
