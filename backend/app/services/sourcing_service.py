@@ -45,8 +45,6 @@ _OPTIONAL_WEIGHT = 0.3
 # to the job query to be eligible via dense recall — weak/unrelated CVs are dropped
 # instead of padding the shortlist. (text-embedding-3-small job↔CV cosine.)
 _MIN_SEMANTIC_SIMILARITY = 0.20
-# Final blended-score floor: drop low-confidence matches from the shortlist.
-_MIN_MATCH_SCORE = 0.12
 
 
 def target_years_for_level(experience_level: str | None) -> float:
@@ -185,18 +183,19 @@ async def search_candidates_for_job(
     dense_rows = list(dense_res.mappings().all())
     sparse_rows = list(sparse_res.mappings().all())
 
-    # Reciprocal-rank fusion (k=60), mirroring cv_chunk hybrid_search.
-    k = 60
-    fusion: dict[str, float] = {}
+    # Recall set = dense (semantic) ∪ sparse (keyword). The dense cosine similarity
+    # (0–1) is the semantic signal; keyword-only candidates get semantic 0 but still
+    # surface (their experience fit can carry them).
     rows_by_id: dict[str, dict] = {}
-    for rank, row in enumerate(dense_rows):
+    semantic: dict[str, float] = {}
+    for row in dense_rows:
         cid = str(row["candidate_id"])
-        fusion[cid] = fusion.get(cid, 0.0) + 1 / (k + rank + 1)
         rows_by_id[cid] = dict(row)
-    for rank, row in enumerate(sparse_rows):
+        semantic[cid] = max(0.0, min(float(row["score"]), 1.0))
+    for row in sparse_rows:
         cid = str(row["candidate_id"])
-        fusion[cid] = fusion.get(cid, 0.0) + 1 / (k + rank + 1)
         rows_by_id.setdefault(cid, dict(row))
+        semantic.setdefault(cid, 0.0)
 
     # Which of these candidates already have an application to this job (dedup hint).
     invited_ids: set[str] = set()
@@ -219,14 +218,9 @@ async def search_candidates_for_job(
             optional_skills=optional_skills,
             experience_level=experience_level,
         )
-        # Balanced score: experience-years matter (so 3y > 2y for a required skill),
-        # but they do NOT dominate — the whole-CV semantic + keyword recall (skills
-        # breadth, projects, education, overall fit) is weighted equally so ranking
-        # isn't only about years of experience.
-        recall = min(fusion.get(cid, 0.0) * 10, 1.0)
-        final = 0.5 * exp["experience_score"] + 0.5 * recall
-        if final < _MIN_MATCH_SCORE:
-            continue  # below the confidence floor — not a credible match
+        # Skills/years fit matters most (so 3y > 2y on a required skill), but the
+        # whole-CV semantic similarity also counts so ranking isn't only about years.
+        final = 0.6 * exp["experience_score"] + 0.4 * semantic.get(cid, 0.0)
         results.append(
             {
                 "candidate_id": cid,

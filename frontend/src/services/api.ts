@@ -224,17 +224,20 @@ export const api = {
       ),
   },
   sourcing: {
-    search: (token: string, jobId: string) =>
-      request<SourcedCandidate[]>("GET", `/jobs/${jobId}/sourcing`, undefined, token),
-    invite: (token: string, jobId: string, candidateId: string, message?: string) =>
-      request<{ id: string; status: string }>(
+    inviteMatches: (token: string, jobId: string) =>
+      request<SourcingInviteResult>(
         "POST",
-        `/jobs/${jobId}/sourcing/${candidateId}/invite`,
-        { message: message ?? null },
+        `/jobs/${jobId}/sourcing/invite`,
+        undefined,
         token
       ),
   },
 };
+
+export interface SourcingInviteResult {
+  invited: number;
+  skipped: number;
+}
 
 export interface Invitation {
   id: string;
@@ -244,16 +247,6 @@ export interface Invitation {
   status: string;
   message?: string | null;
   created_at: string;
-}
-
-export interface SourcedCandidate {
-  candidate_id: string;
-  full_name?: string | null;
-  match_score: number;
-  experience_score: number;
-  matched_skills: { skill: string; years: number | null; required: boolean }[];
-  missing_skills: string[];
-  already_applied: boolean;
 }
 
 export interface CandidateProfile {

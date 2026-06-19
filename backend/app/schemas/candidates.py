@@ -42,21 +42,6 @@ class CandidateApplicationResponse(BaseModel):
     overall_score: int | None = None
 
 
-class SourcingCandidate(BaseModel):
-    candidate_id: str
-    full_name: str | None = None
-    match_score: float
-    experience_score: float
-    matched_skills: list = []
-    missing_skills: list = []
-    already_applied: bool = False
-    # Contact details intentionally omitted until the candidate accepts an invitation.
-
-
-class InviteCandidateRequest(BaseModel):
-    message: str | None = None
-
-
 class CandidateInvitation(BaseModel):
     id: str
     job_id: str

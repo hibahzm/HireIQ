@@ -136,38 +136,43 @@ def _patch_query_embedding():
     )
 
 
+async def _pending_invitations(client: AsyncClient, cand_token: str) -> list:
+    resp = await client.get("/candidate/invitations", headers=_auth(cand_token))
+    assert resp.status_code == 200
+    return [i for i in resp.json() if i["status"] == "pending"]
+
+
 @pytest.mark.asyncio
 async def test_sourcing_disabled_job_returns_400(client: AsyncClient):
     token, company_id = await _register_company(client, "co1@acme.com")
     user_id = (await client.get("/auth/me", headers=_auth(token))).json()["id"]
     job_id = await _seed_sourcing_job(company_id, user_id, sourcing=False)
-    resp = await client.get(f"/jobs/{job_id}/sourcing", headers=_auth(token))
+    resp = await client.post(f"/jobs/{job_id}/sourcing/invite", headers=_auth(token))
     assert resp.status_code == 400
 
 
 @pytest.mark.asyncio
-async def test_search_excludes_not_open_to_work_and_hides_contact(client: AsyncClient):
+async def test_bulk_invite_only_invites_open_to_work(client: AsyncClient):
+    """One-click invite reaches open-to-work matches and skips hidden candidates."""
     token, company_id = await _register_company(client, "co2@acme.com")
     user_id = (await client.get("/auth/me", headers=_auth(token))).json()["id"]
     job_id = await _seed_sourcing_job(company_id, user_id, sourcing=True)
 
-    open_cid, _ = await _register_candidate_with_cv(
+    _open_cid, open_token = await _register_candidate_with_cv(
         client, "open@x.com", open_to_work=True, skills=[{"skill": "node.js", "years": 3.0}]
     )
-    await _register_candidate_with_cv(
+    _hidden_cid, hidden_token = await _register_candidate_with_cv(
         client, "hidden@x.com", open_to_work=False, skills=[{"skill": "node.js", "years": 5.0}]
     )
 
     with _patch_query_embedding():
-        resp = await client.get(f"/jobs/{job_id}/sourcing", headers=_auth(token))
-    assert resp.status_code == 200
-    results = resp.json()
-    ids = [r["candidate_id"] for r in results]
-    assert open_cid in ids
-    assert all(r["candidate_id"] != "hidden" for r in results)
-    # Only open-to-work candidates surface; contact details are withheld.
-    assert len(ids) == 1
-    assert "email" not in results[0]
+        resp = await client.post(f"/jobs/{job_id}/sourcing/invite", headers=_auth(token))
+    assert resp.status_code == 200, resp.text
+    # Company only learns a count — never browses candidate details.
+    assert resp.json()["invited"] == 1
+
+    assert len(await _pending_invitations(client, open_token)) == 1
+    assert len(await _pending_invitations(client, hidden_token)) == 0
 
 
 @pytest.mark.asyncio
@@ -176,25 +181,22 @@ async def test_invite_then_accept_creates_deduped_application(client: AsyncClien
     user_id = (await client.get("/auth/me", headers=_auth(token))).json()["id"]
     job_id = await _seed_sourcing_job(company_id, user_id, sourcing=True)
 
-    cand_id, cand_token = await _register_candidate_with_cv(
+    _cand_id, cand_token = await _register_candidate_with_cv(
         client, "invitee@x.com", open_to_work=True, skills=[{"skill": "node.js", "years": 4.0}]
     )
 
-    # Invite
-    inv = await client.post(
-        f"/jobs/{job_id}/sourcing/{cand_id}/invite", headers=_auth(token), json={}
-    )
-    assert inv.status_code == 201, inv.text
+    # One-click bulk invite.
+    with _patch_query_embedding():
+        inv = await client.post(f"/jobs/{job_id}/sourcing/invite", headers=_auth(token))
+    assert inv.status_code == 200, inv.text
+    assert inv.json()["invited"] == 1
 
-    # Candidate sees the pending invitation
-    listing = await client.get("/candidate/invitations", headers=_auth(cand_token))
-    assert listing.status_code == 200
-    invitations = listing.json()
+    # Candidate sees the pending invitation.
+    invitations = await _pending_invitations(client, cand_token)
     assert len(invitations) == 1
     invitation_id = invitations[0]["id"]
-    assert invitations[0]["status"] == "pending"
 
-    # Accept → application created (screening dispatch mocked away)
+    # Accept → application created (screening dispatch mocked away).
     with patch(
         "app.api.routers.candidate_jobs.run_screening_background", new_callable=AsyncMock
     ):
@@ -214,13 +216,29 @@ async def test_invite_then_accept_creates_deduped_application(client: AsyncClien
 
 
 @pytest.mark.asyncio
-async def test_low_semantic_similarity_candidate_excluded(client: AsyncClient):
-    """A candidate whose CV is semantically unrelated to the job is filtered out."""
+async def test_rerun_invite_skips_already_invited(client: AsyncClient):
+    token, company_id = await _register_company(client, "co6@acme.com")
+    user_id = (await client.get("/auth/me", headers=_auth(token))).json()["id"]
+    job_id = await _seed_sourcing_job(company_id, user_id, sourcing=True)
+    await _register_candidate_with_cv(
+        client, "again@x.com", open_to_work=True, skills=[{"skill": "node.js", "years": 4.0}]
+    )
+
+    with _patch_query_embedding():
+        first = await client.post(f"/jobs/{job_id}/sourcing/invite", headers=_auth(token))
+        second = await client.post(f"/jobs/{job_id}/sourcing/invite", headers=_auth(token))
+    assert first.json()["invited"] == 1
+    assert second.json()["invited"] == 0 and second.json()["skipped"] == 1
+
+
+@pytest.mark.asyncio
+async def test_low_semantic_similarity_candidate_not_invited(client: AsyncClient):
+    """A candidate whose CV is semantically unrelated to the job is not invited."""
     token, company_id = await _register_company(client, "co5@acme.com")
     user_id = (await client.get("/auth/me", headers=_auth(token))).json()["id"]
     job_id = await _seed_sourcing_job(company_id, user_id, sourcing=True)
 
-    far_cid, _ = await _register_candidate_with_cv(
+    far_cid, far_token = await _register_candidate_with_cv(
         client, "far@x.com", open_to_work=True, skills=[]
     )
     # Force an embedding orthogonal to the query vector (cosine ~0 < threshold).
@@ -242,20 +260,7 @@ async def test_low_semantic_similarity_candidate_excluded(client: AsyncClient):
         await engine.dispose()
 
     with _patch_query_embedding():
-        resp = await client.get(f"/jobs/{job_id}/sourcing", headers=_auth(token))
+        resp = await client.post(f"/jobs/{job_id}/sourcing/invite", headers=_auth(token))
     assert resp.status_code == 200
-    assert far_cid not in [r["candidate_id"] for r in resp.json()]
-
-
-@pytest.mark.asyncio
-async def test_invite_not_open_to_work_candidate_422(client: AsyncClient):
-    token, company_id = await _register_company(client, "co4@acme.com")
-    user_id = (await client.get("/auth/me", headers=_auth(token))).json()["id"]
-    job_id = await _seed_sourcing_job(company_id, user_id, sourcing=True)
-    cand_id, _ = await _register_candidate_with_cv(
-        client, "closed@x.com", open_to_work=False, skills=[{"skill": "node.js", "years": 3.0}]
-    )
-    resp = await client.post(
-        f"/jobs/{job_id}/sourcing/{cand_id}/invite", headers=_auth(token), json={}
-    )
-    assert resp.status_code == 422
+    assert resp.json()["invited"] == 0
+    assert len(await _pending_invitations(client, far_token)) == 0
