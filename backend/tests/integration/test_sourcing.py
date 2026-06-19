@@ -176,6 +176,42 @@ async def test_bulk_invite_only_invites_open_to_work(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_bulk_invite_persists_invitation_when_resend_fails(client: AsyncClient):
+    """Email delivery is best-effort; candidates still receive in-app invitations."""
+    token, company_id = await _register_company(client, "co2-resend@acme.com")
+    user_id = (await client.get("/auth/me", headers=_auth(token))).json()["id"]
+    job_id = await _seed_sourcing_job(company_id, user_id, sourcing=True)
+
+    _cand_id, cand_token = await _register_candidate_with_cv(
+        client, "resend-fail@x.com",
+        open_to_work=True,
+        skills=[{"skill": "node.js", "years": 3.0}],
+    )
+
+    from app.config import get_settings
+
+    settings = get_settings()
+    previous_backend = settings.EMAIL_BACKEND
+    try:
+        object.__setattr__(settings, "EMAIL_BACKEND", "resend")
+        with (
+            _patch_query_embedding(),
+            patch(
+                "app.services.notification_service.NotificationService._send_resend",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("Resend test mode"),
+            ),
+        ):
+            resp = await client.post(f"/jobs/{job_id}/sourcing/invite", headers=_auth(token))
+    finally:
+        object.__setattr__(settings, "EMAIL_BACKEND", previous_backend)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["invited"] == 1
+    assert len(await _pending_invitations(client, cand_token)) == 1
+
+
+@pytest.mark.asyncio
 async def test_invite_then_accept_creates_deduped_application(client: AsyncClient):
     token, company_id = await _register_company(client, "co3@acme.com")
     user_id = (await client.get("/auth/me", headers=_auth(token))).json()["id"]

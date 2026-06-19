@@ -24,8 +24,8 @@ class NotificationService:
         if not await self._should_send("user_invite", to_email):
             return
         subject, html = email_templates.team_invite_email(invite_link=invite_link, expiry_hours=24)
-        await self._send_html(to_email, subject, html)
-        await self._mark_sent("user_invite", to_email)
+        if await self._send_html(to_email, subject, html):
+            await self._mark_sent("user_invite", to_email)
 
     async def send_invitation_email(
         self, candidate_email: str, interview_link: str, expiry_hours: int | None = None
@@ -37,8 +37,8 @@ class NotificationService:
         subject, html = email_templates.invitation_email(
             interview_link=interview_link, expiry_hours=hours
         )
-        await self._send_html(candidate_email, subject, html)
-        await self._mark_sent("invitation", candidate_email)
+        if await self._send_html(candidate_email, subject, html):
+            await self._mark_sent("invitation", candidate_email)
 
     async def send_sourcing_invitation_email(
         self, candidate_email: str, company_name: str, job_title: str, link: str
@@ -52,8 +52,8 @@ class NotificationService:
             f"<strong>{job_title}</strong>.</p>"
             f'<p><a href="{link}">View the invitation in HireIQ</a> to accept and apply.</p>'
         )
-        await self._send_html(candidate_email, subject, html)
-        await self._mark_sent("sourcing_invitation", candidate_email)
+        if await self._send_html(candidate_email, subject, html):
+            await self._mark_sent("sourcing_invitation", candidate_email)
 
     async def send_password_reset_email(self, to_email: str, reset_link: str) -> None:
         """Forgot-password reset link. No daily dedup — a user may legitimately
@@ -66,16 +66,16 @@ class NotificationService:
         if not await self._should_send("rejection", candidate_email):
             return
         subject, html = email_templates.rejection_email(job_title=job_title)
-        await self._send_html(candidate_email, subject, html)
-        await self._mark_sent("rejection", candidate_email)
+        if await self._send_html(candidate_email, subject, html):
+            await self._mark_sent("rejection", candidate_email)
 
     async def send_interview_advance_email(self, candidate_email: str, job_title: str) -> None:
         """Interview succeeded → tell the candidate the team will follow up."""
         if not await self._should_send("advance", candidate_email):
             return
         subject, html = email_templates.interview_advance_email(job_title=job_title)
-        await self._send_html(candidate_email, subject, html)
-        await self._mark_sent("advance", candidate_email)
+        if await self._send_html(candidate_email, subject, html):
+            await self._mark_sent("advance", candidate_email)
 
     async def send_feedback_email(
         self, candidate_email: str, job_title: str, feedback_url: str
@@ -86,14 +86,26 @@ class NotificationService:
         subject, html = email_templates.feedback_email(
             job_title=job_title, feedback_url=feedback_url
         )
-        await self._send_html(candidate_email, subject, html)
-        await self._mark_sent("feedback", candidate_email)
+        if await self._send_html(candidate_email, subject, html):
+            await self._mark_sent("feedback", candidate_email)
 
-    async def _send_html(self, to: str, subject: str, html: str) -> None:
+    async def _send_html(self, to: str, subject: str, html: str) -> bool:
         if self._settings.EMAIL_BACKEND == "resend":
-            await self._send_resend(to, subject, html=html)
-        else:
-            logger.info("email.console", to=to, subject=subject, body="[HTML email]")
+            try:
+                await self._send_resend(to, subject, html=html)
+            except Exception as exc:
+                logger.warning(
+                    "email.resend_failed",
+                    to=to,
+                    subject=subject,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+                return False
+            return True
+
+        logger.info("email.console", to=to, subject=subject, body="[HTML email]")
+        return True
 
     async def _send_resend(self, to: str, subject: str, text: str = "", html: str = "") -> None:
         import resend
