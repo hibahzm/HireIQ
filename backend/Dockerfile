@@ -14,9 +14,12 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY app/ app/
 COPY alembic/ alembic/
 COPY alembic.ini alembic.ini
-RUN mkdir -p /app/storage && chown app:app /app/storage
+COPY entrypoint.sh entrypoint.sh
+RUN mkdir -p /app/storage && chown app:app /app/storage && chmod +x entrypoint.sh
 USER app
 EXPOSE 8000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Runs `alembic upgrade head` then launches uvicorn, so a deploy can never leave
+# the schema behind the code (the cause of the candidate "password_hash" 500).
+CMD ["./entrypoint.sh"]
