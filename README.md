@@ -11,8 +11,12 @@ open-to-work candidates directly inside the app.
 https://hireiq-frontend.redbush-801cefdb.westus2.azurecontainerapps.io/
 
 📹 **Demos** (in [`demo/`](demo/)):
-- [`demo/demo_platform.mp4`](demo/demo_platform.mp4) — full platform walkthrough
-- [`demo/demo_interview.mp4`](demo/demo_interview.mp4) — the AI voice interview
+
+full platform walkthrough
+https://github.com/user-attachments/assets/b89a544d-32f6-4e53-8408-345ffda3c6e9 
+
+the AI voice interview
+https://github.com/user-attachments/assets/3d44322f-99ed-49c7-a77c-e56e8345065a
 
 ---
 
