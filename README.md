@@ -51,7 +51,7 @@ A multi-service monorepo deployed as separate containers:
 state, rate limiting, email dedup), Azure Blob Storage / local filesystem (CV files &
 interview audio), HashiCorp Vault (local dev) / Azure Key Vault (prod) for secrets.
 
-**External services (all optional in dev):** OpenAI (LLM), Azure Speech (voice STT/TTS),
+**External services:** OpenAI (LLM), Azure Speech (voice STT/TTS),
 Azure Document Intelligence (scanned-CV OCR), Resend (transactional email), Langfuse (LLM
 tracing).
 
