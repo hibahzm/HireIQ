@@ -7,9 +7,6 @@ voice interview with an AI interviewer (Sila)**, the platform produces an LLM-dr
 evaluation, and candidates receive a structured feedback report. Companies can also source
 open-to-work candidates directly inside the app.
 
-🔗 **Live (hosted on Azure Container Apps):**
-https://hireiq-frontend.redbush-801cefdb.westus2.azurecontainerapps.io/
-
 📹 **Demos** (in [`demo/`](demo/)):
 
 full platform walkthrough
